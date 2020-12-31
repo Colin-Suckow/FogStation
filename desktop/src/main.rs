@@ -9,6 +9,10 @@ fn main() {
         }
     };
 
-    let emu = PSXEmu::new(bios_data);
+    let mut emu = PSXEmu::new(bios_data);
+    emu.reset();
 
+    loop {
+        emu.step_instruction();
+    }
 }

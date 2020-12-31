@@ -14,6 +14,8 @@ pub struct PSXEmu {
 }
 
 impl PSXEmu {
+    /// Creates a new instance of the emulator.
+    /// WARNING: Call reset() before using, emulator is not initialized in a valid state.
     pub fn new(bios: Vec<u8>) -> PSXEmu {
         let bios = Bios::new(bios);
         let bus = Rc::new(MainBus::new(bios));
@@ -24,7 +26,14 @@ impl PSXEmu {
         }
     }
     
+    /// Resets system to startup condition
     pub fn reset(&mut self) {
         self.r3000.reset();
+    }
+
+    /// Runs the next cpu instruction.
+    /// This function is only here for testing and is not at all accurate to how the cpu actually works
+    pub fn step_instruction(&mut self) {
+        self.r3000.step_instruction();
     }
 }

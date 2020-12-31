@@ -3,7 +3,7 @@ mod bus;
 mod cpu;
 mod memory;
 
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use bios::Bios;
 use bus::MainBus;
@@ -11,7 +11,7 @@ use cpu::R3000;
 use crate::memory::Memory;
 
 pub struct PSXEmu {
-    main_bus: Rc<MainBus>,
+    main_bus: Rc<RefCell<MainBus>>,
     r3000: R3000,
 }
 
@@ -21,7 +21,7 @@ impl PSXEmu {
     pub fn new(bios: Vec<u8>) -> PSXEmu {
         let bios = Bios::new(bios);
         let memory = Memory::new();
-        let bus = Rc::new(MainBus::new(bios, memory));
+        let bus = Rc::new(RefCell::new(MainBus::new(bios, memory)));
         let r3000 = R3000::new(bus.clone());
         PSXEmu {
             main_bus: bus,

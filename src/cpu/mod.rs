@@ -1,6 +1,6 @@
 mod instruction;
 
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::bus::MainBus;
 use instruction::Instruction;
@@ -10,11 +10,11 @@ pub struct R3000 {
     pc: u32,
     hi: u32,
     lo: u32,
-    main_bus: Rc<MainBus>,
+    main_bus: Rc<RefCell<MainBus>>,
 }
 
 impl R3000 {
-    pub fn new(bus: Rc<MainBus>) -> R3000 {
+    pub fn new(bus: Rc<RefCell<MainBus>>) -> R3000 {
         R3000 {
             gen_registers: [0; 32],
             pc: 0,
@@ -37,7 +37,8 @@ impl R3000 {
     /// Runs the next instruction based on the PC location. Only useful for testing because it is not at all accurate to
     /// how the cpu actually works.
     pub fn step_instruction(&mut self) {
-        self.execute_instruction(self.main_bus.read_word(self.pc));
+        let instruction = (*self.main_bus).borrow().read_word(self.pc);
+        self.execute_instruction(instruction);
         self.pc += 4;
     }
 
@@ -46,7 +47,7 @@ impl R3000 {
             0x2B => {
                 //SW
                 let addr = self.read_gen_register(instruction.rs()) + instruction.immediate() as u32;
-                self.main_bus.write_word(addr, self.read_gen_register(instruction.rt()));
+                self.main_bus.borrow_mut().write_word(addr, self.read_gen_register(instruction.rt()));
             }
 
             0xD => {

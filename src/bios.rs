@@ -1,0 +1,17 @@
+use byteorder::{ByteOrder, LittleEndian};
+
+pub struct Bios {
+    data: Vec<u8>
+}
+
+impl Bios {
+    pub fn new(data: Vec<u8>) -> Bios {
+        Bios {
+            data
+        }
+    }
+
+    pub fn read_word(&self, addr: u32) -> u32 {
+        LittleEndian::read_u32(&self.data)
+    }
+}

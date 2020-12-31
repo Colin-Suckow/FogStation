@@ -1,12 +1,14 @@
 mod bios;
 mod bus;
 mod cpu;
+mod memory;
 
 use std::rc::Rc;
 
 use bios::Bios;
 use bus::MainBus;
 use cpu::R3000;
+use crate::memory::Memory;
 
 pub struct PSXEmu {
     main_bus: Rc<MainBus>,
@@ -18,7 +20,8 @@ impl PSXEmu {
     /// WARNING: Call reset() before using, emulator is not initialized in a valid state.
     pub fn new(bios: Vec<u8>) -> PSXEmu {
         let bios = Bios::new(bios);
-        let bus = Rc::new(MainBus::new(bios));
+        let memory = Memory::new();
+        let bus = Rc::new(MainBus::new(bios, memory));
         let r3000 = R3000::new(bus.clone());
         PSXEmu {
             main_bus: bus,

@@ -11,17 +11,36 @@ pub trait Instruction {
 
 pub trait NumberHelpers {
     fn sign_extended(&self) -> u32;
+    fn zero_extended(&self) -> u32;
+}
+
+impl NumberHelpers for u8 {
+    fn sign_extended(&self) -> u32 {
+        (self.clone() as i8) as u32
+    }
+
+    fn zero_extended(&self) -> u32 {
+        self.clone() as u32
+    }
 }
 
 impl NumberHelpers for u16 {
     fn sign_extended(&self) -> u32 {
         (self.clone() as i16) as u32
     }
+
+    fn zero_extended(&self) -> u32 {
+        self.clone() as u32
+    }
 }
 
 impl NumberHelpers for u32 {
     fn sign_extended(&self) -> u32 {
         (self.clone() as i32) as u32
+    }
+
+    fn zero_extended(&self) -> u32 {
+        unimplemented!()
     }
 }
 

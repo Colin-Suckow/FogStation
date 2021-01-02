@@ -9,6 +9,22 @@ pub trait Instruction {
     fn address(&self) -> u32;
 }
 
+pub trait NumberHelpers {
+    fn sign_extended(&self) -> u32;
+}
+
+impl NumberHelpers for u16 {
+    fn sign_extended(&self) -> u32 {
+        (self.clone() as i16) as u32
+    }
+}
+
+impl NumberHelpers for u32 {
+    fn sign_extended(&self) -> u32 {
+        (self.clone() as i32) as u32
+    }
+}
+
 impl Instruction for u32 {
     fn opcode(&self) -> u8 {
         (self >> 26) as u8

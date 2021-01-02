@@ -3,7 +3,7 @@ mod instruction;
 use std::{cell::RefCell, rc::Rc};
 
 use crate::bus::MainBus;
-use instruction::Instruction;
+use instruction::{Instruction,NumberHelpers};
 
 pub struct R3000 {
     gen_registers: [u32; 32],
@@ -40,6 +40,7 @@ impl R3000 {
     /// how the cpu actually works.
     pub fn step_instruction(&mut self) {
         let instruction = (*self.main_bus).borrow().read_word(self.pc);
+        self.pc += 4;
         self.execute_instruction(instruction);
 
         //Execute branch delay operation
@@ -48,13 +49,14 @@ impl R3000 {
             self.execute_instruction(delay_instruction);
             self.delay_slot = 0;
         }
-        self.pc += 4;
+        
     }
 
     pub fn execute_instruction(&mut self, instruction: u32) {
-        if self.pc % 4 != 0 {
+        if self.pc % 4 != 0 || self.delay_slot % 4 != 0 {
             panic!("Address is not aligned!");
         }
+       
         match instruction.opcode() {
             0x0 => {
                 //SPECIAL INSTRUCTIONS
@@ -68,6 +70,13 @@ impl R3000 {
                         );
                     }
 
+                    0x8 => {
+                        //JR
+                        let rs = instruction.rs();
+                        self.delay_slot = self.pc;
+                        self.pc = self.read_gen_register(instruction.rs());
+                    }
+
                     0x25 => {
                         //OR
                         self.write_gen_register(
@@ -76,8 +85,9 @@ impl R3000 {
                                 | self.read_gen_register(instruction.rt()),
                         );
                     }
+
                     _ => panic!(
-                        "Unknown SPECIAL instruction. FUNCT is {0:#X} ({0:#08b}, {0:#X})",
+                        "Unknown SPECIAL instruction. FUNCT is {0} ({0:#08b}, {0:#X})",
                         instruction.funct()
                     ),
                 }
@@ -85,21 +95,22 @@ impl R3000 {
 
             0x2 => {
                 //JUMP
-                self.delay_slot = self.pc + 4;
-                self.pc = ((instruction.address() << 2) | self.delay_slot) - 4;
+                self.delay_slot = self.pc;
+                self.pc = ((instruction.address() << 2) | (self.delay_slot & 0xF0000000));
+                
             }
 
             0x5 => {
                 //BNE
                 if self.read_gen_register(instruction.rs()) != self.read_gen_register(instruction.rt()) {
-                    self.delay_slot = self.pc + 4;
-                    self.pc = (((instruction.immediate() as u32) << 2) + self.delay_slot ) - 4;
+                    self.delay_slot = self.pc;
+                    self.pc = (((instruction.immediate() << 2).sign_extended()).wrapping_add(self.delay_slot) );
                 }
             }
 
             0x8 => {
                 //ADDI
-                self.write_gen_register(instruction.rt(), self.read_gen_register(instruction.rs()) + instruction.immediate() as u32);
+                self.write_gen_register(instruction.rt(), self.read_gen_register(instruction.rs()) + instruction.immediate().sign_extended());
             }
 
             0x10 => {
@@ -110,7 +121,7 @@ impl R3000 {
             0x2B => {
                 //SW
                 let addr =
-                    self.read_gen_register(instruction.rs()) + instruction.immediate() as u32;
+                    self.read_gen_register(instruction.rs()) + instruction.immediate().sign_extended();
                 self.main_bus
                     .borrow_mut()
                     .write_word(addr, self.read_gen_register(instruction.rt()));
@@ -132,9 +143,17 @@ impl R3000 {
                 //ADDIU
                 self.write_gen_register(
                     instruction.rt(),
-                    self.read_gen_register(instruction.rs()) + instruction.immediate() as u32,
+                    self.read_gen_register(instruction.rs()).wrapping_add(instruction.immediate().sign_extended())
                 );
             }
+
+            0x23 => {
+                //LW
+                let addr = (instruction.immediate().sign_extended()) + self.read_gen_register(instruction.rs());
+                let val = (*self.main_bus).borrow().read_word(addr);
+                self.write_gen_register(instruction.rt(), val);
+            }
+
             _ => panic!(
                 "Unknown opcode {0} ({0:#08b}, {0:#X})",
                 instruction.opcode()

@@ -2,3 +2,5 @@
 Cargo.lock
 /desktop/SCPH1001.BIN
 /desktop/target
+/.idea
+/.vscode

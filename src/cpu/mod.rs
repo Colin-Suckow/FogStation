@@ -8,6 +8,7 @@ use instruction::{Instruction,NumberHelpers};
 pub struct R3000 {
     gen_registers: [u32; 32],
     pc: u32,
+    old_pc: u32,
     hi: u32,
     lo: u32,
     main_bus: Rc<RefCell<MainBus>>,
@@ -19,6 +20,7 @@ impl R3000 {
         R3000 {
             gen_registers: [0; 32],
             pc: 0,
+            old_pc: 0,
             hi: 0,
             lo: 0,
             main_bus: bus,
@@ -40,12 +42,16 @@ impl R3000 {
     /// how the cpu actually works.
     pub fn step_instruction(&mut self) {
         let instruction = (*self.main_bus).borrow().read_word(self.pc);
+        self.old_pc = self.pc;
         self.pc += 4;
+
+        //println!("Executing {:#X} (FUNCT {:#X}) at {:#X}", instruction.opcode(), instruction.funct(), self.old_pc);
         self.execute_instruction(instruction);
 
         //Execute branch delay operation
         if self.delay_slot != 0 {
             let delay_instruction = (*self.main_bus).borrow().read_word(self.delay_slot);
+            //println!("DS executing {:#X} (FUNCT {:#X}) at {}",delay_instruction.opcode(), delay_instruction.funct(), self.old_pc + 4);
             self.execute_instruction(delay_instruction);
             self.delay_slot = 0;
         }
@@ -56,7 +62,7 @@ impl R3000 {
         if self.pc % 4 != 0 || self.delay_slot % 4 != 0 {
             panic!("Address is not aligned!");
         }
-       
+
         match instruction.opcode() {
             0x0 => {
                 //SPECIAL INSTRUCTIONS
@@ -66,7 +72,7 @@ impl R3000 {
                         self.write_reg(
                             instruction.rd(),
                             self.read_reg(instruction.rt())
-                                << self.read_reg(instruction.shamt()),
+                                << instruction.shamt(),
                         );
                     }
 
@@ -78,7 +84,12 @@ impl R3000 {
 
                     0x2B => {
                         //SLTU
-                        self.write_reg(instruction.rd(), (self.read_reg(instruction.rs()) < self.read_reg(instruction.rt())) as u32)
+                        self.write_reg(instruction.rd(), (self.read_reg(instruction.rs()) < self.read_reg(instruction.rt())) as u32);
+                    }
+
+                    0x24 => {
+                        //AND
+                        self.write_reg(instruction.rd(), self.read_reg(instruction.rs()) & self.read_reg(instruction.rt()));
                     }
 
                     0x25 => {
@@ -92,7 +103,7 @@ impl R3000 {
 
                     0x21 => {
                         //ADDU
-                        self.write_reg(instruction.rd(), self.read_reg(instruction.rt()).wrapping_add(self.read_reg(instruction.rs())))
+                        self.write_reg(instruction.rd(), self.read_reg(instruction.rt()).wrapping_add(self.read_reg(instruction.rs())));
                     }
 
                     _ => panic!(
@@ -134,7 +145,11 @@ impl R3000 {
 
             0x8 => {
                 //ADDI
-                self.write_reg(instruction.rt(), self.read_reg(instruction.rs()) + instruction.immediate().sign_extended());
+                self.write_reg(instruction.rt(), match (self.read_reg(instruction.rs()) as i32).checked_add(instruction.immediate().sign_extended() as i32) {
+                    Some(val) => val as u32,
+                    None => panic!("ADDI overflowed")
+                })
+
             }
 
             0xC => {

@@ -17,6 +17,9 @@ impl Memory {
     }
 
     pub fn write_word(&mut self, addr: u32, word: u32) {
+        if addr >= 0xB0 && addr < 0xC0 {
+            println!("B function maybe have been written. Value was {}", word);
+        }
         LittleEndian::write_u32(&mut self.data[addr as usize..(addr + 4) as usize], word);
     }
 

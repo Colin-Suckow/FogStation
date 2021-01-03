@@ -44,14 +44,20 @@ impl R3000 {
         let instruction = (*self.main_bus).borrow().read_word(self.pc);
         self.old_pc = self.pc;
         self.pc += 4;
+        //Ignore NOP
 
-        //println!("Executing {:#X} (FUNCT {:#X}) at {:#X}", instruction.opcode(), instruction.funct(), self.old_pc);
+        println!("Executing {:#X} (FUNCT {:#X}) at {:#X} (FULL {:#X})", instruction.opcode(), instruction.funct(), self.old_pc, instruction);
+
+
+        if self.old_pc == 0xC0 {
+            println!("Calling C function. R9 is {:#X}", self.read_reg(9));
+        }
         self.execute_instruction(instruction);
 
         //Execute branch delay operation
         if self.delay_slot != 0 {
             let delay_instruction = (*self.main_bus).borrow().read_word(self.delay_slot);
-            //println!("DS executing {:#X} (FUNCT {:#X}) at {}",delay_instruction.opcode(), delay_instruction.funct(), self.old_pc + 4);
+            println!("DS executing {:#X} (FUNCT {:#X}) at {}",delay_instruction.opcode(), delay_instruction.funct(), self.old_pc + 4);
             self.execute_instruction(delay_instruction);
             self.delay_slot = 0;
         }
@@ -62,7 +68,7 @@ impl R3000 {
         if self.pc % 4 != 0 || self.delay_slot % 4 != 0 {
             panic!("Address is not aligned!");
         }
-
+        let pc = self.old_pc;
         match instruction.opcode() {
             0x0 => {
                 //SPECIAL INSTRUCTIONS
@@ -80,6 +86,14 @@ impl R3000 {
                         //JR
                         self.delay_slot = self.pc;
                         self.pc = self.read_reg(instruction.rs());
+                    }
+
+                    0x20 => {
+                        //ADD
+                        self.write_reg(instruction.rd(), match (self.read_reg(instruction.rs()) as i32).checked_add(self.read_reg(instruction.rt()) as i32) {
+                            Some(val) => val as u32,
+                            None => panic!("ADD overflowed")
+                        })
                     }
 
                     0x2B => {
@@ -103,7 +117,7 @@ impl R3000 {
 
                     0x21 => {
                         //ADDU
-                        self.write_reg(instruction.rd(), self.read_reg(instruction.rt()).wrapping_add(self.read_reg(instruction.rs())));
+                        self.write_reg(instruction.rd(), (self.read_reg(instruction.rt())).wrapping_add(self.read_reg(instruction.rs())));
                     }
 
                     _ => panic!(
@@ -129,17 +143,17 @@ impl R3000 {
 
             0x4 => {
                 //BEQ
+                self.delay_slot = self.pc;
                 if self.read_reg(instruction.rs()) == self.read_reg(instruction.rt()) {
-                    self.delay_slot = self.pc;
-                    self.pc = (((instruction.immediate() << 2).sign_extended()).wrapping_add(self.delay_slot) );
+                    self.pc = ((instruction.immediate().sign_extended() << 2).wrapping_add(self.delay_slot) );
                 }
             }
 
             0x5 => {
                 //BNE
+                self.delay_slot = self.pc;
                 if self.read_reg(instruction.rs()) != self.read_reg(instruction.rt()) {
-                    self.delay_slot = self.pc;
-                    self.pc = (((instruction.immediate() << 2).sign_extended()).wrapping_add(self.delay_slot) );
+                    self.pc = ((instruction.immediate().sign_extended() << 2).wrapping_add(self.delay_slot) );
                 }
             }
 
@@ -158,8 +172,12 @@ impl R3000 {
             }
 
             0x10 => {
-                //COPz cofun for COP0
-                println!("COP0 opcode called. Ignoring because cop0 is not emulated");
+                if instruction.rs() == 0 {
+                    //MFCz
+                    //Only puts zero into the specified register. This is very incorrect
+                    self.write_reg(instruction.rt(), 0);
+                }
+
             }
 
             0x2B => {
@@ -180,7 +198,7 @@ impl R3000 {
                 //ORI
                 self.write_reg(
                     instruction.rt(),
-                    self.read_reg(instruction.rs()) | instruction.immediate() as u32,
+                    self.read_reg(instruction.rs()) | instruction.immediate().zero_extended(),
                 )
             }
             0xF => {
@@ -245,6 +263,9 @@ impl R3000 {
 
     /// Sets register to given value. Prevents setting R0, which should always be zero. Will panic if register_number > 31
     fn write_reg(&mut self, register_number: u8, value: u32) {
+        if register_number == 10 {
+            println!("R10 was written to with {}", value);
+        }
         match register_number {
             0 => (), //Prevent writing to the zero register
             _ => self.gen_registers[register_number as usize] = value,

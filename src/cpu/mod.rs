@@ -6,6 +6,23 @@ use std::{cell::RefCell, rc::Rc};
 use crate::bus::MainBus;
 use instruction::{Instruction,NumberHelpers};
 use cop0::Cop0;
+use bit_field::BitField;
+
+enum Exception {
+    IBE = 6, //Bus error
+    DBE = 7, //Bus error Data
+    AdEL = 4, //Address Error Load
+    AdES = 5, //Address Error Store
+    Ovf = 12, //Overflow
+    Sys = 8, //System Call
+    Bp = 9, //Breakpoint
+    RI = 10, //Reserved Instruction
+    CpU = 11, //Co-processor Unusable
+    TLBL = 2, //TLB Miss Load
+    TLBS = 3, //TLB Miss Store
+    Mod = 1, // TLB modified
+    Int = 0, //Interrupt
+}
 
 pub struct R3000 {
     gen_registers: [u32; 32],
@@ -40,6 +57,7 @@ impl R3000 {
         self.hi = 0;
         self.lo = 0;
         self.pc = 0xBFC00000; // Points to the bios entry point
+        self.cop0.write_reg(12, self.cop0.read_reg(12).set_bit(23, true).clone());
     }
 
     /// Runs the next instruction based on the PC location. Only useful for testing because it is not at all accurate to
@@ -81,6 +99,24 @@ impl R3000 {
                         );
                     }
 
+                    0x2 => {
+                        //SRL
+                        self.write_reg(
+                            instruction.rd(),
+                            self.read_reg(instruction.rt())
+                                >> instruction.shamt(),
+                        );
+                    }
+
+                    0x3 => {
+                        //SRA
+                        self.write_reg(
+                            instruction.rd(),
+                            (self.read_reg(instruction.rt()) as i32
+                                >> instruction.shamt()) as u32,
+                        );
+                    }
+
                     0x8 => {
                         //JR
                         self.delay_slot = self.pc;
@@ -94,6 +130,11 @@ impl R3000 {
                         self.write_reg(instruction.rd(), self.delay_slot + 4);
                     }
 
+                    0xC => {
+                        //SYSCALL
+                        self.fire_exception(Exception::Sys);
+                    }
+
                     0x20 => {
                         //ADD
                         self.write_reg(instruction.rd(), match (self.read_reg(instruction.rs()) as i32).checked_add(self.read_reg(instruction.rt()) as i32) {
@@ -105,6 +146,11 @@ impl R3000 {
                     0x2B => {
                         //SLTU
                         self.write_reg(instruction.rd(), (self.read_reg(instruction.rs()) < self.read_reg(instruction.rt())) as u32);
+                    }
+
+                    0x23 => {
+                        //SUBU
+                        self.write_reg(instruction.rd(), (self.read_reg(instruction.rs())).wrapping_sub(self.read_reg(instruction.rt())));
                     }
 
                     0x24 => {
@@ -126,6 +172,11 @@ impl R3000 {
                         self.write_reg(instruction.rd(), (self.read_reg(instruction.rt())).wrapping_add(self.read_reg(instruction.rs())));
                     }
 
+                    0x2A => {
+                        //SLT
+                        self.write_reg(instruction.rd(), ((self.read_reg(instruction.rs()) as i32) < (self.read_reg(instruction.rt())as i32)) as u32);
+                    }
+
                     _ => panic!(
                         "Unknown SPECIAL instruction. FUNCT is {0} ({0:#08b}, {0:#X})",
                         instruction.funct()
@@ -135,7 +186,7 @@ impl R3000 {
 
             0x1 => {
                 //"PC-relative" test and branch instructions
-                match instruction.rd() {
+                match instruction.rt() {
                     0x0 => {
                         //BLTZ
                         self.delay_slot = self.pc;
@@ -143,7 +194,14 @@ impl R3000 {
                             self.pc = ((instruction.immediate().sign_extended() << 2).wrapping_add(self.delay_slot) );
                         }
                     }
-                    _ => panic!("Unknown test and branch instruction {} ({0:#X})", instruction.rd())
+                    0x1 => {
+                        //BGEZ
+                        self.delay_slot = self.pc;
+                        if self.read_reg(instruction.rs()) as i32 > 0 {
+                            self.pc = ((instruction.immediate().sign_extended() << 2).wrapping_add(self.delay_slot) );
+                        }
+                    }
+                    _ => panic!("Unknown test and branch instruction {} ({0:#X})", instruction.rt())
                 }
             }
 
@@ -304,6 +362,20 @@ impl R3000 {
                 instruction.opcode()
             ),
         }
+    }
+
+    fn fire_exception(&mut self, exception: Exception) {
+        if self.delay_slot != 0 {
+            panic!("Branch delay exception rollback is not implemented!");
+        }
+        self.cop0.set_cause_execode(exception);
+        self.cop0.write_reg(14, self.pc);
+
+        self.pc = if self.cop0.read_reg(12).get_bit(23) {
+            0xBFC0_0180
+        } else {
+            0x8000_0080
+        };
     }
 
     fn write_bus_word(&mut self, addr: u32, val: u32) {

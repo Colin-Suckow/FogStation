@@ -1,3 +1,5 @@
+use crate::cpu::Exception;
+
 pub struct Cop0 {
     gen_registers: [u32; 32],
 }
@@ -21,6 +23,10 @@ impl Cop0 {
 
     pub fn cache_isolated(&self) -> bool {
         (((self.gen_registers[12] >> 16) & 0x1) == 1)
+    }
+
+    pub fn set_cause_execode(&mut self, exception: Exception) {
+        (!((0x1F as u32) << 2) & self.gen_registers[13]) | ((exception as u32) << 2);
     }
 }
 

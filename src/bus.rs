@@ -65,6 +65,7 @@ impl MainBus {
     pub fn write_byte(&mut self, addr: u32, value: u8) {
         match addr {
             0x1F80_2000..=0x1F80_3000 => println!("Something tried to write to the second expansion port. This is not currently emulated. The address was {:#X}", addr),
+            0x0..=0x001f_ffff => self.memory.write_byte(addr, value), //KUSEG
             0x8000_0000..=0x801f_ffff => self.memory.write_byte(addr - 0x8000_0000, value), //KSEG0
             _ => panic!("Invalid byte write at address {:#X}! This address is not mapped to any device.", addr)
         }

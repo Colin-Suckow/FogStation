@@ -49,7 +49,7 @@ impl R3000 {
         self.old_pc = self.pc;
         self.pc += 4;
 
-        println!("Executing {:#X} (FUNCT {:#X}) at {:#X} (FULL {:#X})", instruction.opcode(), instruction.funct(), self.old_pc, instruction);
+        //println!("Executing {:#X} (FUNCT {:#X}) at {:#X} (FULL {:#X})", instruction.opcode(), instruction.funct(), self.old_pc, instruction);
 
         self.execute_instruction(instruction);
 
@@ -85,6 +85,13 @@ impl R3000 {
                         //JR
                         self.delay_slot = self.pc;
                         self.pc = self.read_reg(instruction.rs());
+                    }
+
+                    0x9 => {
+                        //JALR
+                        self.delay_slot = self.pc;
+                        self.pc = self.read_reg(instruction.rs());
+                        self.write_reg(instruction.rd(), self.delay_slot + 4);
                     }
 
                     0x20 => {
@@ -126,6 +133,20 @@ impl R3000 {
                 }
             }
 
+            0x1 => {
+                //"PC-relative" test and branch instructions
+                match instruction.rd() {
+                    0x0 => {
+                        //BLTZ
+                        self.delay_slot = self.pc;
+                        if (self.read_reg(instruction.rs()) as i32) < 0 {
+                            self.pc = ((instruction.immediate().sign_extended() << 2).wrapping_add(self.delay_slot) );
+                        }
+                    }
+                    _ => panic!("Unknown test and branch instruction {} ({0:#X})", instruction.rd())
+                }
+            }
+
             0x2 => {
                 //J
                 self.delay_slot = self.pc;
@@ -136,7 +157,7 @@ impl R3000 {
             0x3 => {
                 //JAL
                 self.delay_slot = self.pc;
-                self.write_reg(31, self.pc);
+                self.write_reg(31, self.pc + 4);
                 self.pc = ((instruction.address() << 2) | (self.delay_slot & 0xF0000000));
             }
 
@@ -156,6 +177,22 @@ impl R3000 {
                 }
             }
 
+            0x6 => {
+                //BLEZ
+                self.delay_slot = self.pc;
+                if (self.read_reg(instruction.rs()) as i32) <= 0 {
+                    self.pc = ((instruction.immediate().sign_extended() << 2).wrapping_add(self.delay_slot) );
+                }
+            }
+
+            0x7 => {
+                //BGTZ
+                self.delay_slot = self.pc;
+                if (self.read_reg(instruction.rs()) as i32) > 0 {
+                    self.pc = ((instruction.immediate().sign_extended() << 2).wrapping_add(self.delay_slot) );
+                }
+            }
+
             0x8 => {
                 //ADDI
                 self.write_reg(instruction.rt(), match (self.read_reg(instruction.rs()) as i32).checked_add(instruction.immediate().sign_extended() as i32) {
@@ -165,35 +202,27 @@ impl R3000 {
 
             }
 
-            0xC => {
-                //ANDI
-                self.write_reg(instruction.rt(), instruction.immediate().zero_extended() & self.read_reg(instruction.rs()));
+            0x9 => {
+                //ADDIU
+                self.write_reg(
+                    instruction.rt(),
+                    self.read_reg(instruction.rs()).wrapping_add(instruction.immediate().sign_extended())
+                );
             }
 
-            0x10 => {
-                match instruction.rs() {
-                    0b00100 => {
-                        //MTCz
-                        self.cop0.write_reg(instruction.rd(), self.read_reg(instruction.rt()));
-                    }
-                    0x0 => {
-                        //MFCz
-                        self.write_reg(instruction.rt(), self.cop0.read_reg(instruction.rd()));
-                    }
-                    _ => ()
-                }
-            }
-
-            0x2B => {
-                //SW
-                let addr =
-                    self.read_reg(instruction.rs()).wrapping_add(instruction.immediate().sign_extended());
-                self.write_bus_word(addr, self.read_reg(instruction.rt()));
+            0xA => {
+                //SLTI
+                self.write_reg(instruction.rt(), (((self.read_reg(instruction.rs())) as i32) < (instruction.immediate().sign_extended() as i32)) as u32);
             }
 
             0xB => {
                 //SLTIU
                 self.write_reg(instruction.rt(), (self.read_reg(instruction.rs()) < instruction.immediate().sign_extended()) as u32);
+            }
+
+            0xC => {
+                //ANDI
+                self.write_reg(instruction.rt(), instruction.immediate().zero_extended() & self.read_reg(instruction.rs()));
             }
 
             0xD => {
@@ -208,12 +237,18 @@ impl R3000 {
                 self.write_reg(instruction.rt(), (instruction.immediate() as u32) << 16);
             }
 
-            0x9 => {
-                //ADDIU
-                self.write_reg(
-                    instruction.rt(),
-                    self.read_reg(instruction.rs()).wrapping_add(instruction.immediate().sign_extended())
-                );
+            0x10 => {
+                match instruction.rs() {
+                    0b00100 => {
+                        //MTCz
+                        self.cop0.write_reg(instruction.rd(), self.read_reg(instruction.rt()));
+                    }
+                    0x0 => {
+                        //MFCz
+                        self.write_reg(instruction.rt(), self.cop0.read_reg(instruction.rd()));
+                    }
+                    _ => ()
+                }
             }
 
             0x20 => {
@@ -232,8 +267,15 @@ impl R3000 {
 
             0x23 => {
                 //LW
-                let addr = (instruction.immediate().sign_extended()) + self.read_reg(instruction.rs());
+                let addr = (instruction.immediate().sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
                 let val = (*self.main_bus).borrow().read_word(addr);
+                self.write_reg(instruction.rt(), val);
+            }
+
+            0x24 => {
+                //LBU
+                let addr = (instruction.immediate().sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
+                let val = (*self.main_bus).borrow().read_byte(addr).zero_extended();
                 self.write_reg(instruction.rt(), val);
             }
 
@@ -241,7 +283,7 @@ impl R3000 {
                 //SB
                 let addr = instruction.immediate().sign_extended().wrapping_add(self.read_reg(instruction.rs()));
                 let val = (self.read_reg(instruction.rt()) & 0xFF) as u8;
-               self.write_bus_byte(addr, val);
+                self.write_bus_byte(addr, val);
             }
 
             0x29 => {
@@ -251,6 +293,12 @@ impl R3000 {
                 self.write_bus_half_word(addr, val);
             }
 
+            0x2B => {
+                //SW
+                let addr =
+                    self.read_reg(instruction.rs()).wrapping_add(instruction.immediate().sign_extended());
+                self.write_bus_word(addr, self.read_reg(instruction.rt()));
+            }
             _ => panic!(
                 "Unknown opcode {0} ({0:#08b}, {0:#X})",
                 instruction.opcode()
@@ -262,7 +310,6 @@ impl R3000 {
         let sr = self.cop0.read_reg(12);
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
-            println!("Cache isolated");
             return;
         }
         (*self.main_bus).borrow_mut().write_word(addr, val);
@@ -271,7 +318,6 @@ impl R3000 {
     fn write_bus_half_word(&mut self, addr: u32, val: u16) {
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
-            println!("Cache isolated");
             return;
         }
         (*self.main_bus).borrow_mut().write_half_word(addr, val);
@@ -280,7 +326,6 @@ impl R3000 {
     fn write_bus_byte(&mut self, addr: u32, val: u8) {
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
-            println!("Cache isolated");
             return;
         }
         (*self.main_bus).borrow_mut().write_byte(addr, val);

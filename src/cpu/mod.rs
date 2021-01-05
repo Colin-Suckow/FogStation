@@ -2,7 +2,6 @@ mod instruction;
 mod cop0;
 
 use std::{cell::RefCell, rc::Rc};
-
 use crate::bus::MainBus;
 use instruction::{Instruction,NumberHelpers};
 use cop0::Cop0;

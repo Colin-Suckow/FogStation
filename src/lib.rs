@@ -10,6 +10,7 @@ use bios::Bios;
 use bus::MainBus;
 use cpu::R3000;
 use crate::memory::Memory;
+use crate::gpu::Gpu;
 
 pub struct PSXEmu {
     main_bus: Rc<RefCell<MainBus>>,
@@ -22,7 +23,8 @@ impl PSXEmu {
     pub fn new(bios: Vec<u8>) -> PSXEmu {
         let bios = Bios::new(bios);
         let memory = Memory::new();
-        let bus = Rc::new(RefCell::new(MainBus::new(bios, memory)));
+        let gpu = Gpu::new();
+        let bus = Rc::new(RefCell::new(MainBus::new(bios, memory, gpu)));
         let r3000 = R3000::new(bus.clone());
         PSXEmu {
             main_bus: bus,
@@ -39,5 +41,10 @@ impl PSXEmu {
     /// This function is only here for testing and is not at all accurate to how the cpu actually works
     pub fn step_instruction(&mut self) {
         self.r3000.step_instruction();
+    }
+
+    ///Runs the emulator till one frame has been generated
+    pub fn run_frame(&mut self) {
+
     }
 }

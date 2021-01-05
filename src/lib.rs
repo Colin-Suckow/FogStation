@@ -2,6 +2,7 @@ mod bios;
 mod bus;
 mod cpu;
 mod memory;
+mod gpu;
 
 use std::{cell::RefCell, rc::Rc};
 
@@ -12,7 +13,7 @@ use crate::memory::Memory;
 
 pub struct PSXEmu {
     main_bus: Rc<RefCell<MainBus>>,
-    r3000: R3000,
+    pub r3000: R3000,
 }
 
 impl PSXEmu {

@@ -8,7 +8,7 @@ impl Memory {
     /// Initializes 2MiB of system memory
     pub fn new() -> Memory {
         Memory {
-            data: vec![0; 16_000_000]
+            data: vec![0; 2_000_000]
         }
     }
 

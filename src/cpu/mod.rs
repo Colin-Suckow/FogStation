@@ -25,8 +25,8 @@ enum Exception {
 }
 
 pub struct R3000 {
-    gen_registers: [u32; 32],
-    pc: u32,
+    pub gen_registers: [u32; 32],
+    pub pc: u32,
     old_pc: u32,
     hi: u32,
     lo: u32,

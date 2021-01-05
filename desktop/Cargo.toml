@@ -8,3 +8,8 @@ edition = "2018"
 
 [dependencies]
 psx-emu = {path = ".."}
+glium = "*"
+imgui = "0.6.1"
+winit = "0.24.0"
+imgui-winit-support = "0.6.1"
+imgui-glium-renderer = "0.6.1"

@@ -13,7 +13,6 @@ use crate::memory::Memory;
 use crate::gpu::Gpu;
 
 pub struct PSXEmu {
-    main_bus: Rc<RefCell<MainBus>>,
     pub r3000: R3000,
 }
 
@@ -24,10 +23,9 @@ impl PSXEmu {
         let bios = Bios::new(bios);
         let memory = Memory::new();
         let gpu = Gpu::new();
-        let bus = Rc::new(RefCell::new(MainBus::new(bios, memory, gpu)));
-        let r3000 = R3000::new(bus.clone());
+        let bus = MainBus::new(bios, memory, gpu);
+        let r3000 = R3000::new(bus);
         PSXEmu {
-            main_bus: bus,
             r3000: r3000,
         }
     }

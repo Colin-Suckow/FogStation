@@ -19,6 +19,11 @@ fn main() {
 
     let mut emu = PSXEmu::new(bios_data);
     emu.reset();
+
+    // loop {
+    //     emu.step_instruction();
+    // }
+
     let start = Instant::now();
     for _ in 0..100000 {
         emu.step_instruction();

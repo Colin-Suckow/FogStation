@@ -28,7 +28,7 @@ impl MainBus {
             },
             0xA000_0000..=0xA01f_ffff => self.memory.read_word(addr - 0xA000_0000), //KSEG1
             0xbfc0_0000..=0xbfc7_ffff => self.bios.read_word(addr - 0xbfc0_0000),
-            _ => panic!("Invalid word read at address {:#X}! This address is not mapped to any device.", addr)
+            _ => 0//panic!("Invalid word read at address {:#X}! This address is not mapped to any device.", addr)
         }
     }
 

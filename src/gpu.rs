@@ -16,7 +16,6 @@ impl Gpu {
     }
 
     pub fn read_status_register(&self) -> u32 {
-        println!("Status read!");
         self.status_reg
     }
 

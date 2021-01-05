@@ -117,6 +117,20 @@ impl R3000 {
                         );
                     }
 
+                    0x4 => {
+                        //SLLV
+                        self.write_reg(
+                            instruction.rd(),
+                            self.read_reg(instruction.rt())
+                                << (self.read_reg(instruction.rs()) & 0x1F),
+                        );
+                    }
+
+                    0x7 => {
+                        //SRAV
+                        self.write_reg(instruction.rd(), self.read_reg(instruction.rt()) / (2 ^ self.read_reg(instruction.rs())));
+                    }
+
                     0x8 => {
                         //JR
                         self.delay_slot = self.pc;
@@ -133,6 +147,42 @@ impl R3000 {
                     0xC => {
                         //SYSCALL
                         self.fire_exception(Exception::Sys);
+                    }
+
+                    0x10 => {
+                        //MFHI
+                        self.write_reg(instruction.rd(), self.hi);
+                    }
+
+                    0x11 => {
+                        //MTHI
+                        self.hi = self.read_reg(instruction.rs());
+                    }
+
+                    0x12 => {
+                        //MFLO
+                        self.write_reg(instruction.rd(), self.lo);
+                    }
+
+                    0x13 => {
+                        //MTLO
+                        self.lo = self.read_reg(instruction.rs());
+                    }
+
+                    0x1A => {
+                        //DIV
+                        let rs = self.read_reg(instruction.rs()) as i32;
+                        let rt = self.read_reg(instruction.rt()) as i32;
+                        self.hi = (rs / rt) as u32;
+                        self.lo = (rs % rt) as u32;
+                    }
+
+                    0x1B => {
+                        //DIVU
+                        let rs = self.read_reg(instruction.rs());
+                        let rt = self.read_reg(instruction.rt());
+                        self.hi = rs / rt;
+                        self.lo = rs % rt;
                     }
 
                     0x20 => {
@@ -165,6 +215,11 @@ impl R3000 {
                             self.read_reg(instruction.rs())
                                 | self.read_reg(instruction.rt()),
                         );
+                    }
+
+                    0x27 => {
+                        //NOR
+                        self.write_reg(instruction.rd(), !(self.read_reg(instruction.rt()) | self.read_reg(instruction.rs())));
                     }
 
                     0x21 => {
@@ -334,6 +389,13 @@ impl R3000 {
                 //LBU
                 let addr = (instruction.immediate().sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
                 let val = (*self.main_bus).borrow().read_byte(addr).zero_extended();
+                self.write_reg(instruction.rt(), val);
+            }
+
+            0x25 => {
+                //LHU
+                let addr = (instruction.immediate().sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
+                let val = (*self.main_bus).borrow().read_half_word(addr).zero_extended();
                 self.write_reg(instruction.rt(), val);
             }
 

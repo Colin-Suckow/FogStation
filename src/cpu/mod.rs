@@ -2,11 +2,11 @@ mod instruction;
 mod cop0;
 
 use std::{cell::RefCell, rc::Rc};
-
 use crate::bus::MainBus;
 use instruction::{Instruction,NumberHelpers};
 use cop0::Cop0;
 use bit_field::BitField;
+
 
 enum Exception {
     IBE = 6, //Bus error
@@ -25,18 +25,18 @@ enum Exception {
 }
 
 pub struct R3000 {
-    gen_registers: [u32; 32],
-    pc: u32,
+    pub gen_registers: [u32; 32],
+    pub pc: u32,
     old_pc: u32,
     hi: u32,
     lo: u32,
-    main_bus: Rc<RefCell<MainBus>>,
+    pub main_bus: MainBus,
     delay_slot: u32,
     cop0: Cop0,
 }
 
 impl R3000 {
-    pub fn new(bus: Rc<RefCell<MainBus>>) -> R3000 {
+    pub fn new(bus: MainBus) -> R3000 {
         R3000 {
             gen_registers: [0; 32],
             pc: 0,
@@ -63,7 +63,7 @@ impl R3000 {
     /// Runs the next instruction based on the PC location. Only useful for testing because it is not at all accurate to
     /// how the cpu actually works.
     pub fn step_instruction(&mut self) {
-        let instruction = (*self.main_bus).borrow().read_word(self.pc);
+        let instruction = self.main_bus.read_word(self.pc);
         self.old_pc = self.pc;
         self.pc += 4;
 
@@ -73,7 +73,7 @@ impl R3000 {
 
         //Execute branch delay operation
         if self.delay_slot != 0 {
-            let delay_instruction = (*self.main_bus).borrow().read_word(self.delay_slot);
+            let delay_instruction = self.main_bus.read_word(self.delay_slot);
             //println!("DS executing {:#X} (FUNCT {:#X}) at {:#X}",delay_instruction.opcode(), delay_instruction.funct(), self.old_pc + 4);
             self.execute_instruction(delay_instruction);
             self.delay_slot = 0;
@@ -367,35 +367,35 @@ impl R3000 {
             0x20 => {
                 //LB
                 let addr = (instruction.immediate().sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
-                let val = (*self.main_bus).borrow().read_byte(addr).sign_extended();
+                let val = self.main_bus.read_byte(addr).sign_extended();
                 self.write_reg(instruction.rt(), val);
             }
 
             0x21 => {
                 //LH
                 let addr = (instruction.immediate().sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
-                let val = (*self.main_bus).borrow().read_half_word(addr).sign_extended();
+                let val = self.main_bus.read_half_word(addr).sign_extended();
                 self.write_reg(instruction.rt(), val);
             }
 
             0x23 => {
                 //LW
                 let addr = (instruction.immediate().sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
-                let val = (*self.main_bus).borrow().read_word(addr);
+                let val = self.main_bus.read_word(addr);
                 self.write_reg(instruction.rt(), val);
             }
 
             0x24 => {
                 //LBU
                 let addr = (instruction.immediate().sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
-                let val = (*self.main_bus).borrow().read_byte(addr).zero_extended();
+                let val = self.main_bus.read_byte(addr).zero_extended();
                 self.write_reg(instruction.rt(), val);
             }
 
             0x25 => {
                 //LHU
                 let addr = (instruction.immediate().sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
-                let val = (*self.main_bus).borrow().read_half_word(addr).zero_extended();
+                let val = self.main_bus.read_half_word(addr).zero_extended();
                 self.write_reg(instruction.rt(), val);
             }
 
@@ -446,7 +446,7 @@ impl R3000 {
             //Cache is isolated, so don't write
             return;
         }
-        (*self.main_bus).borrow_mut().write_word(addr, val);
+        self.main_bus.write_word(addr, val);
     }
 
     fn write_bus_half_word(&mut self, addr: u32, val: u16) {
@@ -454,7 +454,7 @@ impl R3000 {
             //Cache is isolated, so don't write
             return;
         }
-        (*self.main_bus).borrow_mut().write_half_word(addr, val);
+        self.main_bus.write_half_word(addr, val);
     }
 
     fn write_bus_byte(&mut self, addr: u32, val: u8) {
@@ -462,7 +462,7 @@ impl R3000 {
             //Cache is isolated, so don't write
             return;
         }
-        (*self.main_bus).borrow_mut().write_byte(addr, val);
+        self.main_bus.write_byte(addr, val);
     }
 
     /// Returns the value stored within the given register. Will panic if register_number > 31

@@ -45,4 +45,8 @@ impl PSXEmu {
     pub fn run_frame(&mut self) {
 
     }
+
+    pub fn get_vram(&self) -> &Vec<u16> {
+        self.r3000.main_bus.gpu.get_vram()
+    }
 }

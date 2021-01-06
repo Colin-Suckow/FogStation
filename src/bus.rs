@@ -5,7 +5,7 @@ use crate::gpu::Gpu;
 pub struct MainBus {
     bios: Bios,
     memory: Memory,
-    gpu: Gpu,
+    pub gpu: Gpu,
 }
 
 impl MainBus {

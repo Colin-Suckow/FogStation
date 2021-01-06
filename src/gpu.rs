@@ -1,5 +1,5 @@
 pub struct Gpu {
-    vram: Vec<u8>,
+    vram: Vec<u16>,
     status_reg: u32,
     pixel_count: u32,
     enabled: bool,
@@ -8,7 +8,7 @@ pub struct Gpu {
 impl Gpu {
     pub fn new() -> Gpu {
         Gpu {
-            vram: vec![0; 1_048_576],
+            vram: vec![0; (1_048_576 / 2)],
             status_reg: 0,
             pixel_count: 0,
             enabled: false,
@@ -32,7 +32,7 @@ impl Gpu {
                 self.enabled = false;
                 self.status_reg = 0;
                 self.pixel_count = 0;
-                self.vram = vec![0; 1_000_000];
+                self.vram = vec![0; 1_048_576 / 2];
             }
 
             0x6 => {
@@ -46,6 +46,10 @@ impl Gpu {
         if self.enabled {
             self.pixel_count += 1;
         }
+    }
+
+    pub fn get_vram(&self) -> &Vec<u16> {
+        &self.vram
     }
 }
 

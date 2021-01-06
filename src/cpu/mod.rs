@@ -30,7 +30,7 @@ pub struct R3000 {
     old_pc: u32,
     hi: u32,
     lo: u32,
-    main_bus: MainBus,
+    pub main_bus: MainBus,
     delay_slot: u32,
     cop0: Cop0,
 }

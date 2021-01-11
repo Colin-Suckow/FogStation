@@ -17,10 +17,11 @@ impl MainBus {
         }
     }
 
-    pub fn read_word(&self, addr: u32) -> u32 {
+    pub fn read_word(&mut self, addr: u32) -> u32 {
         match addr {
             0x0..=0x001f_ffff => self.memory.read_word(addr), //KUSEG
             0x8000_0000..=0x801f_ffff => self.memory.read_word(addr - 0x8000_0000), //KSEG0
+            0x1f801810 => self.gpu.read_word_gp0(),
             0x1f801814 => self.gpu.read_status_register(),
             0x1f80_1000..=0x1f80_2fff => {
                 //println!("Something tried to read the hardware control registers. These are not currently emulated, so a 0 is being returned. The address was {:#X}", addr);

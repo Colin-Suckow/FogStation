@@ -116,17 +116,38 @@ impl Gpu {
                         let x = self.gp0_buffer[1] & 0xFFFF;
                         let y = (self.gp0_buffer[1] >> 16) & 0xFFFF;
                         let address = self.point_to_address(x, y) as usize;
-                        self.vram[address] = (self.gp0_buffer[0] & 0x1FFFFFF) as u16;
+                        let color = if command.get_bit(25) {
+                            //Transparent
+                            alpha_composite(self.vram[address],b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF))
+                        } else {
+                            b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF)
+                        };
+                        self.vram[address] = color;
                     }
 
                     0b0 => {
                         //Draw variable size
                         let x1 = self.gp0_buffer[1] & 0xFFFF;
                         let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
-                        let x2 = self.gp0_buffer[2] & 0xFFFF;
-                        let y2 = (self.gp0_buffer[2] >> 16) & 0xFFFF;
+                        let x2 = (self.gp0_buffer[2] & 0xFFFF) + x1;
+                        let y2 = ((self.gp0_buffer[2] >> 16) & 0xFFFF) + y1;
 
-                        self.draw_solid_box(x1, y1, x2, y2, (self.gp0_buffer[0] & 0x1FFFFFF) as u16);
+
+                        self.draw_solid_box(x1, y1, x2, y2, b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF), command.get_bit(25));
+                    }
+
+                    0b10 => {
+                        //8x8 sprite
+                        let x1 = self.gp0_buffer[1] & 0xFFFF;
+                        let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
+                        self.draw_solid_box(x1, y1, x1 + 8, y1 + 8, b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF), command.get_bit(25));
+                    }
+
+                    0b11 => {
+                        //16x16 sprite
+                        let x1 = self.gp0_buffer[1] & 0xFFFF;
+                        let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
+                        self.draw_solid_box(x1, y1, x1 + 16, y1 + 16, b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF), command.get_bit(25));
                     }
 
                     _ => {
@@ -218,18 +239,45 @@ impl Gpu {
     }
 
 
-    fn draw_horizontal_line(&mut self, x1: u32, x2: u32, y: u32, fill: u16) {
+    fn draw_horizontal_line(&mut self, x1: u32, x2: u32, y: u32, fill: u16, transparent: bool) {
         for x in x1..=x2 {
             let address = self.point_to_address(x, y) as usize;
-            self.vram[address] = fill;
+            let color = if transparent {
+                alpha_composite(self.vram[address], fill)
+            } else {
+                fill
+            };
+            self.vram[address] = color;
         }
     }
 
-    fn draw_solid_box(&mut self, x1: u32, y1: u32, x2: u32, y2: u32, fill: u16) {
+    fn draw_solid_box(&mut self, x1: u32, y1: u32, x2: u32, y2: u32, fill: u16, transparent: bool) {
         for y in y1..=y2 {
-            self.draw_horizontal_line(x1, x2, y, fill);
+            self.draw_horizontal_line(x1, x2, y, fill, transparent);
         }
     }
+}
+
+fn b24color_to_b15color(color: u32) -> u16 {
+    let r = ((color >> 16) & 0xFF) / 8;
+    let g = ((color >> 8) & 0xFF) / 8;
+    let b = (color & 0xFF) / 8;
+    ((r << 10) | (g << 5) | b) as u16
+}
+
+fn b15_to_rgb(color: u16) -> (u8, u8, u8) {
+    (((color >> 10) & 0x1F) as u8, ((color >> 5) & 0x1F) as u8, (color & 0x1F) as u8)
+}
+
+fn rgb_to_b15(r: u8, g: u8, b:u8) -> u16 {
+    ((r as u16) << 10) | ((g as u16) << 5) | (b as u16)
+}
+
+//TODO Make colors more accurate
+fn alpha_composite(background_color: u16, alpha_color: u16) -> u16 {
+    let (b_r,b_g,b_b) = b15_to_rgb(background_color);
+    let (a_r,a_g,a_b) = b15_to_rgb(alpha_color);
+    rgb_to_b15((a_r + b_r), (a_g + b_g),  (a_b + b_b))
 }
 
 //Helper trait + impl

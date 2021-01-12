@@ -3,6 +3,7 @@ mod bus;
 mod cpu;
 mod memory;
 mod gpu;
+mod dma;
 
 use std::{cell::RefCell, rc::Rc};
 

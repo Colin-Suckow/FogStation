@@ -24,12 +24,12 @@ impl MainBus {
             0x1f801810 => self.gpu.read_word_gp0(),
             0x1f801814 => self.gpu.read_status_register(),
             0x1f80_1000..=0x1f80_2fff => {
-                //println!("Something tried to read the hardware control registers. These are not currently emulated, so a 0 is being returned. The address was {:#X}", addr);
+                println!("Something tried to read the hardware control registers. These are not currently emulated, so a 0 is being returned. The address was {:#X}", addr);
                 0
             },
             0xA000_0000..=0xA01f_ffff => self.memory.read_word(addr - 0xA000_0000), //KSEG1
             0xbfc0_0000..=0xbfc7_ffff => self.bios.read_word(addr - 0xbfc0_0000),
-            _ => 0//panic!("Invalid word read at address {:#X}! This address is not mapped to any device.", addr)
+            _ => panic!("Invalid word read at address {:#X}! This address is not mapped to any device.", addr)
         }
     }
 

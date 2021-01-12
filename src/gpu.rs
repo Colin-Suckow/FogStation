@@ -9,7 +9,7 @@ pub struct Gpu {
     pixel_count: u32,
     enabled: bool,
     gp0_words_to_read: usize,
-    gp0_buffer: [u32; 16],
+    gp0_buffer: [u32; 1024],
     gp0_buffer_address: usize,
 
     texpage_x_base: u16,
@@ -37,7 +37,7 @@ impl Gpu {
             pixel_count: 0,
             enabled: false,
             gp0_words_to_read: 0,
-            gp0_buffer: [0; 16],
+            gp0_buffer: [0; 1024],
             gp0_buffer_address: 0,
 
             texpage_x_base: 0,
@@ -66,7 +66,28 @@ impl Gpu {
 
         match command.gp0_header() {
             0x0 => {
-                //NOP
+                //Random junk
+                match command >> 24 {
+                    0x2 => {
+                        //Quick rectangle fill
+                        if self.gp0_buffer_address < 3 {
+                            //Not enough commands
+                            return;
+                        }
+
+                        let x1 = self.gp0_buffer[1] & 0xFFFF;
+                        let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
+                        let x2 = (self.gp0_buffer[2] & 0xFFFF) + x1;
+                        let y2 = ((self.gp0_buffer[2] >> 16) & 0xFFFF) + y1;
+
+
+                        self.draw_solid_box(x1, y1, x2, y2, b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF), false);
+
+                    }
+                    _ => {
+                        //NOP
+                    }
+                }
             }
 
             0x1 => {
@@ -97,6 +118,7 @@ impl Gpu {
                 // If the rectangle is textured, lets just lock up the emulator.
                 // I only want to test flat shaded rectangles right now
                 if command.get_bit(26) {
+                    println!("Textured rectangle");
                     self.gp0_buffer_address = 1; //Prevent overflowing the buffer with more calls.
                     return;
                 }
@@ -157,6 +179,46 @@ impl Gpu {
                 
             }
 
+            0x4 => {
+                //VRAM to VRAM blit
+                if self.gp0_buffer_address < 4 {
+                    //Not enough commands
+                    return;
+                }
+
+                let x_source = self.gp0_buffer[1] & 0xFFFF;
+                let y_source = (self.gp0_buffer[1] >> 16) & 0xFFFF;
+                let x_dest = self.gp0_buffer[2] & 0xFFFF;
+                let y_dest = (self.gp0_buffer[2] >> 16) & 0xFFFF;
+                let width = self.gp0_buffer[3] & 0xFFFF;
+                let height = (self.gp0_buffer[3] >> 16) & 0xFFFF;
+
+                self.copy_rectangle(x_source, y_source, x_dest, y_dest, width, height);
+            }
+            0x5 => {
+                //CPU To VRAM
+                let width = ((self.gp0_buffer[2] & 0xFFFF) as u16);
+                let height = (((self.gp0_buffer[2] >> 16) & 0xFFFF) as u16) * 2;
+                let length = (((width / 2) * height) / 2) + 3;
+                if self.gp0_buffer_address < length as usize {
+                    //Not enough commands
+                    return;
+                }
+
+                let base_x = ((self.gp0_buffer[1] & 0xFFFF) as u16) / 2;
+                let base_y = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as u16;
+
+                for index in 3..(length-3) {
+                    let p1 = ((self.gp0_buffer[index as usize] >> 16) & 0xFFFF) as u16;
+                    let p2 = (self.gp0_buffer[index as usize] & 0xFFFF) as u16;
+                    let x = (base_x + (index * 2)) % width;
+                    let y = (base_y + ((index * 2) / width));
+                    let addr = self.point_to_address(x as u32, y as u32);
+                    self.vram[addr as usize] = p1;
+                    self.vram[(addr + 1) as usize] = p2;
+                }
+
+            }
             0x7 => {
                 //Env commands
                 match command.command() {
@@ -238,6 +300,19 @@ impl Gpu {
         ((1024) as u32 * y) + x
     }
 
+    fn copy_horizontal_line(&mut self, x_source: u32, y_source: u32, x_dest: u32, y_dest: u32, width: u32) {
+        for x_offset in 0..width {
+            let val = self.vram[self.point_to_address(x_source + x_offset, y_source) as usize];
+            let addr = self.point_to_address(x_dest + x_offset, y_dest) as usize;
+            self.vram[addr] = val;
+        }
+    }
+
+    fn copy_rectangle(&mut self, x_source: u32, y_source: u32, x_dest: u32, y_dest: u32, width: u32, height: u32) {
+        for y_offset in 0..height {
+            self.copy_horizontal_line(x_source, y_source + y_offset, x_dest, y_dest + y_offset, width);
+        }
+    }
 
     fn draw_horizontal_line(&mut self, x1: u32, x2: u32, y: u32, fill: u16, transparent: bool) {
         for x in x1..=x2 {
@@ -252,7 +327,7 @@ impl Gpu {
     }
 
     fn draw_solid_box(&mut self, x1: u32, y1: u32, x2: u32, y2: u32, fill: u16, transparent: bool) {
-        for y in y1..=y2 {
+        for y in y1..y2 {
             self.draw_horizontal_line(x1, x2, y, fill, transparent);
         }
     }

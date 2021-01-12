@@ -13,7 +13,7 @@ use glium::{backend::Facade, texture::{ClientFormat, RawImage2d, Texture2d}, uni
 use std::borrow::Cow;
 
 fn main() {
-    let bios_data = match fs::read("RenderRectangle16BPP.bin") {
+    let bios_data = match fs::read("MemoryTransfer16BPP.bin") {
         Ok(data) => data,
         _ => {
             println!("Unable to read bios file. Make sure there is a file named SCPH1001.BIN in the same directory.");

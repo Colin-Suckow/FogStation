@@ -343,7 +343,7 @@ impl R3000 {
                 self.write_reg(
                     instruction.rt(),
                     self.read_reg(instruction.rs()) | instruction.immediate().zero_extended(),
-                )
+                );
             }
             0xF => {
                 //LUI

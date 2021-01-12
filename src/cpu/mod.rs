@@ -23,6 +23,11 @@ enum Exception {
     Int = 0,  //Interrupt
 }
 
+struct LoadDelay {
+    register: u8,
+    value: u32,
+}
+
 pub struct R3000 {
     pub gen_registers: [u32; 32],
     pub pc: u32,
@@ -32,6 +37,7 @@ pub struct R3000 {
     pub main_bus: MainBus,
     delay_slot: u32,
     cop0: Cop0,
+    load_delay: Option<LoadDelay>,
 }
 
 impl R3000 {
@@ -45,6 +51,7 @@ impl R3000 {
             main_bus: bus,
             delay_slot: 0,
             cop0: Cop0::new(),
+            load_delay: None,
         }
     }
     /// Resets cpu registers to zero and sets program counter to reset vector (0xBFC00000)
@@ -55,7 +62,7 @@ impl R3000 {
         }
         self.hi = 0;
         self.lo = 0;
-        self.pc = 0xBFC00000; // Points to the bios entry point
+        self.pc = 0x80010000; // Points to the bios entry point
         self.cop0
             .write_reg(12, self.cop0.read_reg(12).set_bit(23, true).clone());
     }
@@ -63,6 +70,12 @@ impl R3000 {
     /// Runs the next instruction based on the PC location. Only useful for testing because it is not at all accurate to
     /// how the cpu actually works.
     pub fn step_instruction(&mut self) {
+
+        //Execute delayed load
+        if let Some(load) = self.load_delay.take() {
+            self.write_reg(load.register, load.value);
+        }
+
         let instruction = self.main_bus.read_word(self.pc);
         self.old_pc = self.pc;
         self.pc += 4;
@@ -437,7 +450,10 @@ impl R3000 {
                 let addr = (instruction.immediate().sign_extended())
                     .wrapping_add(self.read_reg(instruction.rs()));
                 let val = self.main_bus.read_word(addr);
-                self.write_reg(instruction.rt(), val);
+                self.load_delay = Some(LoadDelay {
+                    register: instruction.rt(),
+                    value: val,
+                });
             }
 
             0x24 => {

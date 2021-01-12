@@ -46,4 +46,8 @@ impl PSXEmu {
     pub fn get_vram(&self) -> &Vec<u16> {
         self.r3000.main_bus.gpu.get_vram()
     }
+
+    pub fn get_bios(&self) -> &Vec<u8> {
+        self.r3000.main_bus.bios.get_data()
+    }
 }

@@ -16,4 +16,8 @@ impl Bios {
     pub fn read_byte(&self, addr: u32) -> u8 {
         self.data[addr as usize]
     }
+
+    pub fn get_data(&self) -> &Vec<u8> {
+        &self.data
+    }
 }

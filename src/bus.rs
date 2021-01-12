@@ -3,7 +3,7 @@ use crate::gpu::Gpu;
 use crate::memory::Memory;
 
 pub struct MainBus {
-    bios: Bios,
+    pub bios: Bios,
     memory: Memory,
     pub gpu: Gpu,
 }
@@ -16,6 +16,7 @@ impl MainBus {
     pub fn read_word(&mut self, addr: u32) -> u32 {
         match addr {
             0x0..=0x001f_ffff => self.memory.read_word(addr), //KUSEG
+            0x8001_0000..=0x8001_f000 => self.bios.read_word(addr - 0x8001_0000),
             0x8000_0000..=0x801f_ffff => self.memory.read_word(addr - 0x8000_0000), //KSEG0
             0x1f801810 => self.gpu.read_word_gp0(),
             0x1f801814 => self.gpu.read_status_register(),

@@ -4,6 +4,7 @@ use std::{fs, rc::Rc};
 
 use imgui::*;
 
+
 use std::time::{Duration, Instant};
 
 mod support;
@@ -41,6 +42,7 @@ fn main() {
     // println!("Frequency {:.2}mhz", (100000.0 / elapsed_seconds) / 1000000.0);
 
     let system = support::init("psx-emu");
+
     system.main_loop(move |_, ui, gl_ctx, textures| {
         for _ in 0..564480 {
             emu.step_instruction();
@@ -60,7 +62,14 @@ fn main() {
                 let id = TextureId::new(0); //This is an awful hack that needs to be replaced
                 textures.replace(id, texture);
                 Image::new(id, [1024.0, 512.0]).build(ui);
-            })
+            });
+        Window::new(im_str!("BIOS"))
+            .build(ui, || {
+                for (index, data) in emu.get_bios().chunks(8).enumerate() {
+                    ui.text(format!("{:#X}: {:?}", 0xbfc0_0000 + (index * 8), data));
+                }
+            });
+        
     });
 }
 

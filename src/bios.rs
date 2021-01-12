@@ -1,14 +1,12 @@
 use byteorder::{ByteOrder, LittleEndian};
 
 pub struct Bios {
-    data: Vec<u8>
+    data: Vec<u8>,
 }
 
 impl Bios {
     pub fn new(data: Vec<u8>) -> Bios {
-        Bios {
-            data
-        }
+        Bios { data }
     }
 
     pub fn read_word(&self, addr: u32) -> u32 {

@@ -78,8 +78,6 @@ impl Instruction for u32 {
     }
 }
 
-
-
 #[cfg(test)]
 mod instruction_tests {
     use super::Instruction;

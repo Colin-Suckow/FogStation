@@ -8,7 +8,11 @@ use std::time::{Duration, Instant};
 
 mod support;
 
-use glium::{backend::Facade, texture::{ClientFormat, RawImage2d, Texture2d}, uniforms::{MagnifySamplerFilter, MinifySamplerFilter, SamplerBehavior}};
+use glium::{
+    backend::Facade,
+    texture::{ClientFormat, RawImage2d, Texture2d},
+    uniforms::{MagnifySamplerFilter, MinifySamplerFilter, SamplerBehavior},
+};
 
 use std::borrow::Cow;
 
@@ -61,7 +65,12 @@ fn main() {
 }
 
 /// Creates OpenGL texture from 16 bit, psx format, framebuffer
-fn create_texture_from_buffer<F>(gl_ctx: &F, data: &Vec<u16>, width: usize, height: usize) -> Texture
+fn create_texture_from_buffer<F>(
+    gl_ctx: &F,
+    data: &Vec<u16>,
+    width: usize,
+    height: usize,
+) -> Texture
 where
     F: Facade,
 {
@@ -79,7 +88,7 @@ where
             magnify_filter: MagnifySamplerFilter::Linear,
             minify_filter: MinifySamplerFilter::Linear,
             ..Default::default()
-        }
+        },
     }
 }
 

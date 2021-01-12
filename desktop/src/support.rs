@@ -1,13 +1,16 @@
-use glium::{Texture2d, glutin::event::{Event, WindowEvent}};
 use glium::glutin::event_loop::{ControlFlow, EventLoop};
 use glium::glutin::window::WindowBuilder;
 use glium::{backend::Facade, glutin};
+use glium::{
+    glutin::event::{Event, WindowEvent},
+    Texture2d,
+};
 use glium::{Display, Surface};
 use imgui::{Context, FontConfig, FontGlyphRanges, FontSource, Textures, Ui};
 use imgui_glium_renderer::{Renderer, Texture};
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
-use std::{path::Path, rc::Rc};
 use std::time::Instant;
+use std::{path::Path, rc::Rc};
 
 pub struct System {
     pub event_loop: EventLoop<()>,
@@ -65,7 +68,9 @@ pub fn init(title: &str) -> System {
 }
 
 impl System {
-    pub fn main_loop<F: FnMut(&mut bool, &mut Ui, &Rc<glium::backend::Context>, &mut Textures<Texture> ) + 'static>(
+    pub fn main_loop<
+        F: FnMut(&mut bool, &mut Ui, &Rc<glium::backend::Context>, &mut Textures<Texture>) + 'static,
+    >(
         self,
         mut run_ui: F,
     ) {
@@ -96,7 +101,12 @@ impl System {
                 let mut ui = imgui.frame();
 
                 let mut run = true;
-                run_ui(&mut run, &mut ui, display.get_context(), renderer.textures());
+                run_ui(
+                    &mut run,
+                    &mut ui,
+                    display.get_context(),
+                    renderer.textures(),
+                );
                 if !run {
                     *control_flow = ControlFlow::Exit;
                 }

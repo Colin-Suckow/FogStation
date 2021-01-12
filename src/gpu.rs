@@ -59,7 +59,6 @@ impl Gpu {
     }
 
     pub fn send_gp0_command(&mut self, value: u32) {
-
         self.gp0_push(value);
 
         let command = self.gp0_buffer[0];
@@ -80,9 +79,14 @@ impl Gpu {
                         let x2 = (self.gp0_buffer[2] & 0xFFFF) + x1;
                         let y2 = ((self.gp0_buffer[2] >> 16) & 0xFFFF) + y1;
 
-
-                        self.draw_solid_box(x1, y1, x2, y2, b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF), false);
-
+                        self.draw_solid_box(
+                            x1,
+                            y1,
+                            x2,
+                            y2,
+                            b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
+                            false,
+                        );
                     }
                     _ => {
                         //NOP
@@ -100,7 +104,7 @@ impl Gpu {
                     return;
                 }
 
-                let verts = if command.get_bit(27) {4} else {3};
+                let verts = if command.get_bit(27) { 4 } else { 3 };
 
                 if self.gp0_buffer_address < verts {
                     // Not enough words for the command. Return early
@@ -109,7 +113,6 @@ impl Gpu {
 
                 //Actually draw the polygon
                 panic!("Tried to draw a polygon. I don't want to do this right now");
-                
             }
 
             0x3 => {
@@ -125,8 +128,8 @@ impl Gpu {
 
                 let size = (command >> 27) & 0x3;
 
-                let length = 2 + if size == 0 {1} else {0};
-                
+                let length = 2 + if size == 0 { 1 } else { 0 };
+
                 if self.gp0_buffer_address < length {
                     //Not enough commands
                     return;
@@ -140,7 +143,10 @@ impl Gpu {
                         let address = self.point_to_address(x, y) as usize;
                         let color = if command.get_bit(25) {
                             //Transparent
-                            alpha_composite(self.vram[address],b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF))
+                            alpha_composite(
+                                self.vram[address],
+                                b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
+                            )
                         } else {
                             b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF)
                         };
@@ -154,29 +160,48 @@ impl Gpu {
                         let x2 = (self.gp0_buffer[2] & 0xFFFF) + x1;
                         let y2 = ((self.gp0_buffer[2] >> 16) & 0xFFFF) + y1;
 
-
-                        self.draw_solid_box(x1, y1, x2, y2, b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF), command.get_bit(25));
+                        self.draw_solid_box(
+                            x1,
+                            y1,
+                            x2,
+                            y2,
+                            b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
+                            command.get_bit(25),
+                        );
                     }
 
                     0b10 => {
                         //8x8 sprite
                         let x1 = self.gp0_buffer[1] & 0xFFFF;
                         let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
-                        self.draw_solid_box(x1, y1, x1 + 8, y1 + 8, b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF), command.get_bit(25));
+                        self.draw_solid_box(
+                            x1,
+                            y1,
+                            x1 + 8,
+                            y1 + 8,
+                            b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
+                            command.get_bit(25),
+                        );
                     }
 
                     0b11 => {
                         //16x16 sprite
                         let x1 = self.gp0_buffer[1] & 0xFFFF;
                         let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
-                        self.draw_solid_box(x1, y1, x1 + 16, y1 + 16, b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF), command.get_bit(25));
+                        self.draw_solid_box(
+                            x1,
+                            y1,
+                            x1 + 16,
+                            y1 + 16,
+                            b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
+                            command.get_bit(25),
+                        );
                     }
 
                     _ => {
                         //Lets do nothing with the others
                     }
                 }
-                
             }
 
             0x4 => {
@@ -217,7 +242,6 @@ impl Gpu {
                     self.vram[addr as usize] = p1;
                     self.vram[(addr + 1) as usize] = p2;
                 }
-
             }
             0x7 => {
                 //Env commands
@@ -226,7 +250,7 @@ impl Gpu {
                         //Draw Mode Setting
                         //TODO I'm going to ignore everything but the texture page settings for now
                         self.texpage_x_base = ((command & 0xF) * 64) as u16;
-                        self.texpage_y_base = if command.get_bit(4) {256} else {0};
+                        self.texpage_y_base = if command.get_bit(4) { 256 } else { 0 };
                     }
 
                     0xE3 => {
@@ -245,11 +269,11 @@ impl Gpu {
                         //Set Drawing Offset
                         //TODO Implement. I'm too lazy right now
                     }
-                    _ => panic!("Unknown GPU ENV command {:#X}", command.command())
+                    _ => panic!("Unknown GPU ENV command {:#X}", command.command()),
                 }
             }
 
-            _ => panic!("unknown gp0 {:#X}!", command.gp0_header())
+            _ => panic!("unknown gp0 {:#X}!", command.gp0_header()),
         }
         //Made it to the end, so the command must have been executed
         self.gp0_clear();
@@ -274,7 +298,11 @@ impl Gpu {
                 //Get gpu information
                 //Ignoring this too
             }
-            _ => println!("Unknown gp1 command {:#X} parameter {}!", command.command(), command.parameter())
+            _ => println!(
+                "Unknown gp1 command {:#X} parameter {}!",
+                command.command(),
+                command.parameter()
+            ),
         }
     }
 
@@ -300,7 +328,14 @@ impl Gpu {
         ((1024) as u32 * y) + x
     }
 
-    fn copy_horizontal_line(&mut self, x_source: u32, y_source: u32, x_dest: u32, y_dest: u32, width: u32) {
+    fn copy_horizontal_line(
+        &mut self,
+        x_source: u32,
+        y_source: u32,
+        x_dest: u32,
+        y_dest: u32,
+        width: u32,
+    ) {
         for x_offset in 0..width {
             let val = self.vram[self.point_to_address(x_source + x_offset, y_source) as usize];
             let addr = self.point_to_address(x_dest + x_offset, y_dest) as usize;
@@ -308,9 +343,23 @@ impl Gpu {
         }
     }
 
-    fn copy_rectangle(&mut self, x_source: u32, y_source: u32, x_dest: u32, y_dest: u32, width: u32, height: u32) {
+    fn copy_rectangle(
+        &mut self,
+        x_source: u32,
+        y_source: u32,
+        x_dest: u32,
+        y_dest: u32,
+        width: u32,
+        height: u32,
+    ) {
         for y_offset in 0..height {
-            self.copy_horizontal_line(x_source, y_source + y_offset, x_dest, y_dest + y_offset, width);
+            self.copy_horizontal_line(
+                x_source,
+                y_source + y_offset,
+                x_dest,
+                y_dest + y_offset,
+                width,
+            );
         }
     }
 
@@ -341,18 +390,22 @@ fn b24color_to_b15color(color: u32) -> u16 {
 }
 
 fn b15_to_rgb(color: u16) -> (u8, u8, u8) {
-    (((color >> 10) & 0x1F) as u8, ((color >> 5) & 0x1F) as u8, (color & 0x1F) as u8)
+    (
+        ((color >> 10) & 0x1F) as u8,
+        ((color >> 5) & 0x1F) as u8,
+        (color & 0x1F) as u8,
+    )
 }
 
-fn rgb_to_b15(r: u8, g: u8, b:u8) -> u16 {
+fn rgb_to_b15(r: u8, g: u8, b: u8) -> u16 {
     ((r as u16) << 10) | ((g as u16) << 5) | (b as u16)
 }
 
 //TODO Make colors more accurate
 fn alpha_composite(background_color: u16, alpha_color: u16) -> u16 {
-    let (b_r,b_g,b_b) = b15_to_rgb(background_color);
-    let (a_r,a_g,a_b) = b15_to_rgb(alpha_color);
-    rgb_to_b15((a_r + b_r), (a_g + b_g),  (a_b + b_b))
+    let (b_r, b_g, b_b) = b15_to_rgb(background_color);
+    let (a_r, a_g, a_b) = b15_to_rgb(alpha_color);
+    rgb_to_b15((a_r + b_r), (a_g + b_g), (a_b + b_b))
 }
 
 //Helper trait + impl

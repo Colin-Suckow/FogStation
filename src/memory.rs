@@ -1,14 +1,14 @@
 use byteorder::{ByteOrder, LittleEndian};
 
 pub struct Memory {
-    data: Vec<u8>
+    data: Vec<u8>,
 }
 
 impl Memory {
     /// Initializes 2MiB of system memory
     pub fn new() -> Memory {
         Memory {
-            data: vec![0; 2_097_152]
+            data: vec![0; 2_097_152],
         }
     }
 

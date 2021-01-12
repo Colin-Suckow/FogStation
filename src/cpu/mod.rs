@@ -1,27 +1,26 @@
-mod instruction;
 mod cop0;
+mod instruction;
 
-use std::{cell::RefCell, rc::Rc};
 use crate::bus::MainBus;
-use instruction::{Instruction,NumberHelpers};
-use cop0::Cop0;
 use bit_field::BitField;
-
+use cop0::Cop0;
+use instruction::{Instruction, NumberHelpers};
+use std::{cell::RefCell, rc::Rc};
 
 enum Exception {
-    IBE = 6, //Bus error
-    DBE = 7, //Bus error Data
+    IBE = 6,  //Bus error
+    DBE = 7,  //Bus error Data
     AdEL = 4, //Address Error Load
     AdES = 5, //Address Error Store
     Ovf = 12, //Overflow
-    Sys = 8, //System Call
-    Bp = 9, //Breakpoint
-    RI = 10, //Reserved Instruction
+    Sys = 8,  //System Call
+    Bp = 9,   //Breakpoint
+    RI = 10,  //Reserved Instruction
     CpU = 11, //Co-processor Unusable
     TLBL = 2, //TLB Miss Load
     TLBS = 3, //TLB Miss Store
-    Mod = 1, // TLB modified
-    Int = 0, //Interrupt
+    Mod = 1,  // TLB modified
+    Int = 0,  //Interrupt
 }
 
 pub struct R3000 {
@@ -57,7 +56,8 @@ impl R3000 {
         self.hi = 0;
         self.lo = 0;
         self.pc = 0xBFC00000; // Points to the bios entry point
-        self.cop0.write_reg(12, self.cop0.read_reg(12).set_bit(23, true).clone());
+        self.cop0
+            .write_reg(12, self.cop0.read_reg(12).set_bit(23, true).clone());
     }
 
     /// Runs the next instruction based on the PC location. Only useful for testing because it is not at all accurate to
@@ -78,7 +78,6 @@ impl R3000 {
             self.execute_instruction(delay_instruction);
             self.delay_slot = 0;
         }
-        
     }
 
     pub fn execute_instruction(&mut self, instruction: u32) {
@@ -94,8 +93,7 @@ impl R3000 {
                         //SLL
                         self.write_reg(
                             instruction.rd(),
-                            self.read_reg(instruction.rt())
-                                << instruction.shamt(),
+                            self.read_reg(instruction.rt()) << instruction.shamt(),
                         );
                     }
 
@@ -103,8 +101,7 @@ impl R3000 {
                         //SRL
                         self.write_reg(
                             instruction.rd(),
-                            self.read_reg(instruction.rt())
-                                >> instruction.shamt(),
+                            self.read_reg(instruction.rt()) >> instruction.shamt(),
                         );
                     }
 
@@ -112,8 +109,7 @@ impl R3000 {
                         //SRA
                         self.write_reg(
                             instruction.rd(),
-                            (self.read_reg(instruction.rt()) as i32
-                                >> instruction.shamt()) as u32,
+                            (self.read_reg(instruction.rt()) as i32 >> instruction.shamt()) as u32,
                         );
                     }
 
@@ -128,7 +124,10 @@ impl R3000 {
 
                     0x7 => {
                         //SRAV
-                        self.write_reg(instruction.rd(), self.read_reg(instruction.rt()) / (2 ^ self.read_reg(instruction.rs())));
+                        self.write_reg(
+                            instruction.rd(),
+                            self.read_reg(instruction.rt()) / (2 ^ self.read_reg(instruction.rs())),
+                        );
                     }
 
                     0x8 => {
@@ -187,49 +186,76 @@ impl R3000 {
 
                     0x20 => {
                         //ADD
-                        self.write_reg(instruction.rd(), match (self.read_reg(instruction.rs()) as i32).checked_add(self.read_reg(instruction.rt()) as i32) {
-                            Some(val) => val as u32,
-                            None => panic!("ADD overflowed")
-                        })
+                        self.write_reg(
+                            instruction.rd(),
+                            match (self.read_reg(instruction.rs()) as i32)
+                                .checked_add(self.read_reg(instruction.rt()) as i32)
+                            {
+                                Some(val) => val as u32,
+                                None => panic!("ADD overflowed"),
+                            },
+                        )
                     }
 
                     0x2B => {
                         //SLTU
-                        self.write_reg(instruction.rd(), (self.read_reg(instruction.rs()) < self.read_reg(instruction.rt())) as u32);
+                        self.write_reg(
+                            instruction.rd(),
+                            (self.read_reg(instruction.rs()) < self.read_reg(instruction.rt()))
+                                as u32,
+                        );
                     }
 
                     0x23 => {
                         //SUBU
-                        self.write_reg(instruction.rd(), (self.read_reg(instruction.rs())).wrapping_sub(self.read_reg(instruction.rt())));
+                        self.write_reg(
+                            instruction.rd(),
+                            (self.read_reg(instruction.rs()))
+                                .wrapping_sub(self.read_reg(instruction.rt())),
+                        );
                     }
 
                     0x24 => {
                         //AND
-                        self.write_reg(instruction.rd(), self.read_reg(instruction.rs()) & self.read_reg(instruction.rt()));
+                        self.write_reg(
+                            instruction.rd(),
+                            self.read_reg(instruction.rs()) & self.read_reg(instruction.rt()),
+                        );
                     }
 
                     0x25 => {
                         //OR
                         self.write_reg(
                             instruction.rd(),
-                            self.read_reg(instruction.rs())
-                                | self.read_reg(instruction.rt()),
+                            self.read_reg(instruction.rs()) | self.read_reg(instruction.rt()),
                         );
                     }
 
                     0x27 => {
                         //NOR
-                        self.write_reg(instruction.rd(), !(self.read_reg(instruction.rt()) | self.read_reg(instruction.rs())));
+                        self.write_reg(
+                            instruction.rd(),
+                            !(self.read_reg(instruction.rt()) | self.read_reg(instruction.rs())),
+                        );
                     }
 
                     0x21 => {
                         //ADDU
-                        self.write_reg(instruction.rd(), (self.read_reg(instruction.rt())).wrapping_add(self.read_reg(instruction.rs())));
+                        self.write_reg(
+                            instruction.rd(),
+                            (self.read_reg(instruction.rt()))
+                                .wrapping_add(self.read_reg(instruction.rs())),
+                        );
                     }
 
                     0x2A => {
                         //SLT
-                        self.write_reg(instruction.rd(), ((self.read_reg(instruction.rs()) as i32) < (self.read_reg(instruction.rt())as i32)) as u32);
+                        self.write_reg(
+                            instruction.rd(),
+                            ((self.read_reg(instruction.rs()) as i32)
+                                < (self.read_reg(instruction.rt()) as i32))
+                                as u32,
+                        );
                     }
 
                     _ => panic!(
@@ -246,17 +272,22 @@ impl R3000 {
                         //BLTZ
                         self.delay_slot = self.pc;
                         if (self.read_reg(instruction.rs()) as i32) < 0 {
-                            self.pc = ((instruction.immediate().sign_extended() << 2).wrapping_add(self.delay_slot) );
+                            self.pc = ((instruction.immediate().sign_extended() << 2)
+                                .wrapping_add(self.delay_slot));
                         }
                     }
                     0x1 => {
                         //BGEZ
                         self.delay_slot = self.pc;
                         if self.read_reg(instruction.rs()) as i32 > 0 {
-                            self.pc = ((instruction.immediate().sign_extended() << 2).wrapping_add(self.delay_slot) );
+                            self.pc = ((instruction.immediate().sign_extended() << 2)
+                                .wrapping_add(self.delay_slot));
                         }
                     }
-                    _ => panic!("Unknown test and branch instruction {} ({0:#X})", instruction.rt())
+                    _ => panic!(
+                        "Unknown test and branch instruction {} ({0:#X})",
+                        instruction.rt()
+                    ),
                 }
             }
 
@@ -264,7 +295,6 @@ impl R3000 {
                 //J
                 self.delay_slot = self.pc;
                 self.pc = ((instruction.address() << 2) | (self.delay_slot & 0xF0000000));
-                
             }
 
             0x3 => {
@@ -278,7 +308,8 @@ impl R3000 {
                 //BEQ
                 self.delay_slot = self.pc;
                 if self.read_reg(instruction.rs()) == self.read_reg(instruction.rt()) {
-                    self.pc = ((instruction.immediate().sign_extended() << 2).wrapping_add(self.delay_slot) );
+                    self.pc = ((instruction.immediate().sign_extended() << 2)
+                        .wrapping_add(self.delay_slot));
                 }
             }
 
@@ -286,7 +317,8 @@ impl R3000 {
                 //BNE
                 self.delay_slot = self.pc;
                 if self.read_reg(instruction.rs()) != self.read_reg(instruction.rt()) {
-                    self.pc = ((instruction.immediate().sign_extended() << 2).wrapping_add(self.delay_slot) );
+                    self.pc = ((instruction.immediate().sign_extended() << 2)
+                        .wrapping_add(self.delay_slot));
                 }
             }
 
@@ -294,7 +326,8 @@ impl R3000 {
                 //BLEZ
                 self.delay_slot = self.pc;
                 if (self.read_reg(instruction.rs()) as i32) <= 0 {
-                    self.pc = ((instruction.immediate().sign_extended() << 2).wrapping_add(self.delay_slot) );
+                    self.pc = ((instruction.immediate().sign_extended() << 2)
+                        .wrapping_add(self.delay_slot));
                 }
             }
 
@@ -302,40 +335,58 @@ impl R3000 {
                 //BGTZ
                 self.delay_slot = self.pc;
                 if (self.read_reg(instruction.rs()) as i32) > 0 {
-                    self.pc = ((instruction.immediate().sign_extended() << 2).wrapping_add(self.delay_slot) );
+                    self.pc = ((instruction.immediate().sign_extended() << 2)
+                        .wrapping_add(self.delay_slot));
                 }
             }
 
             0x8 => {
                 //ADDI
-                self.write_reg(instruction.rt(), match (self.read_reg(instruction.rs()) as i32).checked_add(instruction.immediate().sign_extended() as i32) {
-                    Some(val) => val as u32,
-                    None => panic!("ADDI overflowed")
-                })
-
+                self.write_reg(
+                    instruction.rt(),
+                    match (self.read_reg(instruction.rs()) as i32)
+                        .checked_add(instruction.immediate().sign_extended() as i32)
+                    {
+                        Some(val) => val as u32,
+                        None => panic!("ADDI overflowed"),
+                    },
+                )
             }
 
             0x9 => {
                 //ADDIU
                 self.write_reg(
                     instruction.rt(),
-                    self.read_reg(instruction.rs()).wrapping_add(instruction.immediate().sign_extended())
+                    self.read_reg(instruction.rs())
+                        .wrapping_add(instruction.immediate().sign_extended()),
                 );
             }
 
             0xA => {
                 //SLTI
-                self.write_reg(instruction.rt(), (((self.read_reg(instruction.rs())) as i32) < (instruction.immediate().sign_extended() as i32)) as u32);
+                self.write_reg(
+                    instruction.rt(),
+                    (((self.read_reg(instruction.rs())) as i32)
+                        < (instruction.immediate().sign_extended() as i32))
+                        as u32,
+                );
             }
 
             0xB => {
                 //SLTIU
-                self.write_reg(instruction.rt(), (self.read_reg(instruction.rs()) < instruction.immediate().sign_extended()) as u32);
+                self.write_reg(
+                    instruction.rt(),
+                    (self.read_reg(instruction.rs()) < instruction.immediate().sign_extended())
+                        as u32,
+                );
             }
 
             0xC => {
                 //ANDI
-                self.write_reg(instruction.rt(), instruction.immediate().zero_extended() & self.read_reg(instruction.rs()));
+                self.write_reg(
+                    instruction.rt(),
+                    instruction.immediate().zero_extended() & self.read_reg(instruction.rs()),
+                );
             }
 
             0xD => {
@@ -354,69 +405,82 @@ impl R3000 {
                 match instruction.rs() {
                     0b00100 => {
                         //MTCz
-                        self.cop0.write_reg(instruction.rd(), self.read_reg(instruction.rt()));
+                        self.cop0
+                            .write_reg(instruction.rd(), self.read_reg(instruction.rt()));
                     }
                     0x0 => {
                         //MFCz
                         self.write_reg(instruction.rt(), self.cop0.read_reg(instruction.rd()));
                     }
-                    _ => ()
+                    _ => (),
                 }
             }
 
             0x20 => {
                 //LB
-                let addr = (instruction.immediate().sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
+                let addr = (instruction.immediate().sign_extended())
+                    .wrapping_add(self.read_reg(instruction.rs()));
                 let val = self.main_bus.read_byte(addr).sign_extended();
                 self.write_reg(instruction.rt(), val);
             }
 
             0x21 => {
                 //LH
-                let addr = (instruction.immediate().sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
+                let addr = (instruction.immediate().sign_extended())
+                    .wrapping_add(self.read_reg(instruction.rs()));
                 let val = self.main_bus.read_half_word(addr).sign_extended();
                 self.write_reg(instruction.rt(), val);
             }
 
             0x23 => {
                 //LW
-                let addr = (instruction.immediate().sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
+                let addr = (instruction.immediate().sign_extended())
+                    .wrapping_add(self.read_reg(instruction.rs()));
                 let val = self.main_bus.read_word(addr);
                 self.write_reg(instruction.rt(), val);
             }
 
             0x24 => {
                 //LBU
-                let addr = (instruction.immediate().sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
+                let addr = (instruction.immediate().sign_extended())
+                    .wrapping_add(self.read_reg(instruction.rs()));
                 let val = self.main_bus.read_byte(addr).zero_extended();
                 self.write_reg(instruction.rt(), val);
             }
 
             0x25 => {
                 //LHU
-                let addr = (instruction.immediate().sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
+                let addr = (instruction.immediate().sign_extended())
+                    .wrapping_add(self.read_reg(instruction.rs()));
                 let val = self.main_bus.read_half_word(addr).zero_extended();
                 self.write_reg(instruction.rt(), val);
             }
 
             0x28 => {
                 //SB
-                let addr = instruction.immediate().sign_extended().wrapping_add(self.read_reg(instruction.rs()));
+                let addr = instruction
+                    .immediate()
+                    .sign_extended()
+                    .wrapping_add(self.read_reg(instruction.rs()));
                 let val = (self.read_reg(instruction.rt()) & 0xFF) as u8;
                 self.write_bus_byte(addr, val);
             }
 
             0x29 => {
                 //SH
-                let addr = instruction.immediate().sign_extended().wrapping_add(self.read_reg(instruction.rs()));
+                let addr = instruction
+                    .immediate()
+                    .sign_extended()
+                    .wrapping_add(self.read_reg(instruction.rs()));
                 let val = (self.read_reg(instruction.rt()) & 0xFFFF) as u16;
                 self.write_bus_half_word(addr, val);
             }
 
             0x2B => {
                 //SW
-                let addr =
-                    self.read_reg(instruction.rs()).wrapping_add(instruction.immediate().sign_extended());
+                let addr = self
+                    .read_reg(instruction.rs())
+                    .wrapping_add(instruction.immediate().sign_extended());
                 self.write_bus_word(addr, self.read_reg(instruction.rt()));
             }
             _ => panic!(

@@ -205,14 +205,14 @@ impl Gpu {
                     return;
                 }
 
-                let base_x = ((self.gp0_buffer[1] & 0xFFFF) as u16) / 2;
+                let base_x = ((self.gp0_buffer[1] & 0xFFFF) as u16);
                 let base_y = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as u16;
 
-                for index in 3..(length-3) {
+                for index in 3..(length) {
                     let p1 = ((self.gp0_buffer[index as usize] >> 16) & 0xFFFF) as u16;
                     let p2 = (self.gp0_buffer[index as usize] & 0xFFFF) as u16;
-                    let x = (base_x + (index * 2)) % width;
-                    let y = (base_y + ((index * 2) / width));
+                    let x = (base_x + (((index - 3) * 2) % width));
+                    let y = (base_y + (((index - 3) * 2) / width));
                     let addr = self.point_to_address(x as u32, y as u32);
                     self.vram[addr as usize] = p1;
                     self.vram[(addr + 1) as usize] = p2;

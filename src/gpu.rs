@@ -19,15 +19,10 @@ pub struct Gpu {
     draw_area_top_left_y: u16,
     draw_area_bottom_right_x: u16,
     draw_area_bottom_right_y: u16,
+
+    irq_fired: bool,
 }
 
-#[derive(FromPrimitive)]
-enum RectangleSize {
-    VariableSize,
-    SinglePixel,
-    EightSprite,
-    SixteenSprite,
-}
 
 impl Gpu {
     pub fn new() -> Gpu {
@@ -47,6 +42,8 @@ impl Gpu {
             draw_area_top_left_y: 0,
             draw_area_bottom_right_x: 0,
             draw_area_bottom_right_y: 0,
+
+            irq_fired: false,
         }
     }
 
@@ -101,6 +98,7 @@ impl Gpu {
                 // I only want to test flat shaded polygons right now
                 if command.get_bit(28) || command.get_bit(1) {
                     self.gp0_buffer_address = 1; //Prevent overflowing the buffer with more calls.
+                    println!("Textured or shaded polygon!");
                     return;
                 }
 
@@ -308,6 +306,16 @@ impl Gpu {
 
     pub fn get_vram(&self) -> &Vec<u16> {
         &self.vram
+    }
+
+    ///Returns irq status. If true, function will return true then clear irq status
+    pub fn consume_irq(&mut self) -> bool {
+        if self.irq_fired {
+            self.irq_fired = false;
+            true
+        } else {
+            false
+        }
     }
 
     fn gp0_push(&mut self, val: u32) {

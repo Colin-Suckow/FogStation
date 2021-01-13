@@ -38,6 +38,8 @@ pub struct R3000 {
     delay_slot: u32,
     cop0: Cop0,
     load_delay: Option<LoadDelay>,
+    i_mask: u32,
+    i_status: u32,
 }
 
 impl R3000 {
@@ -52,6 +54,8 @@ impl R3000 {
             delay_slot: 0,
             cop0: Cop0::new(),
             load_delay: None,
+            i_mask: 0,
+            i_status: 0,
         }
     }
     /// Resets cpu registers to zero and sets program counter to reset vector (0xBFC00000)
@@ -62,7 +66,7 @@ impl R3000 {
         }
         self.hi = 0;
         self.lo = 0;
-        self.pc = 0x80010000; // Points to the bios entry point
+        self.pc = 0xBFC00000; // Points to the bios entry point
         self.cop0
             .write_reg(12, self.cop0.read_reg(12).set_bit(23, true).clone());
     }

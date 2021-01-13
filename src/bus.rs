@@ -16,7 +16,9 @@ impl MainBus {
     pub fn read_word(&mut self, addr: u32) -> u32 {
         match addr {
             0x0..=0x001f_ffff => self.memory.read_word(addr), //KUSEG
-            0x8001_0000..=0x8001_f000 => self.bios.read_word(addr - 0x8001_0000),
+            //0x8001_0000..=0x8001_f000 => self.bios.read_word(addr - 0x8001_0000), for test roms
+            0x1F801070 => 0x1,
+            0x1F801074 => 0x1,
             0x8000_0000..=0x801f_ffff => self.memory.read_word(addr - 0x8000_0000), //KSEG0
             0x1f801810 => self.gpu.read_word_gp0(),
             0x1f801814 => self.gpu.read_status_register(),
@@ -36,6 +38,7 @@ impl MainBus {
     pub fn write_word(&mut self, addr: u32, word: u32) {
         match addr {
             0x0..=0x001f_ffff => self.memory.write_word(addr, word), //KUSEG
+            0x1F801074 => println!("IRQ mask write {:#b}", word),
             0x8000_0000..=0x801f_ffff => self.memory.write_word(addr - 0x8000_0000, word), //KSEG0
             0xA000_0000..=0xA01f_ffff => self.memory.write_word(addr - 0xA000_0000, word), //KSEG1
             0x1F801810 => self.gpu.send_gp0_command(word),

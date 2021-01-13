@@ -41,7 +41,12 @@ impl PSXEmu {
     }
 
     ///Runs the emulator till one frame has been generated
-    pub fn run_frame(&mut self) {}
+    pub fn run_frame(&mut self) {
+        for _ in 0..564480 {
+            self.step_instruction();
+        }
+
+    }
 
     pub fn get_vram(&self) -> &Vec<u16> {
         self.r3000.main_bus.gpu.get_vram()

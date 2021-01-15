@@ -21,6 +21,7 @@ pub struct Gpu {
     draw_area_bottom_right_y: u16,
 
     irq_fired: bool,
+    vlank_consumed: bool,
 }
 
 
@@ -44,6 +45,7 @@ impl Gpu {
             draw_area_bottom_right_y: 0,
 
             irq_fired: false,
+            vlank_consumed: false,
         }
     }
 
@@ -302,6 +304,32 @@ impl Gpu {
                 command.parameter()
             ),
         }
+    }
+
+    pub fn execute_cycle(&mut self) {
+        self.pixel_count += 1;
+
+        if self.pixel_count > 640 * 512 {
+            self.pixel_count = 0;
+            self.vlank_consumed = false;
+        }
+    }
+
+    pub fn is_vblank(&self) -> bool {
+        self.pixel_count > 640 * 480 && self.pixel_count < 640 * 512
+    }
+
+    pub fn consume_vblank(&mut self) -> bool {
+        if !self.vlank_consumed && self.is_vblank() {
+            self.vlank_consumed = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn end_of_frame(&self) -> bool {
+        self.pixel_count == 640 * 512
     }
 
     pub fn get_vram(&self) -> &Vec<u16> {

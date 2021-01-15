@@ -75,6 +75,15 @@ impl R3000 {
     /// how the cpu actually works.
     pub fn step_instruction(&mut self) {
 
+        //Check for vblank
+        if self.main_bus.gpu.consume_vblank() {
+            self.i_status.set_bit(0, true);
+            if self.i_mask.get_bit(0) {
+                //Interrupt enabled
+                self.fire_exception(Exception::Int);
+            }
+        }
+
         //Execute delayed load
         if let Some(load) = self.load_delay.take() {
             self.write_reg(load.register, load.value);
@@ -453,7 +462,7 @@ impl R3000 {
                 //LW
                 let addr = (instruction.immediate().sign_extended())
                     .wrapping_add(self.read_reg(instruction.rs()));
-                let val = self.main_bus.read_word(addr);
+                let val = self.read_bus_word(addr);
                 self.load_delay = Some(LoadDelay {
                     register: instruction.rt(),
                     value: val,
@@ -524,13 +533,26 @@ impl R3000 {
         };
     }
 
+    fn read_bus_word(&mut self, addr: u32) -> u32 {
+        match addr {
+            0x1F801070 => self.i_status,
+            0x1F801074 => self.i_mask,
+            _ => self.main_bus.read_word(addr),
+        }
+    }
+
     fn write_bus_word(&mut self, addr: u32, val: u32) {
-        let sr = self.cop0.read_reg(12);
+
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
             return;
         }
-        self.main_bus.write_word(addr, val);
+
+        match addr {
+            0x1F801070 => self.i_status = val,
+            0x1F801074 => self.i_mask = val,
+            _ => self.main_bus.write_word(addr, val),
+        };
     }
 
     fn write_bus_half_word(&mut self, addr: u32, val: u16) {

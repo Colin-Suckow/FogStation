@@ -44,9 +44,7 @@ fn main() {
     let system = support::init("psx-emu");
 
     system.main_loop(move |_, ui, gl_ctx, textures| {
-        for _ in 0..564480 {
-            emu.step_instruction();
-        }
+        emu.run_frame();
         Window::new(im_str!("Registers"))
             .size([300.0, 600.0], Condition::FirstUseEver)
             .build(ui, || {
@@ -63,13 +61,6 @@ fn main() {
                 textures.replace(id, texture);
                 Image::new(id, [1024.0, 512.0]).build(ui);
             });
-        Window::new(im_str!("BIOS"))
-            .build(ui, || {
-                for (index, data) in emu.get_bios().chunks(8).enumerate() {
-                    ui.text(format!("{:#X}: {:?}", 0xbfc0_0000 + (index * 8), data));
-                }
-            });
-        
     });
 }
 
@@ -83,7 +74,11 @@ fn create_texture_from_buffer<F>(
 where
     F: Facade,
 {
-    let gl_raw_data: Vec<u8> = data.iter().map(|p| ps_pixel_to_gl(p)).flatten().collect();
+    let mut gl_raw_data: Vec<u8> = Vec::new();
+    for p in data {
+        gl_raw_data.append(&mut ps_pixel_to_gl(p));
+    }
+
     let image = RawImage2d {
         data: Cow::from(gl_raw_data),
         width: width as u32,

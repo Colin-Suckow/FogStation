@@ -1,7 +1,6 @@
 mod bios;
 mod bus;
 mod cpu;
-mod dma;
 mod gpu;
 mod memory;
 
@@ -42,10 +41,12 @@ impl PSXEmu {
 
     ///Runs the emulator till one frame has been generated
     pub fn run_frame(&mut self) {
-        for _ in 0..564480 {
+        while !self.r3000.main_bus.gpu.end_of_frame() {
             self.step_instruction();
+            self.r3000.main_bus.gpu.execute_cycle();
         }
-
+        //Step the gpu once more to get it off this frame
+        self.r3000.main_bus.gpu.execute_cycle();
     }
 
     pub fn get_vram(&self) -> &Vec<u16> {

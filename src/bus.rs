@@ -39,6 +39,12 @@ impl MainBus {
             0x1F801074 => println!("IRQ mask write {:#b}", word),
             0x8000_0000..=0x801f_ffff => self.memory.write_word(addr - 0x8000_0000, word), //KSEG0
             0xA000_0000..=0xA01f_ffff => self.memory.write_word(addr - 0xA000_0000, word), //KSEG1
+            0x1F801000 => println!("Expansion 1 base write"),
+            0x1F801004 => println!("Expansion 2 base write"),
+            0x1F801008 => println!("Expansion 1 delay/size write"),
+            0x1F801010 => println!("BIOS ROM Control WORD write"),
+            0x1F801060 => println!("RAM SIZE WORD write"),
+            0x1F801020 => println!("COM_DELAY WORD write"),
             0x1F801810 => self.gpu.send_gp0_command(word),
             0x1F801814 => self.gpu.send_gp1_command(word),
             0x1f80_1000..=0x1f80_2fff => println!("Something tried to write to the hardware control registers. These are not currently emulated. The address was {:#X}. Value {:#X}", addr, word),

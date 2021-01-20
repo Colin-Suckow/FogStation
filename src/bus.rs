@@ -1,25 +1,33 @@
 use crate::bios::Bios;
 use crate::gpu::Gpu;
 use crate::memory::Memory;
+use crate::dma::DMAState;
 
 pub struct MainBus {
     pub bios: Bios,
     memory: Memory,
     pub gpu: Gpu,
+    pub dma: DMAState,
 }
 
 impl MainBus {
     pub fn new(bios: Bios, memory: Memory, gpu: Gpu) -> MainBus {
-        MainBus { bios, memory, gpu }
+        MainBus { bios, memory, gpu, dma: DMAState::new() }
     }
 
     pub fn read_word(&mut self, addr: u32) -> u32 {
         match addr {
+            0x1F801070 => {
+                println!("Tried to read i_status word");
+                0
+            },
             0x0..=0x001f_ffff => self.memory.read_word(addr), //KUSEG
             //0x8001_0000..=0x8001_f000 => self.bios.read_word(addr - 0x8001_0000), for test roms
             0x8000_0000..=0x801f_ffff => self.memory.read_word(addr - 0x8000_0000), //KSEG0
             0x1f801810 => self.gpu.read_word_gp0(),
             0x1f801814 => self.gpu.read_status_register(),
+            0x1F8010F4 => self.dma.interrupt_register,
+            0x1F8010F0 => self.dma.control_register,
             0x1f80_1000..=0x1f80_2fff => {
                 println!("Something tried to read the hardware control registers. These are not currently emulated, so a 0 is being returned. The address was {:#X}", addr);
                 0
@@ -45,6 +53,12 @@ impl MainBus {
             0x1F801010 => println!("BIOS ROM Control WORD write"),
             0x1F801060 => println!("RAM SIZE WORD write"),
             0x1F801020 => println!("COM_DELAY WORD write"),
+            0x1F801014 => println!("SPU_DELAY size write"),
+            0x1F801018 => println!("CDROM_DELAY size write"),
+            0x1F80101C => println!("Expansion 2 delay/size write"),
+            0x1F8010F4 => self.dma.interrupt_register = word,
+            0x1F8010F0 => self.dma.control_register = word,
+            0x1F80100C => println!("Expansion 3 Delay/size write"),
             0x1F801810 => self.gpu.send_gp0_command(word),
             0x1F801814 => self.gpu.send_gp1_command(word),
             0x1f80_1000..=0x1f80_2fff => println!("Something tried to write to the hardware control registers. These are not currently emulated. The address was {:#X}. Value {:#X}", addr, word),
@@ -52,15 +66,21 @@ impl MainBus {
                 panic!("Something tried to write to the bios rom. This is not a valid action")
             }
             0xFFFE0000..=0xFFFE0200 => (), //println!("Something tried to write to the cache control registers. These are not currently emulated. The address was {:#X}", addr),
-            _ => panic!(
-                "Invalid word write at address {:#X}! This address is not mapped to any device.",
-                addr
-            ),
+            _ => {
+                panic!(
+                    "Invalid word write at address {:#X}! This address is not mapped to any device.",
+                    addr
+                );
+            }
         }
     }
 
     pub fn read_half_word(&self, addr: u32) -> u16 {
         match addr {
+            0x1F801070 => {
+                panic!("Tried to read i_status half");
+                0
+            },
             0x8000_0000..=0x801f_ffff => self.memory.read_half_word(addr - 0x8000_0000), //KSEG0
             0x1f80_1000..=0x1f80_2fff => {
                 //println!("Something tried to read the hardware control registers. These are not currently emulated, so a 0 is being returned. The address was {:#X}", addr);
@@ -81,6 +101,14 @@ impl MainBus {
 
     pub fn read_byte(&self, addr: u32) -> u8 {
         match addr {
+            0x1F801070 => {
+                println!("Tried to read i_status word");
+                0
+            },
+            0x1F801070 => {
+                println!("Tried to read i_status byte");
+                0
+            },
             0x0..=0x001f_ffff => self.memory.read_byte(addr), //KUSEG
             0x1F00_0000..=0x1f00_FFFF => {
                 //println!("Something tried to read the parallel port. This is not currently emulated, so a 0 was returned. The address was {:#X}", addr);

@@ -1,11 +1,10 @@
 use imgui_glium_renderer::Texture;
 use psx_emu::PSXEmu;
 use std::{fs, rc::Rc};
+use byteorder::{ByteOrder, LittleEndian};
 
 use imgui::*;
-
-
-use std::time::{Duration, Instant};
+use std::env;
 
 mod support;
 
@@ -18,6 +17,7 @@ use glium::{
 use std::borrow::Cow;
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
     let bios_data = match fs::read("SCPH1001.BIN") {
         Ok(data) => data,
         _ => {
@@ -29,17 +29,15 @@ fn main() {
     let mut emu = PSXEmu::new(bios_data);
     emu.reset();
 
-    // loop {
-    //     emu.step_instruction();
-    // }
-
-    // let start = Instant::now();
-    // for _ in 0..100000 {
-    //     emu.step_instruction();
-    // }
-    // let end_time = start.elapsed();
-    // let elapsed_seconds = end_time.as_micros() as f64 * 0.000001;
-    // println!("Frequency {:.2}mhz", (100000.0 / elapsed_seconds) / 1000000.0);
+    if args.len() == 2 {
+        let exe = fs::read(&args[1]).unwrap();
+        let exe_data = exe[0x800..].to_vec();
+        let destination = LittleEndian::read_u32(&exe[0x18..0x1C]);
+        let entrypoint = LittleEndian::read_u32(&exe[0x10..0x1f]);
+        println!("Destination is {:#X}\nEntrypoint is {:#X}", destination, entrypoint);
+        emu.load_executable(destination, &exe_data);
+        emu.r3000.pc = entrypoint;
+    }
 
     let system = support::init("psx-emu");
 
@@ -61,6 +59,15 @@ fn main() {
                 textures.replace(id, texture);
                 Image::new(id, [1024.0, 512.0]).build(ui);
             });
+
+        Window::new(im_str!("Viewport"))
+            .content_size([800.0, 600.0])
+            .build(ui, || {
+                let texture = create_texture_from_buffer(gl_ctx, emu.get_vram(), 320, 240);
+                let id = TextureId::new(1); //This is an awful hack that needs to be replaced
+                textures.replace(id, texture);
+                Image::new(id, [800.0, 600.0]).build(ui);
+            });
     });
 }
 
@@ -75,8 +82,8 @@ where
     F: Facade,
 {
     let mut gl_raw_data: Vec<u8> = Vec::new();
-    for p in data {
-        gl_raw_data.append(&mut ps_pixel_to_gl(p));
+    for index in 0..(width * height) {
+        gl_raw_data.append(&mut ps_pixel_to_gl(&data[((index / width) * 1024) + index % width]));
     }
 
     let image = RawImage2d {

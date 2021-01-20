@@ -2,6 +2,8 @@
 Cargo.lock
 /desktop/SCPH1001.BIN
 /desktop/MemoryTransfer16BPP.bin
+/desktop/*.bin
+/desktop/*.exe
 /desktop/target
 /.idea
 /.vscode

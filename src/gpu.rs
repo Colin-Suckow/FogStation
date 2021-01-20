@@ -3,6 +3,11 @@ use core::num;
 use bit_field::BitField;
 use num_derive::FromPrimitive;
 
+const H_RES: u32 = 654;
+const V_RES: u32 = 512;
+const H_BLANK_START: u32 = 640;
+const V_BLANK_START: u32 = 480;
+
 pub struct Gpu {
     vram: Vec<u16>,
     status_reg: u32,
@@ -21,7 +26,8 @@ pub struct Gpu {
     draw_area_bottom_right_y: u16,
 
     irq_fired: bool,
-    vlank_consumed: bool,
+    vblank_consumed: bool,
+    hblank_consumed: bool,
 }
 
 
@@ -45,7 +51,8 @@ impl Gpu {
             draw_area_bottom_right_y: 0,
 
             irq_fired: false,
-            vlank_consumed: false,
+            vblank_consumed: false,
+            hblank_consumed: false,
         }
     }
 
@@ -234,9 +241,9 @@ impl Gpu {
                 let base_y = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as u16;
 
                 for index in 3..(length) {
-                    let p1 = ((self.gp0_buffer[index as usize] >> 16) & 0xFFFF) as u16;
-                    let p2 = (self.gp0_buffer[index as usize] & 0xFFFF) as u16;
-                    let x = (base_x + (((index - 3) * 2) % width));
+                    let p2 = ((self.gp0_buffer[index as usize] >> 16) & 0xFFFF) as u16;
+                    let p1 = (self.gp0_buffer[index as usize] & 0xFFFF) as u16;
+                    let x = (base_x + ((((index - 3) * 2) % width)));
                     let y = (base_y + (((index - 3) * 2) / width));
                     let addr = self.point_to_address(x as u32, y as u32);
                     self.vram[addr as usize] = p1;
@@ -309,19 +316,36 @@ impl Gpu {
     pub fn execute_cycle(&mut self) {
         self.pixel_count += 1;
 
-        if self.pixel_count > 640 * 512 {
+        if self.pixel_count % H_RES == 0 {
+            self.hblank_consumed = false;
+        }
+
+        if self.pixel_count > H_RES * V_RES {
             self.pixel_count = 0;
-            self.vlank_consumed = false;
+            self.vblank_consumed = false;
         }
     }
 
     pub fn is_vblank(&self) -> bool {
-        self.pixel_count > 640 * 480 && self.pixel_count < 640 * 512
+        self.pixel_count > H_RES * V_BLANK_START && self.pixel_count < H_RES * V_RES
+    }
+
+    pub fn is_hblank(&self) -> bool {
+        self.pixel_count % H_RES > H_BLANK_START
     }
 
     pub fn consume_vblank(&mut self) -> bool {
-        if !self.vlank_consumed && self.is_vblank() {
-            self.vlank_consumed = true;
+        if !self.vblank_consumed && self.is_vblank() {
+            self.vblank_consumed = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn consume_hblank(&mut self) -> bool {
+        if !self.hblank_consumed && self.is_hblank() {
+            self.hblank_consumed = true;
             true
         } else {
             false
@@ -329,7 +353,7 @@ impl Gpu {
     }
 
     pub fn end_of_frame(&self) -> bool {
-        self.pixel_count == 640 * 512
+        self.pixel_count == H_RES * V_RES
     }
 
     pub fn get_vram(&self) -> &Vec<u16> {

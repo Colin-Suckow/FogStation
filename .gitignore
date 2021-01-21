@@ -4,6 +4,7 @@ Cargo.lock
 /desktop/MemoryTransfer16BPP.bin
 /desktop/*.bin
 /desktop/*.exe
+/desktop/*.txt
 /desktop/target
 /.idea
 /.vscode

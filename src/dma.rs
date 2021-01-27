@@ -1,123 +1,181 @@
 use bit_field::BitField;
-use crate::cpu::R3000;
+use crate::cpu::{R3000, InterruptSource};
 use crate::bus::MainBus;
+use crate::cpu::Exception::Int;
 
-pub enum Channel {
-    MDECin,
-    MDECout,
-    GPU,
-    CDROM,
-    SPU,
-    PIO,
-    OTC
-}
-enum StepDirection {
-    Forward,
-    Backward,
+const NUM_CHANNELS: usize = 7;
+
+#[derive(Clone)]
+struct Channel {
+    base_addr: u32,
+    block: u32,
+    control: u32,
 }
 
-enum TransferDirection {
-    ToRAM,
-    FromRAM,
-}
+impl Channel {
+    fn new() -> Self {
+        Self {
+            base_addr: 0,
+            block: 0,
+            control: 0x800000,
+        }
+    }
 
-enum SyncMode {
-    Immediate,
-    Block,
-    LinkedList,
-    Reserved,
-}
+    fn enabled(&self) -> bool {
+        self.control.get_bit(24)
+    }
 
-struct Command {
-    channel: Channel,
-    step_direction: StepDirection,
-    transfer_direction: TransferDirection,
-    chopping_enabled: bool,
-    sync_mode: SyncMode,
-    chopping_dma_size: u8,
-    chopping_cpu_size: u8,
-    busy: bool,
-    trigger: bool,
+    fn complete(&mut self) {
+        self.control.set_bit(24, false);
+        self.control.set_bit(28, false);
+    }
 }
 
 pub struct DMAState {
-    pub control_register: u32,
-    pub interrupt_register: u32,
+    channels: Vec<Channel>,
+    control: u32,
+    interrupt: u32,
 }
 
 impl DMAState {
     pub fn new() -> Self {
         Self {
-            control_register: 0,
-            interrupt_register: 0,
+            channels: vec![Channel::new(); NUM_CHANNELS],
+            control: 0x07654321, //Initial value on reset
+            interrupt: 0,
         }
     }
 
-    pub fn execute_cycle(&mut self, cpu: &mut R3000) {
-
-    }
-
-    pub fn enable_channel(&mut self, channel: Channel) {
-        self.control_register.set_bit(get_channel_enable_bit(&channel), true);
-    }
-
-    pub fn disable_channel(&mut self, channel: Channel) {
-        self.control_register.set_bit(get_channel_enable_bit(&channel), false);
-    }
-
-    pub fn set_channel_priority(&mut self, channel: Channel, priority: u32) {
-        match channel {
-            Channel::MDECin => {
-                self.control_register.set_bits(0..=2, priority & 0b111);
-            }
-            Channel::MDECout => {
-                self.control_register.set_bits(4..=6, priority & 0b111);
-            }
-            Channel::GPU => {
-                self.control_register.set_bits(8..=10, priority & 0b111);
-            }
-            Channel::CDROM => {
-                self.control_register.set_bits(12..=14, priority & 0b111);
-            }
-            Channel::SPU => {
-                self.control_register.set_bits(16..=18, priority & 0b111);
-            }
-            Channel::PIO => {
-                self.control_register.set_bits(20..=22, priority & 0b111);
-            }
-            Channel::OTC => {
-                self.control_register.set_bits(24..=26, priority & 0b111);
+    pub fn read_word(&mut self, addr: u32) -> u32 {
+        let channel_num = (((addr & 0x000000F0) >> 4) - 0x8) as usize;
+        match addr {
+            0x1F8010F0 => self.control,
+            0x1F8010F4 => {
+                println!("Reading DMA interrupt. val {:#X}", self.interrupt);
+                self.interrupt
+            },
+            _ => {
+                match addr & 0xFFFFFF0F {
+                    0x1F801000 => {
+                        //read base address
+                        self.channels[channel_num].base_addr
+                    }
+                    0x1F801004 => {
+                        //read block control
+                        self.channels[channel_num].block
+                    }
+                    0x1F801008 => {
+                        //read control
+                        println!("Reading dma control {} val {:#X}", channel_num, self.channels[channel_num].control);
+                        self.channels[channel_num].control
+                    }
+                    _ => panic!("Unknown dma read {:#X}", addr)
+                }
             }
         }
     }
 
-    pub fn set_interrupt(&mut self, channel: Channel) {
-        self.interrupt_register.set_bit(get_channel_irq_enable_bit(&channel), true);
+    pub fn write_word(&mut self, addr: u32, value: u32) {
+        let channel_num = (((addr & 0x000000F0) >> 4) - 0x8) as usize;
+        match addr {
+            0x1F8010F0 => {
+                self.control = value
+            },
+            0x1F8010F4 =>  {
+                let normal_bits = value & 0x80FFFFFF; //These bits are written normally
+                let ack_bits = (value >> 24) & 0x7F; //These bits are written as a one to clear. 0x7F0000
+                let acked_bits = ((self.interrupt >> 24) & 0x7F) & !ack_bits;
+                self.interrupt = normal_bits | (acked_bits << 24)
+            },
+            _ => {
+                match addr & 0xFFFFFF0F {
+                    0x1F801000 => {
+                        //Set base address
+                        println!("Wrote DMA base {} with {:#X}", channel_num, value);
+                        self.channels[channel_num].base_addr = value;
+                    }
+                    0x1F801004 => {
+                        //Set block control
+                        println!("Wrote DMA block {} with {:#X}", channel_num, value);
+                        self.channels[channel_num].block = value;
+                    }
+                    0x1F801008 => {
+                        //Set control
+                        println!("Wrote DMA control {} with {:#X}", channel_num, value);
+                        self.channels[channel_num].control = value;
+                    }
+                    _ => panic!("Unknown dma write {:#X}", addr)
+                };
+            }
+        };
     }
 
+    pub fn update(&mut self) {
+        let should_flag = self.interrupt.get_bit(15) || (self.interrupt.get_bit(23) && (self.interrupt.get_bits(16..=22) > 0 && self.interrupt.get_bits(24..=30) > 0));
+        self.interrupt.set_bit(31, should_flag);
+    }
+
+    fn channel_enabled(&self, channel_num: usize) -> bool {
+        self.control.get_bit((channel_num * 4) + 3)
+    }
+
+    fn raise_irq(&mut self, channel_num: usize) {
+        let irq_enabled = self.interrupt.get_bit(16 + channel_num);
+        if irq_enabled {
+            self.interrupt.set_bit(24 + channel_num, true);
+        }
+    }
 }
 
-fn get_channel_enable_bit(channel: &Channel) -> usize {
-    match channel {
-        Channel::MDECin => 3,
-        Channel::MDECout => 7,
-        Channel::GPU => 11,
-        Channel::CDROM => 15,
-        Channel::SPU => 19,
-        Channel::PIO => 23,
-        Channel::OTC => 27,
+pub fn execute_dma_cycle(cpu: &mut R3000) {
+    //Populate list of running and enabled dma channels
+    let mut channels_to_run: Vec<usize> = Vec::new();
+    for i in 0..NUM_CHANNELS {
+        let channel = &cpu.main_bus.dma.channels[i];
+        if cpu.main_bus.dma.channel_enabled(i) && channel.enabled() {
+            channels_to_run.push(i);
+        }
     }
-}
 
-fn get_channel_irq_enable_bit(channel: &Channel) -> usize {
-    match channel {
-        Channel::MDECin => 16,
-        Channel::MDECout => 17,
-        Channel::GPU => 18,
-        Channel::CDROM => 19,
-        Channel::SPU => 20,
-        Channel::PIO => 21,
-        Channel::OTC => 22,
+    //Execute dma copy for each channel
+    for num in channels_to_run {
+        match num {
+            2 => {
+                //GPU
+                match cpu.main_bus.dma.channels[num].control {
+                    0x01000401 => {
+                        //Linked list mode. mem -> gpu
+                        let mut next_address = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
+
+                    }
+                    _ => {
+                        panic!("Unknown gpu DMA mode. This must be a custom transfer. Control was {:#X}", cpu.main_bus.dma.channels[num].control)
+                    }
+                }
+            }
+            6 => {
+                //OTC
+                //OTC is only used to reset the ordering table. So we can ignore a lot of the parameters
+                let entries = cpu.main_bus.dma.channels[num].block & 0xFFFF;
+                let base = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
+                for i in 0..entries {
+                    let addr = base - ((entries - i) * 4);
+                    if i == 0 {
+                        //The first entry should point to the end of memory
+                        cpu.main_bus.write_word(addr, 0x00FFFFFF);
+                    } else {
+                        //All the others should point to the address below
+                        cpu.main_bus.write_word(addr, addr - 4);
+                    }
+                }
+                println!("DMA6 done. Marking complete and raising irq");
+                cpu.main_bus.dma.channels[num].complete();
+                cpu.main_bus.dma.raise_irq(num);
+                cpu.fire_external_interrupt(InterruptSource::DMA);
+            }
+            _ => panic!("Unable to transfer unknown DMA channel {}!", num)
+        }
     }
+    cpu.main_bus.dma.update();
 }
 

@@ -7,15 +7,17 @@ use timer::TimerState;
 
 use crate::gpu::Gpu;
 use crate::memory::Memory;
-use crate::dma::DMAState;
+use crate::dma::{DMAState, execute_dma_cycle};
+use crate::cpu::InterruptSource;
 
 mod bios;
 mod bus;
-mod cpu;
+pub mod cpu;
 mod gpu;
 mod memory;
 mod dma;
 mod timer;
+mod spu;
 
 pub struct PSXEmu {
     pub r3000: R3000,
@@ -45,28 +47,14 @@ impl PSXEmu {
     /// This function is only here for testing and is not at all accurate to how the cpu actually works
     pub fn step_instruction(&mut self) {
         //Threeish cpu per gpu clock
-        self.r3000.step_instruction(&mut self.timers);
-        self.dma.execute_cycle(&mut self.r3000);
-        self.cycle_count += 1;
-        self.timers.update_sys_clock(&mut self.r3000);
-        if self.cycle_count % 8 == 0 {
-            self.timers.update_sys_div_8(&mut self.r3000);
-        }
-
-        self.r3000.step_instruction(&mut self.timers);
-        self.dma.execute_cycle(&mut self.r3000);
-        self.cycle_count += 1;
-        self.timers.update_sys_clock(&mut self.r3000);
-        if self.cycle_count % 8 == 0 {
-            self.timers.update_sys_div_8(&mut self.r3000);
-        }
-
-        self.r3000.step_instruction(&mut self.timers);
-        self.dma.execute_cycle(&mut self.r3000);
-        self.cycle_count += 1;
-        self.timers.update_sys_clock(&mut self.r3000);
-        if self.cycle_count % 8 == 0 {
-            self.timers.update_sys_div_8(&mut self.r3000);
+        for _ in 0..3 {
+            self.r3000.step_instruction(&mut self.timers);
+            execute_dma_cycle(&mut self.r3000);
+            self.cycle_count += 1;
+            self.timers.update_sys_clock(&mut self.r3000);
+            if self.cycle_count % 8 == 0 {
+                self.timers.update_sys_div_8(&mut self.r3000);
+            }
         }
 
         self.r3000.main_bus.gpu.execute_cycle();
@@ -99,5 +87,9 @@ impl PSXEmu {
 
     pub fn get_bios(&self) -> &Vec<u8> {
         self.r3000.main_bus.bios.get_data()
+    }
+
+    pub fn manually_fire_interrupt(&mut self, source: InterruptSource) {
+        self.r3000.fire_external_interrupt(source);
     }
 }

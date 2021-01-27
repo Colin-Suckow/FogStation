@@ -14,7 +14,7 @@ pub struct Gpu {
     pixel_count: u32,
     enabled: bool,
     gp0_words_to_read: usize,
-    gp0_buffer: [u32; 1024],
+    gp0_buffer: [u32; 2048],
     gp0_buffer_address: usize,
 
     texpage_x_base: u16,
@@ -35,11 +35,11 @@ impl Gpu {
     pub fn new() -> Gpu {
         Gpu {
             vram: vec![0; (1_048_576 / 2)],
-            status_reg: 0,
+            status_reg: 0x1C000000,
             pixel_count: 0,
             enabled: false,
             gp0_words_to_read: 0,
-            gp0_buffer: [0; 1024],
+            gp0_buffer: [0; 2048],
             gp0_buffer_address: 0,
 
             texpage_x_base: 0,
@@ -56,8 +56,10 @@ impl Gpu {
         }
     }
 
-    pub fn read_status_register(&self) -> u32 {
-        self.status_reg
+    pub fn read_status_register(&mut self) -> u32 {
+        println!("Reading GPUSTAT");
+        //self.status_reg
+        0x1C000000
     }
 
     pub fn read_word_gp0(&mut self) -> u32 {

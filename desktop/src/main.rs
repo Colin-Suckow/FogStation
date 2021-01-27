@@ -1,5 +1,6 @@
 use imgui_glium_renderer::Texture;
-use psx_emu::PSXEmu;
+use psx_emu::{PSXEmu, cpu::InterruptSource};
+
 use std::{fs, rc::Rc};
 use byteorder::{ByteOrder, LittleEndian};
 
@@ -67,6 +68,15 @@ fn main() {
                 let id = TextureId::new(1); //This is an awful hack that needs to be replaced
                 textures.replace(id, texture);
                 Image::new(id, [800.0, 600.0]).build(ui);
+            });
+        Window::new(im_str!("Interrupt Control"))
+            .build(ui, || {
+                if ui.radio_button_bool(im_str!("DMA"), false) {
+                    emu.manually_fire_interrupt(InterruptSource::DMA);
+                }
+                if ui.radio_button_bool(im_str!("GPU"), false) {
+                    emu.manually_fire_interrupt(InterruptSource::GPU);
+                }
             });
     });
 }

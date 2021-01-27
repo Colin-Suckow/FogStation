@@ -2,17 +2,19 @@ use crate::bios::Bios;
 use crate::gpu::Gpu;
 use crate::memory::Memory;
 use crate::dma::DMAState;
+use crate::spu::SPU;
 
 pub struct MainBus {
     pub bios: Bios,
     memory: Memory,
     pub gpu: Gpu,
     pub dma: DMAState,
+    spu: SPU,
 }
 
 impl MainBus {
     pub fn new(bios: Bios, memory: Memory, gpu: Gpu) -> MainBus {
-        MainBus { bios, memory, gpu, dma: DMAState::new() }
+        MainBus { bios, memory, gpu, dma: DMAState::new(), spu: SPU::new() }
     }
 
     pub fn read_word(&mut self, addr: u32) -> u32 {
@@ -26,8 +28,7 @@ impl MainBus {
             0x8000_0000..=0x801f_ffff => self.memory.read_word(addr - 0x8000_0000), //KSEG0
             0x1f801810 => self.gpu.read_word_gp0(),
             0x1f801814 => self.gpu.read_status_register(),
-            0x1F8010F4 => self.dma.interrupt_register,
-            0x1F8010F0 => self.dma.control_register,
+            0x1F801080..=0x1F8010F4 => self.dma.read_word(addr),
             0x1f80_1000..=0x1f80_2fff => {
                 println!("Something tried to read the hardware control registers. These are not currently emulated, so a 0 is being returned. The address was {:#X}", addr);
                 0
@@ -56,8 +57,7 @@ impl MainBus {
             0x1F801014 => println!("SPU_DELAY size write"),
             0x1F801018 => println!("CDROM_DELAY size write"),
             0x1F80101C => println!("Expansion 2 delay/size write"),
-            0x1F8010F4 => self.dma.interrupt_register = word,
-            0x1F8010F0 => self.dma.control_register = word,
+            0x1F801080..=0x1F8010F4 => self.dma.write_word(addr, word),
             0x1F80100C => println!("Expansion 3 Delay/size write"),
             0x1F801810 => self.gpu.send_gp0_command(word),
             0x1F801814 => self.gpu.send_gp1_command(word),
@@ -75,15 +75,16 @@ impl MainBus {
         }
     }
 
-    pub fn read_half_word(&self, addr: u32) -> u16 {
+    pub fn read_half_word(&mut self, addr: u32) -> u16 {
         match addr {
             0x1F801070 => {
                 panic!("Tried to read i_status half");
                 0
             },
             0x8000_0000..=0x801f_ffff => self.memory.read_half_word(addr - 0x8000_0000), //KSEG0
+            0x1F801C00..=0x1F801E80 => self.spu.read_half_word(addr),
             0x1f80_1000..=0x1f80_2fff => {
-                //println!("Something tried to read the hardware control registers. These are not currently emulated, so a 0 is being returned. The address was {:#X}", addr);
+                println!("Something tried to half word read an undefined IO address. The address was {:#X}", addr);
                 0
             },
             _ => panic!("Invalid half word read at address {:#X}! This address is not mapped to any device.", addr)
@@ -94,7 +95,8 @@ impl MainBus {
         match addr {
             0x0..=0x001f_ffff => self.memory.write_half_word(addr, value), //KUSEG
             0x8000_0000..=0x801f_ffff => self.memory.write_half_word(addr - 0x8000_0000, value), //KSEG0
-            0x1F80_1000..=0x1F80_2000 => (), //println!("Something tried to write to the I/O ports. This is not currently emulated. The address was {:#X}", addr),
+            0x1F801C00..=0x1F801E80 => self.spu.write_half_word(addr, value),
+            0x1F80_1000..=0x1F80_2000 => println!("Something tried to half word write to the I/O ports. This is not currently emulated. The address was {:#X}. value was {:#X}", addr, value),
             _ => panic!("Invalid half word write at address {:#X}! This address is not mapped to any device.", addr)
         }
     }
@@ -105,8 +107,8 @@ impl MainBus {
                 println!("Tried to read i_status word");
                 0
             },
-            0x1F801070 => {
-                println!("Tried to read i_status byte");
+            0x1F801074 => {
+                println!("Tried to read i_mask byte");
                 0
             },
             0x0..=0x001f_ffff => self.memory.read_byte(addr), //KUSEG

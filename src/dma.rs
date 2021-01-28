@@ -145,8 +145,28 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 match cpu.main_bus.dma.channels[num].control {
                     0x01000401 => {
                         //Linked list mode. mem -> gpu
-                        let mut next_address = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
-
+                        let mut addr= cpu.main_bus.dma.channels[num].base_addr;
+                        let mut header = cpu.main_bus.read_word(addr);
+                        let mut next_address = header & 0xFFFFFF;
+                        println!("base addr: {:#X}. base header: {:#X}", addr, header);
+                        loop {
+                            let num_words = (header >> 24) & 0xFF;
+                            next_address = header & 0xFFFFFF;
+                            for i in 0..num_words {
+                                let packet = cpu.main_bus.read_word((addr + 4) + (i * 4));
+                                cpu.main_bus.gpu.send_gp0_command(packet);
+                            };
+                            println!("addr {:#X}, header {:#X}, next_addr {:#X}", addr, header, next_address);
+                            addr = next_address;
+                            if addr & 0x800000 > 0 {
+                                break;
+                            }
+                            header = cpu.main_bus.read_word(addr);
+                        }
+                        println!("DMA2 linked list transfer done.");
+                        cpu.main_bus.dma.channels[num].complete();
+                        cpu.main_bus.dma.raise_irq(num);
+                        cpu.fire_external_interrupt(InterruptSource::DMA);
                     }
                     _ => {
                         panic!("Unknown gpu DMA mode. This must be a custom transfer. Control was {:#X}", cpu.main_bus.dma.channels[num].control)

@@ -69,15 +69,6 @@ fn main() {
                 textures.replace(id, texture);
                 Image::new(id, [800.0, 600.0]).build(ui);
             });
-        Window::new(im_str!("Interrupt Control"))
-            .build(ui, || {
-                if ui.radio_button_bool(im_str!("DMA"), false) {
-                    emu.manually_fire_interrupt(InterruptSource::DMA);
-                }
-                if ui.radio_button_bool(im_str!("GPU"), false) {
-                    emu.manually_fire_interrupt(InterruptSource::GPU);
-                }
-            });
     });
 }
 

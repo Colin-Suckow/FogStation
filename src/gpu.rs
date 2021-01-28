@@ -8,13 +8,43 @@ const V_RES: u32 = 512;
 const H_BLANK_START: u32 = 640;
 const V_BLANK_START: u32 = 480;
 
+#[derive(Copy, Clone, Debug)]
+struct Point {
+    x: i16,
+    y: i16,
+}
+
+impl Point {
+    fn from_word(word: u32) -> Self {
+        Self {
+            x: (word & 0xFFFF) as i16,
+            y: ((word >> 16) & 0xFFFF) as i16,
+        }
+    }
+
+    fn from_word_with_offset(word: u32, offset: Point) -> Self{
+        Self {
+            x: ((word & 0xFFFF) as i32 + offset.x as i32) as i16,
+            y: (((word >> 16) & 0xFFFF) as i32 + offset.y as i32) as i16,
+        }
+    }
+
+    fn from_components(x: i16, y: i16) -> Self {
+        Self {
+            x,
+            y
+        }
+    }
+}
+
+
 pub struct Gpu {
     vram: Vec<u16>,
     status_reg: u32,
     pixel_count: u32,
     enabled: bool,
     gp0_words_to_read: usize,
-    gp0_buffer: [u32; 2048],
+    gp0_buffer: [u32; 20480],
     gp0_buffer_address: usize,
 
     texpage_x_base: u16,
@@ -39,7 +69,7 @@ impl Gpu {
             pixel_count: 0,
             enabled: false,
             gp0_words_to_read: 0,
-            gp0_buffer: [0; 2048],
+            gp0_buffer: [0; 20480],
             gp0_buffer_address: 0,
 
             texpage_x_base: 0,
@@ -107,21 +137,38 @@ impl Gpu {
 
                 // If the polygon is textured or gouraud shaded, lets just lock up the emulator.
                 // I only want to test flat shaded polygons right now
-                if command.get_bit(28) || command.get_bit(1) {
+                if command.get_bit(28) {
                     self.gp0_buffer_address = 1; //Prevent overflowing the buffer with more calls.
-                    println!("Textured or shaded polygon!");
+                    //println!("Textured or shaded polygon!");
+
                     return;
                 }
 
-                let verts = if command.get_bit(27) { 4 } else { 3 };
+                let is_rectangle = command.get_bit(27);
+                let verts = if is_rectangle { 5 } else { 4 };
 
                 if self.gp0_buffer_address < verts {
                     // Not enough words for the command. Return early
                     return;
                 }
 
-                //Actually draw the polygon
-                panic!("Tried to draw a polygon. I don't want to do this right now");
+                //Only works for unshaded, untextered polygons
+                
+                let fill = b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF);
+                if is_rectangle {
+                    println!("Tried to draw rectangle")
+                } else {
+                    let points: Vec<Point> = self.gp0_buffer[1..4].to_vec().iter().map(|word| Point::from_word(word.clone())).collect();
+                    self.draw_solid_triangle(&points, fill, command.get_bit(25));
+                    println!("Triangle drawn!");
+                }
+
+            }
+
+            0x2 => {
+                //Render line
+                //TODO Do this
+                println!("Tried to render line. Also not doing this rn");
             }
 
             0x3 => {
@@ -147,9 +194,9 @@ impl Gpu {
                 match size {
                     0b01 => {
                         //Draw single pixel
-                        let x = self.gp0_buffer[1] & 0xFFFF;
-                        let y = (self.gp0_buffer[1] >> 16) & 0xFFFF;
-                        let address = self.point_to_address(x, y) as usize;
+                        let point = Point::from_word(self.gp0_buffer[1]);
+
+                        let address = self.point_to_address(point.x as u32, point.y as u32) as usize;
                         let color = if command.get_bit(25) {
                             //Transparent
                             alpha_composite(
@@ -164,16 +211,14 @@ impl Gpu {
 
                     0b0 => {
                         //Draw variable size
-                        let x1 = self.gp0_buffer[1] & 0xFFFF;
-                        let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
-                        let x2 = (self.gp0_buffer[2] & 0xFFFF) + x1;
-                        let y2 = ((self.gp0_buffer[2] >> 16) & 0xFFFF) + y1;
+                        let tl_point = Point::from_word(self.gp0_buffer[1]);
+                        let br_point = Point::from_word_with_offset(self.gp0_buffer[2], tl_point);
 
                         self.draw_solid_box(
-                            x1,
-                            y1,
-                            x2,
-                            y2,
+                            tl_point.x as u32,
+                            tl_point.y as u32,
+                            br_point.x as u32,
+                            br_point.y as u32,
                             b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
                             command.get_bit(25),
                         );
@@ -274,9 +319,21 @@ impl Gpu {
                         self.draw_area_bottom_right_y = ((command >> 10) & 0x1FF) as u16;
                     }
 
+                    0xE2 => {
+                        //Texture window area
+                        //Not needed rn
+                        println!("GP0 command E2 not implemented!");
+                    }
+
                     0xE5 => {
                         //Set Drawing Offset
                         //TODO Implement. I'm too lazy right now
+                    }
+
+                    0xE6 => {
+                        //Mask bit
+                        //Also no needed
+                        println!("GP0 command E6 not implemented!");
                     }
                     _ => panic!("Unknown GPU ENV command {:#X}", command.command()),
                 }
@@ -399,7 +456,7 @@ impl Gpu {
         width: u32,
     ) {
         for x_offset in 0..width {
-            let val = self.vram[self.point_to_address(x_source + x_offset, y_source) as usize];
+            let val = self.vram[(self.point_to_address(x_source + x_offset, y_source) as usize)];
             let addr = self.point_to_address(x_dest + x_offset, y_dest) as usize;
             self.vram[addr] = val;
         }
@@ -441,6 +498,57 @@ impl Gpu {
         for y in y1..y2 {
             self.draw_horizontal_line(x1, x2, y, fill, transparent);
         }
+    }
+
+
+    fn draw_solid_flat_bottom_triangle(&mut self, p1: Point, p2: Point, p3: Point, fill: u16, transparent: bool) {
+        let invslope1 = (p2.x - p1.x) as f32 / (p2.y - p1.y) as f32;
+        let invslope2 = (p3.x - p1.x) as f32 / (p3.y - p1.y) as f32;
+
+        let mut curx1 = p1.x as f32;
+        let mut curx2 = p1.x as f32;
+
+        for scanline in p1.y..=p2.y {
+            self.draw_horizontal_line(curx2 as u32, curx1 as u32, scanline as u32, fill, transparent);
+            curx1 = curx1 + invslope1;
+            curx2 = curx2 +  invslope2;
+        }
+    }
+
+    fn draw_solid_flat_top_triangle(&mut self, p1: Point, p2: Point, p3: Point, fill: u16, transparent: bool) {
+        let invslope1 = (p3.x - p1.x) as f32 / (p3.y - p1.y) as f32;
+        let invslope2 = (p3.x - p2.x) as f32 / (p3.y - p2.y) as f32;
+
+        let mut curx1 = p3.x as f32;
+        let mut curx2 = p3.x as f32;
+
+        for scanline in (p1.y..=p3.y).rev() {
+            self.draw_horizontal_line(curx2 as u32, curx1 as u32, scanline as u32, fill, transparent);
+            curx1 = curx1 - invslope1;
+            curx2 = curx2 - invslope2;
+        }
+    }
+
+    fn draw_solid_triangle(&mut self, points: &[Point], fill: u16, transparent: bool) {
+        let mut sp = points.to_vec();
+        println!("points {:?}", sp);
+        sp.sort_by_key(|p| p.y);
+        println!("y1 {} y2 {} y3{}", sp[0].y, sp[1].y, sp[2].y);
+        if sp[1].y == sp[2].y {
+            println!("flat bottom");
+            self.draw_solid_flat_bottom_triangle(sp[0], sp[1], sp[2], fill, transparent);
+        } else if sp[0].y == sp[1].y {
+            println!("flat top");
+            self.draw_solid_flat_top_triangle(sp[0], sp[1], sp[2], fill, transparent);
+        } else {
+            println!("general");
+            let bound_x = (sp[0].x + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as i16 * (sp[2].x - sp[0].x)) as i16;
+            let bound_point = Point::from_components(bound_x, sp[1].y);
+            self.draw_solid_flat_bottom_triangle(sp[0], sp[1], bound_point, fill, transparent);
+            self.draw_solid_flat_top_triangle(sp[1], bound_point, sp[2], fill, transparent);
+        }
+
+
     }
 }
 

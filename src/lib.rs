@@ -23,7 +23,6 @@ pub struct PSXEmu {
     pub r3000: R3000,
     timers: TimerState,
     cycle_count: u32,
-    dma: DMAState,
 }
 
 impl PSXEmu {
@@ -35,7 +34,7 @@ impl PSXEmu {
         let gpu = Gpu::new();
         let bus = MainBus::new(bios, memory, gpu);
         let r3000 = R3000::new(bus);
-        PSXEmu { r3000: r3000, timers: TimerState::new(), cycle_count: 0, dma: DMAState::new() }
+        PSXEmu { r3000: r3000, timers: TimerState::new(), cycle_count: 0 }
     }
 
     /// Resets system to startup condition

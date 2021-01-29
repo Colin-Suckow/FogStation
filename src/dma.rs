@@ -147,23 +147,38 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                         //Linked list mode. mem -> gpu
                         let mut addr= cpu.main_bus.dma.channels[num].base_addr;
                         let mut header = cpu.main_bus.read_word(addr);
-                        let mut next_address = header & 0xFFFFFF;
                         println!("base addr: {:#X}. base header: {:#X}", addr, header);
                         loop {
                             let num_words = (header >> 24) & 0xFF;
-                            next_address = header & 0xFFFFFF;
                             for i in 0..num_words {
                                 let packet = cpu.main_bus.read_word((addr + 4) + (i * 4));
                                 cpu.main_bus.gpu.send_gp0_command(packet);
                             };
-                            println!("addr {:#X}, header {:#X}, next_addr {:#X}", addr, header, next_address);
-                            addr = next_address;
-                            if addr & 0x800000 > 0 {
+                            println!("addr {:#X}, header {:#X}", addr, header);
+                            if header & 0x800000 != 0 {
                                 break;
                             }
+                            addr = header & 0xFFFFFF;
                             header = cpu.main_bus.read_word(addr);
                         }
                         println!("DMA2 linked list transfer done.");
+                        cpu.main_bus.dma.channels[num].complete();
+                        cpu.main_bus.dma.raise_irq(num);
+                        cpu.fire_external_interrupt(InterruptSource::DMA);
+                    }
+
+                    0x01000201 => {
+                        //VramWrite
+                        let entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
+                        let block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
+                        let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
+                        for i in 0..entries {
+                            for j in 0..block_size {
+                                let packet = cpu.main_bus.read_word(base_addr + ((i * block_size) * 4) + (j * 4));
+                                cpu.main_bus.gpu.send_gp0_command(packet);
+                            }
+                        }
+                        println!("DMA2 block transfer done.");
                         cpu.main_bus.dma.channels[num].complete();
                         cpu.main_bus.dma.raise_irq(num);
                         cpu.fire_external_interrupt(InterruptSource::DMA);
@@ -178,14 +193,17 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 //OTC is only used to reset the ordering table. So we can ignore a lot of the parameters
                 let entries = cpu.main_bus.dma.channels[num].block & 0xFFFF;
                 let base = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
+                println!("Initializing {} entries ending at {:#X}", entries, base);
                 for i in 0..entries {
-                    let addr = base - ((entries - i) * 4);
+                    let addr = base + (i * 4);
                     if i == 0 {
                         //The first entry should point to the end of memory
                         cpu.main_bus.write_word(addr, 0x00FFFFFF);
+                        println!("Wrote DMA6 end at {:#X} pointing to {:#X}", addr, 0x00FFFFFF);
                     } else {
                         //All the others should point to the address below
                         cpu.main_bus.write_word(addr, addr - 4);
+                        println!("Wrote DMA6 header at {:#X} pointing to {:#X}", addr, addr - 4);
                     }
                 }
                 println!("DMA6 done. Marking complete and raising irq");

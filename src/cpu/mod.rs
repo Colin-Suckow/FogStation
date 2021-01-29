@@ -578,14 +578,28 @@ impl R3000 {
                 self.write_bus_half_word(addr, val, timers);
             }
 
-            // 0x22 => {
-            //     //LWL
-            // }
-            //
-            // 0x26 => {
-            //     //LWR
-            // }
-            //
+            0x22 => {
+                //LWL
+                let mut addr = instruction
+                    .immediate()
+                    .sign_extended()
+                    .wrapping_add(self.read_reg(instruction.rs()));
+                let reg = instruction.rt();
+                let mut offset = 3;
+                loop {
+                    let byte = self.main_bus.read_byte(addr);
+                    self.write_reg(reg,( self.gen_registers[reg as usize] & !(0xFF << (offset * 8))) | ((byte << (offset * 8)) as u32));
+                    addr += 1;
+                    offset -= 1;
+                    if addr % 4 == 0 {break}
+                }
+            }
+
+            0x26 => {
+                //LWR
+
+            }
+
             // 0x2A => {
             //     //SWL
             //     println!("SWL Lets do this one latter :)");

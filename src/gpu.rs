@@ -137,17 +137,15 @@ impl Gpu {
 
                 // If the polygon is textured or gouraud shaded, lets just lock up the emulator.
                 // I only want to test flat shaded polygons right now
-                if command.get_bit(28) {
-                    self.gp0_buffer_address = 1; //Prevent overflowing the buffer with more calls.
-                    //println!("Textured or shaded polygon!");
+                
+                let is_gouraud = command.get_bit(28);
+                let is_textured = command.get_bit(26);
+                let is_quad = command.get_bit(27);
+                let verts = if is_quad { 4 } else { 3 };
 
-                    return;
-                }
+                let packets = 1 + (verts * (is_gouraud as usize + is_textured as usize)) + verts;
 
-                let is_rectangle = command.get_bit(27);
-                let verts = if is_rectangle { 5 } else { 4 };
-
-                if self.gp0_buffer_address < verts {
+                if self.gp0_buffer_address < packets {
                     // Not enough words for the command. Return early
                     return;
                 }
@@ -155,10 +153,12 @@ impl Gpu {
                 //Only works for unshaded, untextered polygons
                 
                 let fill = b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF);
-                if is_rectangle {
-                    println!("Tried to draw rectangle")
+                if is_quad {
+                    let points: Vec<Point> = self.gp0_buffer[1..packets].to_vec().iter().step_by((is_gouraud as usize + is_textured as usize) + 1).map(|word| Point::from_word(word.clone())).collect();
+                    self.draw_solid_quad(&points, fill, command.get_bit(25));
+                    
                 } else {
-                    let points: Vec<Point> = self.gp0_buffer[1..4].to_vec().iter().map(|word| Point::from_word(word.clone())).collect();
+                    let points: Vec<Point> = self.gp0_buffer[1..packets].to_vec().iter().step_by((is_gouraud as usize + is_textured as usize) + 1).map(|word| Point::from_word(word.clone())).collect();
                     self.draw_solid_triangle(&points, fill, command.get_bit(25));
                     println!("Triangle drawn!");
                 }
@@ -444,7 +444,7 @@ impl Gpu {
     }
 
     fn point_to_address(&self, x: u32, y: u32) -> u32 {
-        ((1024) as u32 * y) + x
+        ((1024) as u32 * y).wrapping_add(x)
     }
 
     fn copy_horizontal_line(
@@ -483,14 +483,15 @@ impl Gpu {
     }
 
     fn draw_horizontal_line(&mut self, x1: u32, x2: u32, y: u32, fill: u16, transparent: bool) {
-        for x in x1..=x2 {
+        let (start, end) = if x1 > x2 {(x2, x1)} else {(x1, x2)};
+        for x in start..=end {
             let address = self.point_to_address(x, y) as usize;
             let color = if transparent {
-                alpha_composite(self.vram[address], fill)
+                alpha_composite(self.vram[address % 524288], fill)
             } else {
                 fill
             };
-            self.vram[address] = color;
+            self.vram[address % 524288] = color;
         }
     }
 
@@ -509,7 +510,7 @@ impl Gpu {
         let mut curx2 = p1.x as f32;
 
         for scanline in p1.y..=p2.y {
-            self.draw_horizontal_line(curx2 as u32, curx1 as u32, scanline as u32, fill, transparent);
+            self.draw_horizontal_line(curx1 as u32, curx2 as u32, scanline as u32, fill, transparent);
             curx1 = curx1 + invslope1;
             curx2 = curx2 +  invslope2;
         }
@@ -523,7 +524,7 @@ impl Gpu {
         let mut curx2 = p3.x as f32;
 
         for scanline in (p1.y..=p3.y).rev() {
-            self.draw_horizontal_line(curx2 as u32, curx1 as u32, scanline as u32, fill, transparent);
+            self.draw_horizontal_line(curx1 as u32, curx2 as u32, scanline as u32, fill, transparent);
             curx1 = curx1 - invslope1;
             curx2 = curx2 - invslope2;
         }
@@ -531,9 +532,8 @@ impl Gpu {
 
     fn draw_solid_triangle(&mut self, points: &[Point], fill: u16, transparent: bool) {
         let mut sp = points.to_vec();
-        println!("points {:?}", sp);
         sp.sort_by_key(|p| p.y);
-        println!("y1 {} y2 {} y3{}", sp[0].y, sp[1].y, sp[2].y);
+
         if sp[1].y == sp[2].y {
             println!("flat bottom");
             self.draw_solid_flat_bottom_triangle(sp[0], sp[1], sp[2], fill, transparent);
@@ -547,8 +547,12 @@ impl Gpu {
             self.draw_solid_flat_bottom_triangle(sp[0], sp[1], bound_point, fill, transparent);
             self.draw_solid_flat_top_triangle(sp[1], bound_point, sp[2], fill, transparent);
         }
+    }
 
-
+    fn draw_solid_quad(&mut self, points: &[Point], fill: u16, transparent: bool) {
+        println!("points {:?}", points);
+        self.draw_solid_triangle(&points[0..3], fill, transparent);
+        self.draw_solid_triangle(&points[1..4], fill, transparent);
     }
 }
 

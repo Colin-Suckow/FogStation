@@ -79,7 +79,6 @@ impl MainBus {
         match addr {
             0x1F801070 => {
                 panic!("Tried to read i_status half");
-                0
             },
             0x8000_0000..=0x801f_ffff => self.memory.read_half_word(addr - 0x8000_0000), //KSEG0
             0x1F801C00..=0x1F801E80 => self.spu.read_half_word(addr),

@@ -580,7 +580,7 @@ impl R3000 {
 
             0x22 => {
                 //LWL
-                let mut addr = instruction
+                let addr = instruction
                     .immediate()
                     .sign_extended()
                     .wrapping_add(self.read_reg(instruction.rs()));
@@ -599,7 +599,7 @@ impl R3000 {
 
             0x26 => {
                 //LWR
-                let mut addr = instruction
+                let addr = instruction
                     .immediate()
                     .sign_extended()
                     .wrapping_add(self.read_reg(instruction.rs()));
@@ -615,14 +615,39 @@ impl R3000 {
                 });
             }
 
-            // 0x2A => {
-            //     //SWL
-            //     println!("SWL Lets do this one latter :)");
-            // }
-            // 0x2E => {
-            //     //SWR
-            //     println!("SWR lets do this one latter too");
-            // }
+            0x2A => {
+                //SWL
+                let addr = instruction
+                    .immediate()
+                    .sign_extended()
+                    .wrapping_add(self.read_reg(instruction.rs()));
+                let word = self.read_bus_word(addr & !3, timers);
+                let reg_val = self.read_reg(instruction.rt());
+                self.write_bus_word(addr & !3, match addr & 3 {
+                    0 => (word & 0xffffff00) | (reg_val >> 24),
+                    1 => (word & 0xffff0000) | (reg_val >> 16),
+                    2 => (word & 0xff000000) | (reg_val >> 8),
+                    3 => (word & 0x00000000) | (reg_val >> 0),
+                    _ => unreachable!(),
+                }, timers);
+            }
+
+            0x2E => {
+                //SWR
+                let addr = instruction
+                    .immediate()
+                    .sign_extended()
+                    .wrapping_add(self.read_reg(instruction.rs()));
+                let word = self.read_bus_word(addr & !3, timers);
+                let reg_val = self.read_reg(instruction.rt());
+                self.write_bus_word(addr & !3, match addr & 3 {
+                    0 => (word & 0x00000000) | (reg_val << 0),
+                    1 => (word & 0x000000ff) | (reg_val << 8),
+                    2 => (word & 0x0000ffff) | (reg_val << 16),
+                    3 => (word & 0x00ffffff) | (reg_val << 24),
+                    _ => unreachable!(),
+                }, timers);
+            }
 
             0x2B => {
                 //SW

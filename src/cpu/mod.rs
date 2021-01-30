@@ -584,20 +584,35 @@ impl R3000 {
                     .immediate()
                     .sign_extended()
                     .wrapping_add(self.read_reg(instruction.rs()));
-                let reg = instruction.rt();
-                let mut offset = 3;
-                loop {
-                    let byte = self.main_bus.read_byte(addr);
-                    self.write_reg(reg,( self.gen_registers[reg as usize] & !(0xFF << (offset * 8))) | ((byte << (offset * 8)) as u32));
-                    addr += 1;
-                    offset -= 1;
-                    if addr % 4 == 0 {break}
-                }
+
+                let word = self.read_bus_word(addr & !3, timers);
+                let reg_val = self.read_reg(instruction.rt());
+                self.write_reg(instruction.rt(), match addr & 3 {
+                    0 => (reg_val & 0x00ffffff) | (word << 24),
+                    1 => (reg_val & 0x0000ffff) | (word << 16),
+                    2 => (reg_val & 0x000000ff) | (word << 8),
+                    3 => (reg_val & 0x00000000) | (word << 0),
+                    _ => unreachable!(),
+                });
+                
             }
 
             0x26 => {
                 //LWR
+                let mut addr = instruction
+                    .immediate()
+                    .sign_extended()
+                    .wrapping_add(self.read_reg(instruction.rs()));
 
+                let word = self.read_bus_word(addr & !3, timers);
+                let reg_val = self.read_reg(instruction.rt());
+                self.write_reg(instruction.rt(), match addr & 3 {
+                    3 => (reg_val & 0xffffff00) | (word >> 24),
+                    2 => (reg_val & 0xffff0000) | (word >> 16),
+                    1 => (reg_val & 0xff000000) | (word >> 8),
+                    0 => (reg_val & 0x00000000) | (word >> 0),
+                    _ => unreachable!(),
+                });
             }
 
             // 0x2A => {

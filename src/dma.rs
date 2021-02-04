@@ -148,7 +148,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                         let mut addr= cpu.main_bus.dma.channels[num].base_addr;
                         let mut header = cpu.main_bus.read_word(addr);
                         println!("Starting linked list transfer");
-                        println!("base addr: {:#X}. base header: {:#X}", addr, header);
+                        //println!("base addr: {:#X}. base header: {:#X}", addr, header);
                         loop {
                             let num_words = (header >> 24) & 0xFF;
                             for i in 0..num_words {

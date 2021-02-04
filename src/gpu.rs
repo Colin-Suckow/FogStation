@@ -218,7 +218,7 @@ impl Gpu {
                             Point::from_word_with_offset(self.gp0_buffer[2], tl_point)
                         };
                         
-                        println!("tl x: {} y: {} br x: {} y: {}", tl_point.x, tl_point.y, br_point.x, br_point.y);
+                        //println!("tl x: {} y: {} br x: {} y: {}", tl_point.x, tl_point.y, br_point.x, br_point.y);
 
                         self.draw_solid_box(
                             tl_point.x as u32,
@@ -554,13 +554,10 @@ impl Gpu {
         sp.sort_by_key(|p| p.y);
 
         if sp[1].y == sp[2].y {
-            println!("flat bottom");
             self.draw_solid_flat_bottom_triangle(sp[0], sp[1], sp[2], fill, transparent);
         } else if sp[0].y == sp[1].y {
-            println!("flat top");
             self.draw_solid_flat_top_triangle(sp[0], sp[1], sp[2], fill, transparent);
         } else {
-            println!("general");
             let bound_x = (sp[0].x + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as i16 * (sp[2].x - sp[0].x)) as i16;
             let bound_point = Point::from_components(bound_x, sp[1].y);
             self.draw_solid_flat_bottom_triangle(sp[0], sp[1], bound_point, fill, transparent);
@@ -569,7 +566,6 @@ impl Gpu {
     }
 
     fn draw_solid_quad(&mut self, points: &[Point], fill: u16, transparent: bool) {
-        println!("points {:?}", points);
         self.draw_solid_triangle(&points[0..3], fill, transparent);
         self.draw_solid_triangle(&points[1..4], fill, transparent);
     }

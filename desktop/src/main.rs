@@ -65,7 +65,7 @@ fn main() {
         Window::new(im_str!("Viewport"))
             .content_size([800.0, 600.0])
             .build(ui, || {
-                let texture = create_texture_from_buffer(gl_ctx, emu.get_vram(), 320, 240);
+                let texture = create_texture_from_buffer(gl_ctx, emu.get_vram(), 640, 480);
                 let id = TextureId::new(1); //This is an awful hack that needs to be replaced
                 textures.replace(id, texture);
                 Image::new(id, [800.0, 600.0]).build(ui);

@@ -3,10 +3,11 @@ use core::num;
 use bit_field::BitField;
 use num_derive::FromPrimitive;
 
-const H_RES: u32 = 654;
-const V_RES: u32 = 512;
+const H_RES: u32 = H_BLANK_START + 40;
+const V_RES: u32 = V_BLANK_START + 60;
 const H_BLANK_START: u32 = 640;
 const V_BLANK_START: u32 = 480;
+
 
 #[derive(Copy, Clone, Debug)]
 struct Point {
@@ -38,6 +39,7 @@ impl Point {
 }
 
 
+
 pub struct Gpu {
     vram: Vec<u16>,
     status_reg: u32,
@@ -58,6 +60,7 @@ pub struct Gpu {
     irq_fired: bool,
     vblank_consumed: bool,
     hblank_consumed: bool,
+    show_frame: bool,
 }
 
 
@@ -83,17 +86,18 @@ impl Gpu {
             irq_fired: false,
             vblank_consumed: false,
             hblank_consumed: false,
+            show_frame: false,
         }
     }
 
     pub fn read_status_register(&mut self) -> u32 {
-        println!("Reading GPUSTAT");
+        //println!("Reading GPUSTAT");
         //self.status_reg
         0x1C000000
     }
 
     pub fn read_word_gp0(&mut self) -> u32 {
-        0
+        0xFF as u32
     }
 
     pub fn send_gp0_command(&mut self, value: u32) {
@@ -116,7 +120,7 @@ impl Gpu {
                         let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
                         let x2 = (self.gp0_buffer[2] & 0xFFFF) + x1;
                         let y2 = ((self.gp0_buffer[2] >> 16) & 0xFFFF) + y1;
-
+                        println!("Drawing quick rect");
                         self.draw_solid_box(
                             x1,
                             y1,
@@ -150,6 +154,8 @@ impl Gpu {
                     return;
                 }
 
+                println!("Drawing polygon");
+
                 //Only works for unshaded, untextered polygons
                 
                 let fill = b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF);
@@ -168,28 +174,22 @@ impl Gpu {
             0x2 => {
                 //Render line
                 //TODO Do this
-                println!("Tried to render line. Also not doing this rn");
+                panic!("Tried to render line. Also not doing this rn");
             }
 
             0x3 => {
                 //Render Rectangle
 
-                // If the rectangle is textured, lets just lock up the emulator.
-                // I only want to test flat shaded rectangles right now
-                if command.get_bit(26) {
-                    println!("Textured rectangle");
-                    self.gp0_buffer_address = 1; //Prevent overflowing the buffer with more calls.
-                    return;
-                }
-
                 let size = (command >> 27) & 0x3;
 
-                let length = 2 + if size == 0 { 1 } else { 0 };
+                let length = 2 + if size == 0 { 1 } else { 0 } + if command.get_bit(26) {1} else {0};
 
                 if self.gp0_buffer_address < length {
                     //Not enough commands
                     return;
                 }
+
+                println!("Drawing rect size {}", size);
 
                 match size {
                     0b01 => {
@@ -212,7 +212,13 @@ impl Gpu {
                     0b0 => {
                         //Draw variable size
                         let tl_point = Point::from_word(self.gp0_buffer[1]);
-                        let br_point = Point::from_word_with_offset(self.gp0_buffer[2], tl_point);
+                        let br_point = if command.get_bit(26) {
+                            Point::from_word_with_offset(self.gp0_buffer[3], tl_point)
+                        } else {
+                            Point::from_word_with_offset(self.gp0_buffer[2], tl_point)
+                        };
+                        
+                        println!("tl x: {} y: {} br x: {} y: {}", tl_point.x, tl_point.y, br_point.x, br_point.y);
 
                         self.draw_solid_box(
                             tl_point.x as u32,
@@ -254,6 +260,7 @@ impl Gpu {
 
                     _ => {
                         //Lets do nothing with the others
+                        println!("Invalid size rect");
                     }
                 }
             }
@@ -264,7 +271,7 @@ impl Gpu {
                     //Not enough commands
                     return;
                 }
-
+                println!("Running VRAM to VRAM transfer");
                 let x_source = self.gp0_buffer[1] & 0xFFFF;
                 let y_source = (self.gp0_buffer[1] >> 16) & 0xFFFF;
                 let x_dest = self.gp0_buffer[2] & 0xFFFF;
@@ -296,6 +303,14 @@ impl Gpu {
                     self.vram[addr as usize] = p1;
                     self.vram[(addr + 1) as usize] = p2;
                 }
+            }
+
+            0x6 => {
+                //VRAM to CPU
+                if self.gp0_buffer_address < 3 {
+                    return;
+                }
+                //Lets ignore this one for now
             }
             0x7 => {
                 //Env commands
@@ -353,6 +368,10 @@ impl Gpu {
                 self.status_reg = 0;
                 self.pixel_count = 0;
                 self.vram = vec![0; 1_048_576 / 2];
+            }
+
+            0x2 => {
+                self.show_frame = true;
             }
 
             0x6 => {
@@ -484,7 +503,7 @@ impl Gpu {
 
     fn draw_horizontal_line(&mut self, x1: u32, x2: u32, y: u32, fill: u16, transparent: bool) {
         let (start, end) = if x1 > x2 {(x2, x1)} else {(x1, x2)};
-        for x in start..=end {
+        for x in start..=end.clamp(0, 2048) {
             let address = self.point_to_address(x, y) as usize;
             let color = if transparent {
                 alpha_composite(self.vram[address % 524288], fill)

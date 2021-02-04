@@ -51,7 +51,7 @@ impl DMAState {
         match addr {
             0x1F8010F0 => self.control,
             0x1F8010F4 => {
-                println!("Reading DMA interrupt. val {:#X}", self.interrupt);
+                //println!("Reading DMA interrupt. val {:#X}", self.interrupt);
                 self.interrupt
             },
             _ => {
@@ -66,7 +66,7 @@ impl DMAState {
                     }
                     0x1F801008 => {
                         //read control
-                        println!("Reading dma control {} val {:#X}", channel_num, self.channels[channel_num].control);
+                        //println!("Reading dma control {} val {:#X}", channel_num, self.channels[channel_num].control);
                         self.channels[channel_num].control
                     }
                     _ => panic!("Unknown dma read {:#X}", addr)
@@ -147,6 +147,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                         //Linked list mode. mem -> gpu
                         let mut addr= cpu.main_bus.dma.channels[num].base_addr;
                         let mut header = cpu.main_bus.read_word(addr);
+                        println!("Starting linked list transfer");
                         println!("base addr: {:#X}. base header: {:#X}", addr, header);
                         loop {
                             let num_words = (header >> 24) & 0xFF;
@@ -154,14 +155,14 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                                 let packet = cpu.main_bus.read_word((addr + 4) + (i * 4));
                                 cpu.main_bus.gpu.send_gp0_command(packet);
                             };
-                            println!("addr {:#X}, header {:#X}", addr, header);
+                            println!("addr {:#X}, header {:#X}, nw {}", addr, header, num_words);
                             if header & 0x800000 != 0 {
                                 break;
                             }
                             addr = header & 0xFFFFFF;
                             header = cpu.main_bus.read_word(addr);
                         }
-                        println!("DMA2 linked list transfer done.");
+                        // println!("DMA2 linked list transfer done.");
                         cpu.main_bus.dma.channels[num].complete();
                         cpu.main_bus.dma.raise_irq(num);
                         cpu.fire_external_interrupt(InterruptSource::DMA);
@@ -194,16 +195,16 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 let entries = cpu.main_bus.dma.channels[num].block & 0xFFFF;
                 let base = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
                 println!("Initializing {} entries ending at {:#X}", entries, base);
-                for i in 0..entries {
-                    let addr = base + (i * 4);
+                for i in 0..=entries {
+                    let addr = base - ((entries - i) * 4);
                     if i == 0 {
                         //The first entry should point to the end of memory
                         cpu.main_bus.write_word(addr, 0x00FFFFFF);
-                        println!("Wrote DMA6 end at {:#X} pointing to {:#X}", addr, 0x00FFFFFF);
+                        //println!("Wrote DMA6 end at {:#X} pointing to {:#X}", addr, 0x00FFFFFF);
                     } else {
                         //All the others should point to the address below
                         cpu.main_bus.write_word(addr, addr - 4);
-                        println!("Wrote DMA6 header at {:#X} pointing to {:#X}", addr, addr - 4);
+                        //println!("Wrote DMA6 header at {:#X} pointing to {:#X}", addr, addr - 4);
                     }
                 }
                 println!("DMA6 done. Marking complete and raising irq");

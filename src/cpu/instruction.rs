@@ -1,3 +1,5 @@
+use bit_field::BitField;
+
 pub trait Instruction {
     fn opcode(&self) -> u8;
     fn rs(&self) -> u8;
@@ -7,6 +9,7 @@ pub trait Instruction {
     fn funct(&self) -> u8;
     fn immediate(&self) -> u16;
     fn address(&self) -> u32;
+    fn immediate_sign_extended(&self) -> u32;
 }
 
 pub trait NumberHelpers {
@@ -75,6 +78,10 @@ impl Instruction for u32 {
 
     fn address(&self) -> u32 {
         self & 0x3FFFFFF
+    }
+
+    fn immediate_sign_extended(&self) -> u32 {
+        (self.clone() & 0xFFFF) as i16 as u32
     }
 }
 

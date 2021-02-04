@@ -117,6 +117,10 @@ impl MainBus {
             }
             0x8000_0000..=0x801f_ffff => self.memory.read_byte(addr - 0x8000_0000), //KSEG0
             0xbfc0_0000..=0xbfc7_ffff => self.bios.read_byte(addr - 0xbfc0_0000),
+            0x1F801800..=0x1F801803 => {
+                println!("Reading byte at {:#X} from CDROM address space!", addr);
+                0
+            }, //CDROM
             _ => panic!(
                 "Invalid byte read at address {:#X}! This address is not mapped to any device.",
                 addr
@@ -130,6 +134,7 @@ impl MainBus {
             0x0..=0x001f_ffff => self.memory.write_byte(addr, value), //KUSEG
             0x8000_0000..=0x801f_ffff => self.memory.write_byte(addr - 0x8000_0000, value), //KSEG0
             0xA000_0000..=0xA01f_ffff => self.memory.write_byte(addr - 0xA000_0000, value), //KSEG1
+            0x1F801800..=0x1F801803 => (), //CDROM
             _ => panic!(
                 "Invalid byte write at address {:#X}! This address is not mapped to any device.",
                 addr

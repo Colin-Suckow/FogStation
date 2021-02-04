@@ -19,7 +19,7 @@ use std::borrow::Cow;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let bios_data = match fs::read("SCPH1001.BIN") {
+    let bios_data = match fs::read("SCPH1001.BIN") { //SCPH1001.BIN openbios.bin
         Ok(data) => data,
         _ => {
             println!("Unable to read bios file. Make sure there is a file named SCPH1001.BIN in the same directory.");
@@ -34,16 +34,17 @@ fn main() {
         let exe = fs::read(&args[1]).unwrap();
         let exe_data = exe[0x800..].to_vec();
         let destination = LittleEndian::read_u32(&exe[0x18..0x1C]);
-        let entrypoint = LittleEndian::read_u32(&exe[0x10..0x1f]);
-        println!("Destination is {:#X}\nEntrypoint is {:#X}", destination, entrypoint);
-        emu.load_executable(destination, &exe_data);
-        emu.r3000.pc = entrypoint;
+        let entrypoint = LittleEndian::read_u32(&exe[0x10..0x14]);
+        let init_sp = LittleEndian::read_u32(&exe[0x30..0x34]);
+        println!("Destination is {:#X}\nEntrypoint is {:#X}\nSP is {:#X}", destination, entrypoint, init_sp);
+        emu.load_executable(destination, entrypoint, init_sp, &exe_data);
     }
 
     let system = support::init("psx-emu");
 
     system.main_loop(move |_, ui, gl_ctx, textures| {
         emu.run_frame();
+        
         Window::new(im_str!("Registers"))
             .size([300.0, 600.0], Condition::FirstUseEver)
             .build(ui, || {

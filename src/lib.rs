@@ -46,7 +46,7 @@ impl PSXEmu {
     /// This function is only here for testing and is not at all accurate to how the cpu actually works
     pub fn step_instruction(&mut self) {
         //Threeish cpu per gpu clock
-        for _ in 0..3 {
+        //for _ in 0..3 {
             self.r3000.step_instruction(&mut self.timers);
             execute_dma_cycle(&mut self.r3000);
             self.cycle_count += 1;
@@ -54,7 +54,7 @@ impl PSXEmu {
             if self.cycle_count % 8 == 0 {
                 self.timers.update_sys_div_8(&mut self.r3000);
             }
-        }
+        //}
 
         self.r3000.main_bus.gpu.execute_cycle();
         self.timers.update_dot_clock(&mut self.r3000);
@@ -73,11 +73,13 @@ impl PSXEmu {
         self.r3000.main_bus.gpu.execute_cycle();
     }
 
-    pub fn load_executable(&mut self, start_addr: u32, data: &Vec<u8>) {
+    pub fn load_executable(&mut self, start_addr: u32, entrypoint: u32, sp: u32, data: &Vec<u8>) {
         for (index, val) in data.iter().enumerate() {
             self.r3000.main_bus.write_byte((index + start_addr as usize) as u32, val.clone());
         }
-        self.r3000.pc = start_addr;
+        self.r3000.pc = entrypoint;
+        // self.r3000.gen_registers[29] = sp;
+        // self.r3000.gen_registers[30] = sp;
     }
 
     pub fn get_vram(&self) -> &Vec<u16> {

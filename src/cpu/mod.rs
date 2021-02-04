@@ -63,7 +63,6 @@ pub struct R3000 {
     i_mask: u32,
     pub i_status: u32,
     trace_file: File,
-    in_exception: bool,
 }
 
 impl R3000 {
@@ -81,7 +80,6 @@ impl R3000 {
             i_mask: 0,
             i_status: 0,
             trace_file: File::create(Path::new("trace.txt")).unwrap(),
-            in_exception: false,
         }
     }
     /// Resets cpu registers to zero and sets program counter to reset vector (0xBFC00000)
@@ -102,19 +100,18 @@ impl R3000 {
     pub fn step_instruction(&mut self, timers: &mut TimerState) {
 
         //Check for vblank
-        // if !self.in_exception && self.main_bus.gpu.consume_vblank() {
-        //     self.i_status.set_bit(0, true);
-        // };
+        if self.main_bus.gpu.consume_vblank() {
+            self.i_status.set_bit(0, true);
+        };
 
         //Handle interrupts
-
-        // for i in 0..=10 {
-        //     if !self.in_exception && self.i_status.get_bit(i) && self.i_mask.get_bit(i) {
-        //         // println!("IMASK = {:#}", self.i_mask);
-        //          println!("Firing exception for irq {}", i);
-        //         self.fire_exception(Exception::Int);
-        //     }
-        // }
+        for i in 0..=10 {
+            if self.cop0.interrupt_enabled() && self.i_status.get_bit(i) && self.i_mask.get_bit(i) {
+                // println!("IMASK = {:#}", self.i_mask);
+                //println!("Firing exception for irq {}", i);
+                self.fire_exception(Exception::Int);
+            }
+        }
 
         //Execute delayed load
         if let Some(load) = self.load_delay.take() {
@@ -127,6 +124,7 @@ impl R3000 {
 
         //println!("Executing {:#X} (FUNCT {:#X}) at {:#X} (FULL {:#X})", instruction.opcode(), instruction.funct(), self.old_pc, instruction);
         //self.trace_file.write(format!("{:08x}: {:08x}\n", self.old_pc, instruction).as_bytes());
+        
         self.execute_instruction(instruction, timers);
 
         //Execute branch delay operation
@@ -144,7 +142,7 @@ impl R3000 {
         if self.pc % 4 != 0 || self.delay_slot % 4 != 0 {
             panic!("Address is not aligned!");
         }
-        let pc = self.old_pc;
+
         match instruction.opcode() {
             0x0 => {
                 //SPECIAL INSTRUCTIONS
@@ -362,7 +360,7 @@ impl R3000 {
                         //BLTZ
                         if (self.read_reg(instruction.rs()) as i32) < 0 {
                             self.delay_slot = self.pc;
-                            self.pc = ((instruction.immediate().sign_extended() << 2)
+                            self.pc = ((instruction.immediate_sign_extended() << 2)
                                 .wrapping_add(self.delay_slot));
                         }
                     }
@@ -370,7 +368,7 @@ impl R3000 {
                         //BGEZ
                         if self.read_reg(instruction.rs()) as i32 >= 0 {
                             self.delay_slot = self.pc;
-                            self.pc = ((instruction.immediate().sign_extended() << 2)
+                            self.pc = ((instruction.immediate_sign_extended() << 2)
                                 .wrapping_add(self.delay_slot));
                         }
                     }
@@ -398,7 +396,7 @@ impl R3000 {
                 //BEQ
                 if self.read_reg(instruction.rs()) == self.read_reg(instruction.rt()) {
                     self.delay_slot = self.pc;
-                    self.pc = ((instruction.immediate().sign_extended() << 2)
+                    self.pc = ((instruction.immediate_sign_extended() << 2)
                         .wrapping_add(self.delay_slot));
                 }
             }
@@ -407,7 +405,7 @@ impl R3000 {
                 //BNE
                 if self.read_reg(instruction.rs()) != self.read_reg(instruction.rt()) {
                     self.delay_slot = self.pc;
-                    self.pc = ((instruction.immediate().sign_extended() << 2)
+                    self.pc = ((instruction.immediate_sign_extended() << 2)
                         .wrapping_add(self.delay_slot));
                 }
             }
@@ -416,7 +414,7 @@ impl R3000 {
                 //BLEZ
                 if (self.read_reg(instruction.rs()) as i32) <= 0 {
                     self.delay_slot = self.pc;
-                    self.pc = ((instruction.immediate().sign_extended() << 2)
+                    self.pc = ((instruction.immediate_sign_extended() << 2)
                         .wrapping_add(self.delay_slot));
                 }
             }
@@ -425,7 +423,7 @@ impl R3000 {
                 //BGTZ
                 if (self.read_reg(instruction.rs()) as i32) > 0 {
                     self.delay_slot = self.pc;
-                    self.pc = ((instruction.immediate().sign_extended() << 2)
+                    self.pc = ((instruction.immediate_sign_extended() << 2)
                         .wrapping_add(self.delay_slot));
                 }
             }
@@ -435,7 +433,7 @@ impl R3000 {
                 self.write_reg(
                     instruction.rt(),
                     match (self.read_reg(instruction.rs()) as i32)
-                        .checked_add(instruction.immediate().sign_extended() as i32)
+                        .checked_add(instruction.immediate_sign_extended() as i32)
                     {
                         Some(val) => val as u32,
                         None => panic!("ADDI overflowed"),
@@ -445,10 +443,11 @@ impl R3000 {
 
             0x9 => {
                 //ADDIU
+                //println!("Value {:#X}", instruction.immediate_sign_extended());
                 self.write_reg(
                     instruction.rt(),
-                    self.read_reg(instruction.rs())
-                        .wrapping_add(instruction.immediate().sign_extended()),
+                    (self.read_reg(instruction.rs()))
+                        .wrapping_add(instruction.immediate_sign_extended()),
                 );
             }
 
@@ -466,7 +465,7 @@ impl R3000 {
                 //SLTIU
                 self.write_reg(
                     instruction.rt(),
-                    (self.read_reg(instruction.rs()) < instruction.immediate().sign_extended())
+                    (self.read_reg(instruction.rs()) < instruction.immediate_sign_extended())
                         as u32,
                 );
             }
@@ -475,7 +474,7 @@ impl R3000 {
                 //ANDI
                 self.write_reg(
                     instruction.rt(),
-                    instruction.immediate().zero_extended() & self.read_reg(instruction.rs()),
+                    (instruction & 0xFFFF) & self.read_reg(instruction.rs()),
                 );
             }
 
@@ -500,13 +499,14 @@ impl R3000 {
                     }
                     0x0 => {
                         //MFC0
+                        //println!("Reading COP0 reg {}. Val {:#X}", instruction.rd(), self.cop0.read_reg(instruction.rd()));
                         self.write_reg(instruction.rt(), self.cop0.read_reg(instruction.rd()));
                     }
 
                     0x10 => {
                         //RFE
-                        self.in_exception = false;
-                        self.cop0.write_reg(12, self.cop0.read_reg(12) >> 4);
+                        let status = self.cop0.read_reg(12);
+                        self.cop0.write_reg(12, (status & 0xfffffff0) | ((status & 0x3c) >> 2));
                         self.pc = self.cop0.read_reg(14);
                     }
                     _ => (),
@@ -515,7 +515,7 @@ impl R3000 {
 
             0x20 => {
                 //LB
-                let addr = (instruction.immediate().sign_extended())
+                let addr = (instruction.immediate_sign_extended())
                     .wrapping_add(self.read_reg(instruction.rs()));
                 let val = self.main_bus.read_byte(addr).sign_extended();
                 self.write_reg(instruction.rt(), val);
@@ -523,7 +523,7 @@ impl R3000 {
 
             0x21 => {
                 //LH
-                let addr = (instruction.immediate().sign_extended())
+                let addr = (instruction.immediate_sign_extended())
                     .wrapping_add(self.read_reg(instruction.rs()));
                 let val = self.read_bus_half_word(addr, timers).sign_extended();
                 self.write_reg(instruction.rt(), val);
@@ -531,7 +531,7 @@ impl R3000 {
 
             0x23 => {
                 //LW
-                let addr = (instruction.immediate().sign_extended())
+                let addr = (instruction.immediate_sign_extended())
                     .wrapping_add(self.read_reg(instruction.rs()));
                 let val = self.read_bus_word(addr, timers);
                 //println!("LW read {:#X}. Storing in {}", val, instruction.rt());
@@ -544,7 +544,7 @@ impl R3000 {
 
             0x24 => {
                 //LBU
-                let addr = (instruction.immediate().sign_extended())
+                let addr = (instruction.immediate_sign_extended())
                     .wrapping_add(self.read_reg(instruction.rs()));
                 let val = self.main_bus.read_byte(addr).zero_extended();
                 self.write_reg(instruction.rt(), val);
@@ -552,7 +552,7 @@ impl R3000 {
 
             0x25 => {
                 //LHU
-                let addr = (instruction.immediate().sign_extended())
+                let addr = (instruction.immediate_sign_extended())
                     .wrapping_add(self.read_reg(instruction.rs()));
                 let val = self.read_bus_half_word(addr, timers).zero_extended();
                 self.write_reg(instruction.rt(), val);
@@ -651,9 +651,10 @@ impl R3000 {
 
             0x2B => {
                 //SW
+                //println!("R{} value {:#X}", instruction.rs(), self.read_reg(instruction.rs()));
                 let addr = self
                     .read_reg(instruction.rs())
-                    .wrapping_add(instruction.immediate().sign_extended());
+                    .wrapping_add(instruction.immediate_sign_extended());
                 self.write_bus_word(addr, self.read_reg(instruction.rt()), timers);
             }
             _ => panic!(
@@ -664,13 +665,13 @@ impl R3000 {
     }
 
     pub fn fire_exception(&mut self, exception: Exception) {
-        self.in_exception = true;
         if self.delay_slot != 0 {
             panic!("Branch delay exception rollback is not implemented!");
         }
         self.cop0.set_cause_execode(exception);
         self.cop0.write_reg(14, self.pc);
-
+        let old_status = self.cop0.read_reg(12);
+        self.cop0.write_reg(12, (old_status & !0x3F) | (((old_status & 0x3f) << 2) & 0x3f));
         self.pc = if self.cop0.read_reg(12).get_bit(23) {
             0xBFC0_0180
         } else {
@@ -682,7 +683,7 @@ impl R3000 {
 
     pub fn fire_external_interrupt(&mut self, source: InterruptSource) {
         let mask_bit = source as usize;
-        println!("mask_bit num = {}", mask_bit);
+        //println!("mask_bit num = {}", mask_bit);
 
         self.i_status.set_bit(mask_bit, true);
 
@@ -694,7 +695,7 @@ impl R3000 {
     fn read_bus_word(&mut self, addr: u32, timers: &mut TimerState) -> u32 {
         match addr {
             0x1F801070 => {
-                println!("Reading ISTATUS");
+                //println!("Reading ISTATUS");
                 self.i_status
             },
             0x1F801074 => self.i_mask,
@@ -712,11 +713,11 @@ impl R3000 {
 
         match addr {
             0x1F801070 => {
-                println!("Writing I_STAT. val {:#X} pc {:#X} oldpc {:#X}", val, self.pc, self.old_pc);
+                //println!("Writing I_STAT. val {:#X} pc {:#X} oldpc {:#X}", val, self.pc, self.old_pc);
                 self.i_status &= val;
             },
             0x1F801074 => {
-                println!("Writing I_MASK val {:#X}", val);
+                //println!("Writing I_MASK val {:#X}", val);
                 self.i_mask = val;
             },
             0x1F801100..=0x1F801128 => timers.write_word(addr, val),
@@ -742,11 +743,11 @@ impl R3000 {
         }
         match addr {
             0x1F801070 => {
-                println!("wrote ISTATUS {:#X}", val);
+                //println!("wrote ISTATUS {:#X}", val);
                 self.i_status &= (val as u32);
             },
             0x1F801074 => self.i_mask = {
-                println!("Wrote IMASK {:#X}", val);
+                //println!("Wrote IMASK {:#X}", val);
                 val as u32
             },
             0x1F801100..=0x1F801128 => timers.write_half_word(addr, val),

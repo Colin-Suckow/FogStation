@@ -105,11 +105,11 @@ impl R3000 {
         };
 
         //Handle interrupts
-        for i in 0..=10 {
-            if self.cop0.interrupt_enabled() && self.i_status.get_bit(i) && self.i_mask.get_bit(i) {
-                // println!("IMASK = {:#}", self.i_mask);
-                //println!("Firing exception for irq {}", i);
-                self.fire_exception(Exception::Int);
+        if self.cop0.interrupt_enabled() {
+            for i in 0..=10 {
+                if self.i_status.get_bit(i) && self.i_mask.get_bit(i) {
+                    self.fire_exception(Exception::Int);
+                }
             }
         }
 

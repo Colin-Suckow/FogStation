@@ -13,27 +13,31 @@ const V_BLANK_START: u32 = 480;
 struct Point {
     x: i16,
     y: i16,
+    color: u16,
 }
 
 impl Point {
-    fn from_word(word: u32) -> Self {
+    fn from_word(word: u32, color: u16) -> Self {
         Self {
             x: (word & 0xFFFF) as i16,
             y: ((word >> 16) & 0xFFFF) as i16,
+            color: color,
         }
     }
 
-    fn from_word_with_offset(word: u32, offset: Point) -> Self{
+    fn from_word_with_offset(word: u32, color: u16, offset: Point) -> Self{
         Self {
             x: ((word & 0xFFFF) as i32 + offset.x as i32) as i16,
             y: (((word >> 16) & 0xFFFF) as i32 + offset.y as i32) as i16,
+            color: color,
         }
     }
 
-    fn from_components(x: i16, y: i16) -> Self {
+    fn from_components(x: i16, y: i16, color: u16) -> Self {
         Self {
             x,
-            y
+            y,
+            color: color
         }
     }
 }
@@ -45,8 +49,7 @@ pub struct Gpu {
     status_reg: u32,
     pixel_count: u32,
     enabled: bool,
-    gp0_words_to_read: usize,
-    gp0_buffer: [u32; 20480],
+    gp0_buffer: [u32; 2048],
     gp0_buffer_address: usize,
 
     texpage_x_base: u16,
@@ -71,8 +74,7 @@ impl Gpu {
             status_reg: 0x1C000000,
             pixel_count: 0,
             enabled: false,
-            gp0_words_to_read: 0,
-            gp0_buffer: [0; 20480],
+            gp0_buffer: [0; 2048],
             gp0_buffer_address: 0,
 
             texpage_x_base: 0,
@@ -88,6 +90,14 @@ impl Gpu {
             hblank_consumed: false,
             show_frame: false,
         }
+    }
+
+    //Only reseting the big stuff. This will probably bite me later
+    pub fn reset(&mut self) {
+        self.vram = vec![0; (1_048_576 / 2)];
+        self.status_reg = 0x1C000000;
+        self.gp0_buffer = [0; 2048];
+        self.gp0_buffer_address = 0;        
     }
 
     pub fn read_status_register(&mut self) -> u32 {
@@ -147,26 +157,54 @@ impl Gpu {
                 let is_quad = command.get_bit(27);
                 let verts = if is_quad { 4 } else { 3 };
 
-                let packets = 1 + (verts * (is_gouraud as usize + is_textured as usize)) + verts;
+                let packets = 1 + (verts * is_textured as usize) + verts + if is_gouraud {verts - 1} else {0};
 
                 if self.gp0_buffer_address < packets {
                     // Not enough words for the command. Return early
                     return;
                 }
 
-                println!("Drawing polygon");
-
-                //Only works for unshaded, untextered polygons
                 
                 let fill = b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF);
                 if is_quad {
-                    let points: Vec<Point> = self.gp0_buffer[1..packets].to_vec().iter().step_by((is_gouraud as usize + is_textured as usize) + 1).map(|word| Point::from_word(word.clone())).collect();
-                    self.draw_solid_quad(&points, fill, command.get_bit(25));
-                    
+                    if is_gouraud {
+                        let points: Vec<Point> = vec![
+                            Point::from_word(self.gp0_buffer[1], fill),
+                            Point::from_word(self.gp0_buffer[3], b24color_to_b15color(self.gp0_buffer[2])),
+                            Point::from_word(self.gp0_buffer[5], b24color_to_b15color(self.gp0_buffer[4])),
+                            Point::from_word(self.gp0_buffer[7], b24color_to_b15color(self.gp0_buffer[6])),
+                        ];
+                        self.draw_shaded_quad(&points, command.get_bit(25));
+                    } else {
+                        if is_textured {
+
+                        } else {
+                            let points: Vec<Point> = vec![
+                                Point::from_word(self.gp0_buffer[1], 0),
+                                Point::from_word(self.gp0_buffer[2], 0),
+                                Point::from_word(self.gp0_buffer[3], 0),
+                                Point::from_word(self.gp0_buffer[4], 0),
+                            ];
+                            self.draw_solid_quad(&points, fill, command.get_bit(25));
+                        }
+                    };
                 } else {
-                    let points: Vec<Point> = self.gp0_buffer[1..packets].to_vec().iter().step_by((is_gouraud as usize + is_textured as usize) + 1).map(|word| Point::from_word(word.clone())).collect();
-                    self.draw_solid_triangle(&points, fill, command.get_bit(25));
-                    println!("Triangle drawn!");
+                    if is_gouraud {
+                        let points: Vec<Point> = vec![
+                            Point::from_word(self.gp0_buffer[1], fill),
+                            Point::from_word(self.gp0_buffer[3], b24color_to_b15color(self.gp0_buffer[2])),
+                            Point::from_word(self.gp0_buffer[5], b24color_to_b15color(self.gp0_buffer[4])),
+                        ];
+                        //println!("{:?}", points);
+                        self.draw_shaded_triangle(&points, command.get_bit(25));
+                    } else {
+                        let points: Vec<Point> = vec![
+                            Point::from_word(self.gp0_buffer[1], 0),
+                            Point::from_word(self.gp0_buffer[2], 0),
+                            Point::from_word(self.gp0_buffer[3], 0),
+                        ];
+                        self.draw_solid_triangle(&points, fill, command.get_bit(25));
+                    }
                 }
 
             }
@@ -194,7 +232,7 @@ impl Gpu {
                 match size {
                     0b01 => {
                         //Draw single pixel
-                        let point = Point::from_word(self.gp0_buffer[1]);
+                        let point = Point::from_word(self.gp0_buffer[1], 0);
 
                         let address = self.point_to_address(point.x as u32, point.y as u32) as usize;
                         let color = if command.get_bit(25) {
@@ -211,11 +249,11 @@ impl Gpu {
 
                     0b0 => {
                         //Draw variable size
-                        let tl_point = Point::from_word(self.gp0_buffer[1]);
+                        let tl_point = Point::from_word(self.gp0_buffer[1], 0);
                         let br_point = if command.get_bit(26) {
-                            Point::from_word_with_offset(self.gp0_buffer[3], tl_point)
+                            Point::from_word_with_offset(self.gp0_buffer[3], 0, tl_point)
                         } else {
-                            Point::from_word_with_offset(self.gp0_buffer[2], tl_point)
+                            Point::from_word_with_offset(self.gp0_buffer[2], 0, tl_point)
                         };
                         
                         //println!("tl x: {} y: {} br x: {} y: {}", tl_point.x, tl_point.y, br_point.x, br_point.y);
@@ -514,6 +552,21 @@ impl Gpu {
         }
     }
 
+    fn draw_horizontal_line_shaded(&mut self, x1: i16, x2: i16, y: i16, x1_color: u16, x2_color: u16, transparent: bool) {
+        let (start, end, start_color, end_color) = if x1 > x2 {(x2, x1, x2_color, x1_color)} else {(x1, x2, x1_color, x2_color)};
+        for x in start..end {
+            let address = self.point_to_address(x as u32, y as u32) as usize;
+            let fill = lerp_color(start_color, end_color, start, end, x);
+            //println!("x {} end {} fill {:#X}", x, end, fill);
+            let color = if transparent {
+                alpha_composite(self.vram[address % 524288], fill)
+            } else {
+                fill
+            };
+            self.vram[address % 524288] = color;
+        }
+    }
+
     fn draw_solid_box(&mut self, x1: u32, y1: u32, x2: u32, y2: u32, fill: u16, transparent: bool) {
         for y in y1..y2 {
             self.draw_horizontal_line(x1, x2, y, fill, transparent);
@@ -549,6 +602,38 @@ impl Gpu {
         }
     }
 
+    fn draw_shaded_flat_bottom_triangle(&mut self, p1: Point, p2: Point, p3: Point, transparent: bool) {
+        let invslope1 = (p2.x - p1.x) as f32 / (p2.y - p1.y) as f32;
+        let invslope2 = (p3.x - p1.x) as f32 / (p3.y - p1.y) as f32;
+
+        let mut curx1 = p1.x as f32;
+        let mut curx2 = p1.x as f32;
+
+        for scanline in p1.y..=p3.y {
+            let curx1_color = lerp_color(p1.color, p2.color, p1.y, p3.y, scanline);
+            let curx2_color = lerp_color(p1.color, p3.color, p1.y, p3.y, scanline);
+            self.draw_horizontal_line_shaded(curx1 as i16, curx2 as i16, scanline, curx1_color, curx2_color, transparent);
+            curx1 = curx1 + invslope1;
+            curx2 = curx2 +  invslope2;
+        }
+    }
+
+    fn draw_shaded_flat_top_triangle(&mut self, p1: Point, p2: Point, p3: Point, transparent: bool) {
+        let invslope1 = (p3.x - p1.x) as f32 / (p3.y - p1.y) as f32;
+        let invslope2 = (p3.x - p2.x) as f32 / (p3.y - p2.y) as f32;
+
+        let mut curx1 = p3.x as f32;
+        let mut curx2 = p3.x as f32;
+
+        for scanline in (p1.y..=p3.y).rev() {
+            let curx1_color = lerp_color(p1.color, p3.color, p1.y, p3.y, scanline);
+            let curx2_color = lerp_color(p2.color, p3.color, p1.y, p3.y, scanline);
+            self.draw_horizontal_line_shaded(curx1 as i16, curx2 as i16, scanline, curx1_color, curx2_color, transparent);
+            curx1 = curx1 - invslope1;
+            curx2 = curx2 - invslope2;
+        }
+    }
+
     fn draw_solid_triangle(&mut self, points: &[Point], fill: u16, transparent: bool) {
         let mut sp = points.to_vec();
         sp.sort_by_key(|p| p.y);
@@ -559,15 +644,37 @@ impl Gpu {
             self.draw_solid_flat_top_triangle(sp[0], sp[1], sp[2], fill, transparent);
         } else {
             let bound_x = (sp[0].x + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as i16 * (sp[2].x - sp[0].x)) as i16;
-            let bound_point = Point::from_components(bound_x, sp[1].y);
+            let bound_point = Point::from_components(bound_x, sp[1].y, 0);
             self.draw_solid_flat_bottom_triangle(sp[0], sp[1], bound_point, fill, transparent);
             self.draw_solid_flat_top_triangle(sp[1], bound_point, sp[2], fill, transparent);
+        }
+    }
+
+
+    fn draw_shaded_triangle(&mut self, points: &[Point], transparent: bool) {
+        let mut sp = points.to_vec();
+        sp.sort_by_key(|p| p.y);
+
+        if sp[1].y == sp[2].y {
+            self.draw_shaded_flat_bottom_triangle(sp[0], sp[1], sp[2], transparent);
+        } else if sp[0].y == sp[1].y {
+            self.draw_shaded_flat_top_triangle(sp[0], sp[1], sp[2], transparent);
+        } else {
+            let bound_x = (sp[0].x + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as i16 * (sp[2].x - sp[0].x)) as i16;
+            let bound_point = Point::from_components(bound_x, sp[1].y, sp[2].color);
+            self.draw_shaded_flat_bottom_triangle(sp[0], bound_point, sp[1], transparent);
+            self.draw_shaded_flat_top_triangle(sp[1], bound_point, sp[2], transparent);
         }
     }
 
     fn draw_solid_quad(&mut self, points: &[Point], fill: u16, transparent: bool) {
         self.draw_solid_triangle(&points[0..3], fill, transparent);
         self.draw_solid_triangle(&points[1..4], fill, transparent);
+    }
+
+    fn draw_shaded_quad(&mut self, points: &[Point], transparent: bool) {
+        self.draw_shaded_triangle(&points[0..3], transparent);
+        self.draw_shaded_triangle(&points[1..4], transparent);
     }
 }
 
@@ -588,6 +695,19 @@ fn b15_to_rgb(color: u16) -> (u8, u8, u8) {
 
 fn rgb_to_b15(r: u8, g: u8, b: u8) -> u16 {
     ((r as u16) << 10) | ((g as u16) << 5) | (b as u16)
+}
+
+fn lerp_color(y0: u16, y1: u16, x0: i16, x1: i16, x: i16) -> u16 {
+    let (sr, sg, sb) = b15_to_rgb(y0);
+    let (er, eg, eb) = b15_to_rgb(y1);
+    
+    let ir = (sr as f32 + ((er as i32 - sr as i32) as f32 * ((x - x0) as f32 / (x1 - x0) as f32))) as u16;
+    let ig = (sg as f32 + ((eg as i32 - sg as i32) as f32 * ((x - x0) as f32 / (x1 - x0) as f32))) as u16;
+    let ib = (sb as f32 + ((eb as i32 - sb as i32) as f32 * ((x - x0) as f32 / (x1 - x0) as f32))) as u16;
+    
+    rgb_to_b15(ir as u8, ig as u8, ib as u8)
+
+    //(y0 as f32 + ((y1 - y0) as f32 * ((x - x0) as f32 / (x1 - x0) as f32))) as u16
 }
 
 //TODO Make colors more accurate
@@ -615,5 +735,19 @@ impl Command for u32 {
 
     fn parameter(&self) -> u32 {
         (self.clone() & 0x7FFFFF)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_lerp_color() {
+        assert_eq!(15, lerp_color(10, 20, 100, 200, 150));
+    }
+
+    #[test]
+    fn test_lerp_color_negative() {
+        assert_eq!(15, lerp_color(20, 10, 100, 200, 150));
     }
 }

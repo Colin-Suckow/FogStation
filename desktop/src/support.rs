@@ -2,11 +2,10 @@ use glium::glutin::event_loop::{ControlFlow, EventLoop};
 use glium::glutin::window::WindowBuilder;
 use glium::{backend::Facade, glutin};
 use glium::{
-    glutin::event::{Event, WindowEvent},
-    Texture2d,
+    glutin::event::{Event, WindowEvent}
 };
 use glium::{Display, Surface};
-use imgui::{Context, FontConfig, FontGlyphRanges, FontSource, Textures, Ui};
+use imgui::{Context, FontConfig, FontSource, Textures, Ui};
 use imgui_glium_renderer::{Renderer, Texture};
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use std::time::Instant;

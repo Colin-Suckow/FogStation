@@ -1,6 +1,6 @@
 use core::num;
 
-use bit_field::BitField;
+use bit_field::{BitArray, BitField};
 use num_derive::FromPrimitive;
 
 const H_RES: u32 = H_BLANK_START + 40;
@@ -83,6 +83,7 @@ pub struct Gpu {
     texmode: TextureColorMode,
     palette_x: u16,
     palette_y: u16,
+    blend_enabled: bool,
     blend_color: u16,
 
     draw_area_top_left_x: u16,
@@ -112,6 +113,7 @@ impl Gpu {
             texmode: TextureColorMode::FifteenBit,
             palette_x: 0,
             palette_y: 0,
+            blend_enabled: false,
             blend_color: 0xFFFF,
 
             draw_area_top_left_x: 0,
@@ -200,7 +202,8 @@ impl Gpu {
 
                 
                 let fill = b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF);
-                self.blend_color = 0xFFFF;
+                self.blend_enabled = self.gp0_buffer[0].get_bit(24);
+                self.blend_color = fill;
                 if is_quad {
                     if is_textured && is_gouraud {
                         //Do nothing
@@ -867,7 +870,11 @@ impl Gpu {
                 self.vram[point_to_address((clut_x * 16 + clut_index) as u32, clut_y as u32) as usize]
             }
         };
-        pixel_val
+        if self.blend_enabled {
+            pixel_val & self.blend_color
+        } else {
+            pixel_val
+        }
     }
 
 }

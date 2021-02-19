@@ -40,7 +40,7 @@ fn main() {
         emu.load_executable(destination, entrypoint, init_sp, &exe_data);
     }
 
-    let system = support::init("psx-emu");
+    let system = support::init("VaporStation");
 
     system.main_loop(move |_, ui, gl_ctx, textures| {
         emu.run_frame();
@@ -65,7 +65,7 @@ fn main() {
         Window::new(im_str!("Viewport"))
             .content_size([800.0, 600.0])
             .build(ui, || {
-                let texture = create_texture_from_buffer(gl_ctx, emu.get_vram(), 640, 480);
+                let texture = create_texture_from_buffer(gl_ctx, emu.get_vram(), 320, 240);
                 let id = TextureId::new(1); //This is an awful hack that needs to be replaced
                 textures.replace(id, texture);
                 Image::new(id, [800.0, 600.0]).build(ui);
@@ -93,7 +93,7 @@ where
 {
     let mut gl_raw_data: Vec<u8> = Vec::new();
     for index in 0..(width * height) {
-        gl_raw_data.append(&mut ps_pixel_to_gl(&data[((index / width) * 1024) + index % width]));
+        gl_raw_data.append(&mut ps_pixel_to_gl(&data[((index / width) * 1024) + index % width]));  
     }
 
     let image = RawImage2d {

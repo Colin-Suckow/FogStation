@@ -1,5 +1,3 @@
-use std::{cell::RefCell, rc::Rc};
-
 use bit_field::BitField;
 
 use cop0::Cop0;
@@ -7,10 +5,7 @@ use instruction::{Instruction, NumberHelpers};
 
 use crate::bus::MainBus;
 use crate::timer::TimerState;
-use crate::dma::DMAState;
-use std::fs::File;
-use std::path::Path;
-use std::io::Write;
+
 
 mod cop0;
 mod instruction;
@@ -62,7 +57,6 @@ pub struct R3000 {
     load_delay: Option<LoadDelay>,
     i_mask: u32,
     pub i_status: u32,
-    trace_file: File,
 }
 
 impl R3000 {
@@ -79,7 +73,6 @@ impl R3000 {
             load_delay: None,
             i_mask: 0,
             i_status: 0,
-            trace_file: File::create(Path::new("trace.txt")).unwrap(),
         }
     }
     /// Resets cpu registers to zero and sets program counter to reset vector (0xBFC00000)
@@ -360,16 +353,16 @@ impl R3000 {
                         //BLTZ
                         if (self.read_reg(instruction.rs()) as i32) < 0 {
                             self.delay_slot = self.pc;
-                            self.pc = ((instruction.immediate_sign_extended() << 2)
-                                .wrapping_add(self.delay_slot));
+                            self.pc = (instruction.immediate_sign_extended() << 2)
+                                .wrapping_add(self.delay_slot);
                         }
                     }
                     0x1 => {
                         //BGEZ
                         if self.read_reg(instruction.rs()) as i32 >= 0 {
                             self.delay_slot = self.pc;
-                            self.pc = ((instruction.immediate_sign_extended() << 2)
-                                .wrapping_add(self.delay_slot));
+                            self.pc = (instruction.immediate_sign_extended() << 2)
+                                .wrapping_add(self.delay_slot);
                         }
                     }
                     _ => panic!(
@@ -382,22 +375,22 @@ impl R3000 {
             0x2 => {
                 //J
                 self.delay_slot = self.pc;
-                self.pc = ((instruction.address() << 2)  | (self.delay_slot & 0xF0000000));
+                self.pc = (instruction.address() << 2)  | (self.delay_slot & 0xF0000000);
             }
 
             0x3 => {
                 //JAL
                 self.delay_slot = self.pc;
                 self.write_reg(31, self.pc + 4);
-                self.pc = ((instruction.address() << 2) | (self.delay_slot & 0xF0000000));
+                self.pc = (instruction.address() << 2) | (self.delay_slot & 0xF0000000);
             }
 
             0x4 => {
                 //BEQ
                 if self.read_reg(instruction.rs()) == self.read_reg(instruction.rt()) {
                     self.delay_slot = self.pc;
-                    self.pc = ((instruction.immediate_sign_extended() << 2)
-                        .wrapping_add(self.delay_slot));
+                    self.pc = (instruction.immediate_sign_extended() << 2)
+                        .wrapping_add(self.delay_slot);
                 }
             }
 
@@ -405,8 +398,8 @@ impl R3000 {
                 //BNE
                 if self.read_reg(instruction.rs()) != self.read_reg(instruction.rt()) {
                     self.delay_slot = self.pc;
-                    self.pc = ((instruction.immediate_sign_extended() << 2)
-                        .wrapping_add(self.delay_slot));
+                    self.pc = (instruction.immediate_sign_extended() << 2)
+                        .wrapping_add(self.delay_slot);
                 }
             }
 
@@ -414,8 +407,8 @@ impl R3000 {
                 //BLEZ
                 if (self.read_reg(instruction.rs()) as i32) <= 0 {
                     self.delay_slot = self.pc;
-                    self.pc = ((instruction.immediate_sign_extended() << 2)
-                        .wrapping_add(self.delay_slot));
+                    self.pc = (instruction.immediate_sign_extended() << 2)
+                        .wrapping_add(self.delay_slot);
                 }
             }
 
@@ -423,8 +416,8 @@ impl R3000 {
                 //BGTZ
                 if (self.read_reg(instruction.rs()) as i32) > 0 {
                     self.delay_slot = self.pc;
-                    self.pc = ((instruction.immediate_sign_extended() << 2)
-                        .wrapping_add(self.delay_slot));
+                    self.pc = (instruction.immediate_sign_extended() << 2)
+                        .wrapping_add(self.delay_slot);
                 }
             }
 
@@ -742,14 +735,8 @@ impl R3000 {
             return;
         }
         match addr {
-            0x1F801070 => {
-                //println!("wrote ISTATUS {:#X}", val);
-                self.i_status &= (val as u32);
-            },
-            0x1F801074 => self.i_mask = {
-                //println!("Wrote IMASK {:#X}", val);
-                val as u32
-            },
+            0x1F801070 => self.i_status &= val as u32,
+            0x1F801074 => self.i_mask = val as u32,
             0x1F801100..=0x1F801128 => timers.write_half_word(addr, val),
             _ => self.main_bus.write_half_word(addr, val),
         };
@@ -761,7 +748,12 @@ impl R3000 {
             //Cache is isolated, so don't write
             return;
         }
-        self.main_bus.write_byte(addr, val);
+        match addr {
+            0x1F801070 => self.i_status &= val as u32,
+            0x1F801074 => self.i_mask = val as u32,
+            _ => self.main_bus.write_byte(addr, val),
+        };
+        
     }
 
     /// Returns the value stored within the given register. Will panic if register_number > 31

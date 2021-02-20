@@ -135,6 +135,7 @@ impl MainBus {
             0x8000_0000..=0x801f_ffff => self.memory.write_byte(addr - 0x8000_0000, value), //KSEG0
             0xA000_0000..=0xA01f_ffff => self.memory.write_byte(addr - 0xA000_0000, value), //KSEG1
             0x1F801800..=0x1F801803 => (), //CDROM
+            0xBF802000..=0xBf803000 => (), //Expansion port 2
             _ => panic!(
                 "Invalid byte write at address {:#X}! This address is not mapped to any device.",
                 addr

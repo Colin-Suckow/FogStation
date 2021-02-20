@@ -1,7 +1,5 @@
 use bit_field::BitField;
 use crate::cpu::{R3000, InterruptSource};
-use crate::bus::MainBus;
-use crate::cpu::Exception::Int;
 
 const NUM_CHANNELS: usize = 7;
 

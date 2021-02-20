@@ -1,7 +1,4 @@
-use core::num;
-
-use bit_field::{BitArray, BitField};
-use num_derive::FromPrimitive;
+use bit_field::BitField;
 
 const H_RES: u32 = H_BLANK_START + 40;
 const V_RES: u32 = V_BLANK_START + 60;
@@ -101,7 +98,7 @@ pub struct Gpu {
 impl Gpu {
     pub fn new() -> Gpu {
         Gpu {
-            vram: vec![0; (1_048_576 / 2)],
+            vram: vec![0; 1_048_576 / 2],
             status_reg: 0x1C000000,
             pixel_count: 0,
             enabled: false,
@@ -130,7 +127,7 @@ impl Gpu {
 
     //Only reseting the big stuff. This will probably bite me later
     pub fn reset(&mut self) {
-        self.vram = vec![0; (1_048_576 / 2)];
+        self.vram = vec![0; 1_048_576 / 2];
         self.status_reg = 0x1C000000;
         self.gp0_buffer = [0; 20480];
         self.gp0_buffer_address = 0;        
@@ -400,7 +397,7 @@ impl Gpu {
             }
             0x5 => {
                 //CPU To VRAM
-                let width = ((self.gp0_buffer[2] & 0xFFFF) as u16);
+                let width = (self.gp0_buffer[2] & 0xFFFF) as u16;
                 let height = (((self.gp0_buffer[2] >> 16) & 0xFFFF) as u16) * 2;
                 let length = (((width / 2) * height) / 2) + 3;
                 if self.gp0_buffer_address < length as usize {
@@ -408,14 +405,14 @@ impl Gpu {
                     return;
                 }
 
-                let base_x = ((self.gp0_buffer[1] & 0xFFFF) as u16);
+                let base_x = (self.gp0_buffer[1] & 0xFFFF) as u16;
                 let base_y = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as u16;
 
                 for index in 3..(length) {
                     let p2 = ((self.gp0_buffer[index as usize] >> 16) & 0xFFFF) as u16;
                     let p1 = (self.gp0_buffer[index as usize] & 0xFFFF) as u16;
-                    let x = (base_x + ((((index - 3) * 2) % width)));
-                    let y = (base_y + (((index - 3) * 2) / width));
+                    let x = base_x + ((((index - 3) * 2) % width));
+                    let y = base_y + (((index - 3) * 2) / width);
                     let addr = point_to_address(x as u32, y as u32);
                     self.vram[addr as usize] = p1;
                     self.vram[(addr + 1) as usize] = p2;
@@ -573,11 +570,6 @@ impl Gpu {
     fn gp0_push(&mut self, val: u32) {
         self.gp0_buffer[self.gp0_buffer_address] = val;
         self.gp0_buffer_address += 1;
-    }
-
-    fn gp0_pop(&mut self) -> u32 {
-        self.gp0_buffer_address -= 1;
-        self.gp0_buffer[self.gp0_buffer_address]
     }
 
     fn gp0_clear(&mut self) {
@@ -924,7 +916,7 @@ fn lerp_coords(y0: i16, y1: i16, x0: i16, x1: i16, x: i16) -> i16 {
 fn alpha_composite(background_color: u16, alpha_color: u16) -> u16 {
     let (b_r, b_g, b_b) = b15_to_rgb(background_color);
     let (a_r, a_g, a_b) = b15_to_rgb(alpha_color);
-    rgb_to_b15((a_r + b_r), (a_g + b_g), (a_b + b_b))
+    rgb_to_b15(a_r + b_r, a_g + b_g, a_b + b_b)
 }
 
 //Helper trait + impl
@@ -944,7 +936,7 @@ impl Command for u32 {
     }
 
     fn parameter(&self) -> u32 {
-        (self.clone() & 0x7FFFFF)
+        self.clone() & 0x7FFFFF
     }
 }
 

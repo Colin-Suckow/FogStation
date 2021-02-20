@@ -1,6 +1,5 @@
 use bit_field::BitField;
 use crate::cpu::{R3000, InterruptSource};
-use crate::cpu::Exception::Int;
 
 #[derive(PartialEq, Debug)]
 enum Cause {
@@ -60,7 +59,7 @@ impl Timer {
                 2 => InterruptSource::TMR2,
                 _ => panic!("Invalid timer source"),
             };
-            //cpu.fire_external_interrupt(source);
+            cpu.fire_external_interrupt(source);
         }
     }
 

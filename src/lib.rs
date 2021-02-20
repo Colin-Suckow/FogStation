@@ -1,5 +1,3 @@
-use std::{cell::RefCell, rc::Rc};
-
 use bios::Bios;
 use bus::MainBus;
 use cpu::R3000;
@@ -7,7 +5,7 @@ use timer::TimerState;
 
 use crate::gpu::Gpu;
 use crate::memory::Memory;
-use crate::dma::{DMAState, execute_dma_cycle};
+use crate::dma::execute_dma_cycle;
 use crate::cpu::InterruptSource;
 
 mod bios;
@@ -74,7 +72,7 @@ impl PSXEmu {
         self.r3000.main_bus.gpu.execute_cycle();
     }
 
-    pub fn load_executable(&mut self, start_addr: u32, entrypoint: u32, sp: u32, data: &Vec<u8>) {
+    pub fn load_executable(&mut self, start_addr: u32, entrypoint: u32, _sp: u32, data: &Vec<u8>) {
         for (index, val) in data.iter().enumerate() {
             self.r3000.main_bus.write_byte((index + start_addr as usize) as u32, val.clone());
         }

@@ -1,5 +1,3 @@
-use bit_field::BitField;
-
 pub trait Instruction {
     fn opcode(&self) -> u8;
     fn rs(&self) -> u8;

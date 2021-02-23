@@ -3,6 +3,7 @@ use crate::gpu::Gpu;
 use crate::memory::Memory;
 use crate::dma::DMAState;
 use crate::spu::SPU;
+use crate::cdrom::CDDrive;
 
 pub struct MainBus {
     pub bios: Bios,
@@ -10,11 +11,12 @@ pub struct MainBus {
     pub gpu: Gpu,
     pub dma: DMAState,
     spu: SPU,
+    cd_drive: CDDrive,
 }
 
 impl MainBus {
     pub fn new(bios: Bios, memory: Memory, gpu: Gpu) -> MainBus {
-        MainBus { bios, memory, gpu, dma: DMAState::new(), spu: SPU::new() }
+        MainBus { bios, memory, gpu, dma: DMAState::new(), spu: SPU::new(), cd_drive: CDDrive::new() }
     }
 
     pub fn read_word(&mut self, addr: u32) -> u32 {
@@ -117,10 +119,7 @@ impl MainBus {
             }
             0x8000_0000..=0x801f_ffff => self.memory.read_byte(addr - 0x8000_0000), //KSEG0
             0xbfc0_0000..=0xbfc7_ffff => self.bios.read_byte(addr - 0xbfc0_0000),
-            0x1F801800..=0x1F801803 => {
-                println!("Reading byte at {:#X} from CDROM address space!", addr);
-                0
-            }, //CDROM
+            0x1F801800..=0x1F801803 => self.cd_drive.read_byte(addr), //CDROM
             _ => panic!(
                 "Invalid byte read at address {:#X}! This address is not mapped to any device.",
                 addr
@@ -134,7 +133,7 @@ impl MainBus {
             0x0..=0x001f_ffff => self.memory.write_byte(addr, value), //KUSEG
             0x8000_0000..=0x801f_ffff => self.memory.write_byte(addr - 0x8000_0000, value), //KSEG0
             0xA000_0000..=0xA01f_ffff => self.memory.write_byte(addr - 0xA000_0000, value), //KSEG1
-            0x1F801800..=0x1F801803 => (), //CDROM
+            0x1F801800..=0x1F801803 => self.cd_drive.write_byte(addr, value), //CDROM
             0xBF802000..=0xBf803000 => (), //Expansion port 2
             _ => panic!(
                 "Invalid byte write at address {:#X}! This address is not mapped to any device.",

@@ -99,7 +99,7 @@ where
 {
     let mut gl_raw_data: Vec<u8> = Vec::new();
     for index in 0..(width * height) {
-        gl_raw_data.append(&mut ps_pixel_to_gl(&data[((index / width) * 1024) + index % width]));  
+        gl_raw_data.extend_from_slice(&ps_pixel_to_gl(&data[((index / width) * 1024) + index % width]));
     }
 
     let image = RawImage2d {
@@ -120,8 +120,8 @@ where
 }
 
 ///Converts 16 bit psx pixel format to u8u8u8
-fn ps_pixel_to_gl(pixel_data: &u16) -> Vec<u8> {
-    vec![
+fn ps_pixel_to_gl(pixel_data: &u16) -> [u8; 3] {
+    [
         ((pixel_data & 0x1F) * 8) as u8,
         (((pixel_data >> 5) & 0x1F) * 8) as u8,
         (((pixel_data >> 10) & 0x1F) * 8) as u8,

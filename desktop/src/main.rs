@@ -3,6 +3,7 @@ use psx_emu::PSXEmu;
 
 use std::{fs, rc::Rc};
 use byteorder::{ByteOrder, LittleEndian};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use imgui::*;
 use std::env;
@@ -41,9 +42,13 @@ fn main() {
     }
 
     let system = support::init("VaporStation");
+    let mut start = SystemTime::now();
+    let mut frame_time = 0;
 
     system.main_loop(move |_, ui, gl_ctx, textures| {
+        start = SystemTime::now();
         emu.run_frame();
+        frame_time = SystemTime::now().duration_since(start).expect("Error getting frame duration").as_millis();
         
         Window::new(im_str!("Registers"))
             .size([300.0, 600.0], Condition::FirstUseEver)
@@ -77,6 +82,7 @@ fn main() {
                 if ui.button(im_str!("Reset"), [80.0, 20.0]) {
                     emu.reset();
                 }
+                ui.text(format!("{:.1} FPS", (1000.0 / frame_time as f64)));
             });
     });
 }

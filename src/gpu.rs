@@ -203,7 +203,8 @@ impl Gpu {
                 self.blend_color = fill;
                 if is_quad {
                     if is_textured && is_gouraud {
-                        //Do nothing
+                        //Should be blending in colors. Do that later
+                        
                     } else if is_textured {
                         let points: Vec<Point> = vec![
                             Point::new_textured_point(self.gp0_buffer[1], ((self.gp0_buffer[2] >> 8) & 0xFF) as i16, (self.gp0_buffer[2] & 0xFF) as i16),
@@ -216,13 +217,8 @@ impl Gpu {
                         self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
                         self.texpage_x_base = ((self.gp0_buffer[4] >> 16) & 0xF) as u16;
                         self.texpage_y_base = ((self.gp0_buffer[4] >> 20) & 0x1) as u16;
-                        // self.blend_color = if fill == 0 {
-                        //     0xFFFF
-                        // } else {
-                        //     fill
-                        // };
                         self.blend_color = fill;
-                        println!("blend {:#X}", self.blend_color);
+
                         self.draw_textured_quad(&points, command.get_bit(25));
                     } else if is_gouraud {
                         let points: Vec<Point> = vec![
@@ -245,7 +241,7 @@ impl Gpu {
                     
                 } else {
                     if is_gouraud && is_textured {
-                        //Nothing
+                        
                     } else if is_textured {
                         let points: Vec<Point> = vec![
                                 Point::new_textured_point(self.gp0_buffer[1], ((self.gp0_buffer[2] >> 8) & 0xFF) as i16, (self.gp0_buffer[2] & 0xFF) as i16),
@@ -303,8 +299,6 @@ impl Gpu {
                     return;
                 }
 
-                println!("Drawing rect size {}", size);
-
                 match size {
                     0b01 => {
                         //Draw single pixel
@@ -332,7 +326,7 @@ impl Gpu {
                             Point::from_word_with_offset(self.gp0_buffer[2], 0, tl_point)
                         };
                         
-                        //println!("tl x: {} y: {} br x: {} y: {}", tl_point.x, tl_point.y, br_point.x, br_point.y);
+                    
 
                         self.draw_solid_box(
                             tl_point.x as u32,
@@ -852,7 +846,7 @@ impl Gpu {
                 self.vram[point_to_address(((page_x * 64) as u32 + x as u32) as u32, ((page_y * 256) as u32 + y as u32) as u32) as usize]
             },
             TextureColorMode::EightBit => {
-                let value = self.vram[point_to_address(((page_x * 64) as i16 + x / 2) as u32, ((page_y * 256) as i16 + y) as u32) as usize];
+                let value = self.vram[point_to_address((page_x * 64) as u32 + (x / 2) as u32, (page_y * 256) as u32 + y as u32) as usize];
                 let clut_index = (value >> (x % 2) * 8) & 0xF;
                 self.vram[point_to_address((clut_x * 16 + clut_index) as u32, clut_y as u32) as usize]
             },

@@ -2,6 +2,8 @@ use std::collections::VecDeque;
 use bit_field::BitField;
 use commands::*;
 
+use crate::cpu::{InterruptSource, R3000};
+
 mod commands;
 
 pub(super) enum IntCause {
@@ -16,14 +18,30 @@ pub(super) enum IntCause {
     INT10h,
 }
 
+impl IntCause {
+    fn bitflag(&self) -> u8 {
+        match self {
+            IntCause::INT1 => 1,
+            IntCause::INT2 => 2,
+            IntCause::INT3 => 3,
+            IntCause::INT4 => 4,
+            IntCause::INT5 => 5,
+            IntCause::INT6 => 6,
+            IntCause::INT7 => 7,
+            IntCause::INT8 => 8,
+            IntCause::INT10h => 0x10,
+        }
+    }
+}
+
 pub(super) struct PendingResponse {
     cause: IntCause,
     response: Vec<u8>,
-    execution_cycles: u64,
+    execution_cycles: u32,
 }
 
 pub struct CDDrive {
-    cycle_counter: u64,
+    cycle_counter: u32,
     pending_responses: VecDeque<PendingResponse>,
 
     parameter_queue: VecDeque<u8>,
@@ -55,15 +73,6 @@ impl CDDrive {
             
             //Probably useless registers
             reg_sound_map_data_out: 0,
-        }
-    }
-
-    pub fn step_cycle(&mut self) {
-        if self.cycle_counter > 0 {
-            self.cycle_counter -= 1;
-            return;
-        } else {
-            //TODO: Fire IRQ or something
         }
     }
 
@@ -120,6 +129,10 @@ impl CDDrive {
             }
             _ => panic!("CD: Unknown command {:#X}!", command)
         });
+
+        if self.pending_responses.len() == 1 {
+            self.cycle_counter = self.pending_responses[0].execution_cycles;
+        }
     }
 
     fn get_status_register(&self) -> u8 {
@@ -141,7 +154,7 @@ impl CDDrive {
     }
 
     fn push_parameter(&mut self, val: u8) {
-        self.parameter_queue.push_front(val);
+        self.parameter_queue.push_back(val);
     }
 
     fn write_interrupt_flag_register(&mut self, val: u8) {
@@ -158,5 +171,35 @@ impl CDDrive {
 
     fn read_interrupt_flag_register(&mut self) -> u8 {
         todo!();
+    }
+}
+
+pub fn step_cycle(cpu: &mut R3000) {
+    if cpu.main_bus.cd_drive.cycle_counter > 0 {
+        cpu.main_bus.cd_drive.cycle_counter -= 1;
+        return;
+    } else {
+        if cpu.main_bus.cd_drive.pending_responses.len() == 0 {
+            //We could respond, but theres no pending responses
+            return;
+        }
+        println!("CD: Response ready!");
+        let response = cpu.main_bus.cd_drive.pending_responses.pop_front().expect("CD: Unable to pop pending response!");
+        cpu.main_bus.cd_drive.response_queue = VecDeque::with_capacity(response.response.len()); //Clear queue
+        cpu.main_bus.cd_drive.response_queue.extend(response.response.iter());
+        cpu.main_bus.cd_drive.reg_interrupt_flag = response.cause.bitflag();
+        //Check if interrupt enabled. If so, fire interrupt
+        if cpu.main_bus.cd_drive.reg_interrupt_enable & response.cause.bitflag() == response.cause.bitflag() {
+            println!("CD: Firing interrupt!");
+            cpu.fire_external_interrupt(InterruptSource::CDROM);
+        }
+
+        //Set cycle counter for next pending response
+        //This seems inaccurate. It doesn't start counting the delay, till
+        //it is at the front of the queue. Realistically, the delay should
+        //start counting from the moment the command is fired.
+        if cpu.main_bus.cd_drive.pending_responses.len() > 0 {
+            cpu.main_bus.cd_drive.cycle_counter = cpu.main_bus.cd_drive.pending_responses[0].execution_cycles;
+        }
     }
 }

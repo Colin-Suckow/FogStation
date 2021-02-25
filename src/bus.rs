@@ -11,7 +11,7 @@ pub struct MainBus {
     pub gpu: Gpu,
     pub dma: DMAState,
     spu: SPU,
-    cd_drive: CDDrive,
+    pub cd_drive: CDDrive,
 }
 
 impl MainBus {

@@ -3,7 +3,7 @@ use bit_field::BitField;
 use cop0::Cop0;
 use instruction::{Instruction, NumberHelpers};
 
-use crate::bus::MainBus;
+use crate::{bus::MainBus, cdrom};
 use crate::timer::TimerState;
 
 
@@ -96,6 +96,9 @@ impl R3000 {
         if self.main_bus.gpu.consume_vblank() {
             self.i_status.set_bit(0, true);
         };
+
+        //Update the cdrom drive
+        cdrom::step_cycle(self);
 
         //Handle interrupts
         if self.cop0.interrupt_enabled() {

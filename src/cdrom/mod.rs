@@ -6,6 +6,20 @@ use crate::cpu::{InterruptSource, R3000};
 
 mod commands;
 
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub(super) enum DriveState {
+    Play,
+    Seek,
+    Read,
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub(super) enum MotorState {
+    Off,
+    SpinUp,
+    On,
+}
+
 pub(super) enum IntCause {
     INT1,
     INT2,
@@ -38,11 +52,16 @@ pub(super) struct PendingResponse {
     cause: IntCause,
     response: Vec<u8>,
     execution_cycles: u32,
+    extra_response: Option<Box<PendingResponse>>
 }
 
 pub struct CDDrive {
     cycle_counter: u32,
     pending_responses: VecDeque<PendingResponse>,
+
+    drive_state: DriveState,
+    motor_state: MotorState,
+    disk_inserted: bool,
 
     parameter_queue: VecDeque<u8>,
     data_queue: VecDeque<u8>,
@@ -62,10 +81,15 @@ impl CDDrive {
         Self {
             cycle_counter: 0,
             pending_responses: VecDeque::new(),
+
             parameter_queue: VecDeque::new(),
             data_queue: VecDeque::new(),
             response_queue: VecDeque::new(),
             status_index: 0,
+
+            drive_state: DriveState::Seek,
+            motor_state: MotorState::Off,
+            disk_inserted: false,
 
             reg_interrupt_flag: 0,
             reg_interrupt_enable: 0,
@@ -110,16 +134,36 @@ impl CDDrive {
         }
     }
 
-    pub fn read_byte(&self, addr: u32) -> u8 {
+    pub fn read_byte(&mut self, addr: u32) -> u8 {
         match addr {
             0x1F801800 => self.get_status_register(),
+            0x1F801801 => {
+                match self.status_index {
+                    0 => panic!("CD: 0x1F801801 read byte unknown index 0"),
+                    1 => self.pop_response(),
+                    2 => panic!("CD: 0x1F801803 read byte unknown index 2"),
+                    3 => panic!("CD: 0x1F801801 read byte unknown index 3"),
+                    _ => unreachable!()
+                }
+            }
+            0x1F801803 => {
+                match self.status_index {
+                    0 => panic!("CD: 0x1F801803 read byte unknown index 0"),
+                    1 => self.reg_interrupt_flag,
+                    2 => panic!("CD: 0x1F801803 read byte unknown index 2"),
+                    3 => self.reg_interrupt_flag, //Register mirror
+                    _ => unreachable!()
+                }
+            }
             _ => panic!("CD: Tried to read unknown byte. Address: {:#X} Index: {}", addr, self.status_index),
         }
     }
 
     fn execute_command(&mut self, command: u8) {
         let parameters: Vec<&u8> = self.parameter_queue.iter().collect();
-        self.pending_responses.push_front(match command {
+        self.pending_responses.push_back(match command {
+            0x1 => get_stat(self),
+            0x1A => get_id(self),
             0x19 => {
                 //sub_function commands
                 match parameters[0] {
@@ -157,6 +201,16 @@ impl CDDrive {
         self.parameter_queue.push_back(val);
     }
 
+    fn pop_response(&mut self) -> u8 {
+        match self.response_queue.pop_front() {
+            Some(val) => val,
+            None => {
+                println!("CD: Tried to read response from empty response queue! Returning 0...");
+                0
+            }
+        }
+    }
+
     fn write_interrupt_flag_register(&mut self, val: u8) {
         self.reg_interrupt_flag &= !val;
         self.response_queue = VecDeque::new(); //Reset queue
@@ -183,15 +237,20 @@ pub fn step_cycle(cpu: &mut R3000) {
             //We could respond, but theres no pending responses
             return;
         }
-        println!("CD: Response ready!");
+
         let response = cpu.main_bus.cd_drive.pending_responses.pop_front().expect("CD: Unable to pop pending response!");
         cpu.main_bus.cd_drive.response_queue = VecDeque::with_capacity(response.response.len()); //Clear queue
         cpu.main_bus.cd_drive.response_queue.extend(response.response.iter());
         cpu.main_bus.cd_drive.reg_interrupt_flag = response.cause.bitflag();
+
         //Check if interrupt enabled. If so, fire interrupt
         if cpu.main_bus.cd_drive.reg_interrupt_enable & response.cause.bitflag() == response.cause.bitflag() {
-            println!("CD: Firing interrupt!");
             cpu.fire_external_interrupt(InterruptSource::CDROM);
+        }
+
+        //If the response has an extra response, push that to the front of the line
+        if let Some(ext_response) = response.extra_response {
+            cpu.main_bus.cd_drive.pending_responses.push_front(*ext_response);
         }
 
         //Set cycle counter for next pending response

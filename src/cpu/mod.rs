@@ -136,7 +136,7 @@ impl R3000 {
     pub fn execute_instruction(&mut self, instruction: u32, timers: &mut TimerState) {
 
         if self.pc % 4 != 0 || self.delay_slot % 4 != 0 {
-            panic!("Address is not aligned!");
+            panic!("CPU: Address is not aligned!");
         }
 
         match instruction.opcode() {
@@ -260,7 +260,7 @@ impl R3000 {
                                 .checked_add(self.read_reg(instruction.rt()) as i32)
                             {
                                 Some(val) => val as u32,
-                                None => panic!("ADD overflowed"),
+                                None => panic!("CPU: ADD overflowed"),
                             },
                         )
                     }
@@ -343,7 +343,7 @@ impl R3000 {
                     }
 
                     _ => panic!(
-                        "Unknown SPECIAL instruction. FUNCT is {0} ({0:#08b}, {0:#X})",
+                        "CPU: Unknown SPECIAL instruction. FUNCT is {0} ({0:#08b}, {0:#X})",
                         instruction.funct()
                     ),
                 }
@@ -369,7 +369,7 @@ impl R3000 {
                         }
                     }
                     _ => panic!(
-                        "Unknown test and branch instruction {} ({0:#X})",
+                        "CPU: Unknown test and branch instruction {} ({0:#X})",
                         instruction.rt()
                     ),
                 }
@@ -432,7 +432,7 @@ impl R3000 {
                         .checked_add(instruction.immediate_sign_extended() as i32)
                     {
                         Some(val) => val as u32,
-                        None => panic!("ADDI overflowed"),
+                        None => panic!("CPU: ADDI overflowed"),
                     },
                 );
             }
@@ -654,7 +654,7 @@ impl R3000 {
                 self.write_bus_word(addr, self.read_reg(instruction.rt()), timers);
             }
             _ => panic!(
-                "Unknown opcode {0} ({0:#08b}, {0:#X})",
+                "CPU: Unknown opcode {0} ({0:#08b}, {0:#X})",
                 instruction.opcode()
             ),
         };
@@ -662,7 +662,7 @@ impl R3000 {
 
     pub fn fire_exception(&mut self, exception: Exception) {
         if self.delay_slot != 0 {
-            panic!("Branch delay exception rollback is not implemented!");
+            panic!("CPU: Branch delay exception rollback is not implemented!");
         }
         self.cop0.set_cause_execode(exception);
         self.cop0.write_reg(14, self.pc);

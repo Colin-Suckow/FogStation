@@ -102,7 +102,7 @@ impl MainBus {
         }
     }
 
-    pub fn read_byte(&self, addr: u32) -> u8 {
+    pub fn read_byte(&mut self, addr: u32) -> u8 {
         match addr {
             0x1F801070 => {
                 println!("Tried to read i_status word");

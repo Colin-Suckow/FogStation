@@ -51,3 +51,11 @@ pub(super) fn get_id(state: &CDDrive) -> PendingResponse {
         first_response
     }
 }
+
+pub(super) fn init(state: &mut CDDrive) -> PendingResponse {
+    state.motor_state = MotorState::On;
+    let mut first_response = get_stat(state);
+    let second_response = get_stat(state);
+    first_response.extra_response = Some(Box::new(second_response));
+    first_response
+}

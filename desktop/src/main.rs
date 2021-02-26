@@ -77,7 +77,7 @@ fn main() {
             });
 
         Window::new(im_str!("Emulator Controls"))
-            .content_size([100.0, 100.0])
+            .content_size([150.0, 100.0])
             .build(ui, || {
                 if ui.button(im_str!("Reset"), [80.0, 20.0]) {
                     emu.reset();

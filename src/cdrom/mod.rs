@@ -161,8 +161,9 @@ impl CDDrive {
 
     fn execute_command(&mut self, command: u8) {
         let parameters: Vec<&u8> = self.parameter_queue.iter().collect();
-        self.pending_responses.push_back(match command {
+        let response = match command {
             0x1 => get_stat(self),
+            0xA => init(self),
             0x1A => get_id(self),
             0x19 => {
                 //sub_function commands
@@ -172,7 +173,8 @@ impl CDDrive {
                 }
             }
             _ => panic!("CD: Unknown command {:#X}!", command)
-        });
+        };
+        self.pending_responses.push_back(response);
 
         if self.pending_responses.len() == 1 {
             self.cycle_counter = self.pending_responses[0].execution_cycles;
@@ -222,10 +224,6 @@ impl CDDrive {
     fn write_interrupt_enable_register(&mut self, val: u8) {
         self.reg_interrupt_enable = val;
     }
-
-    fn read_interrupt_flag_register(&mut self) -> u8 {
-        todo!();
-    }
 }
 
 pub fn step_cycle(cpu: &mut R3000) {
@@ -254,7 +252,7 @@ pub fn step_cycle(cpu: &mut R3000) {
         }
 
         //Set cycle counter for next pending response
-        //This seems inaccurate. It doesn't start counting the delay, till
+        //This seems inaccurate. It doesn't start counting the delay till
         //it is at the front of the queue. Realistically, the delay should
         //start counting from the moment the command is fired.
         if cpu.main_bus.cd_drive.pending_responses.len() > 0 {

@@ -72,8 +72,7 @@ pub struct Gpu {
     status_reg: u32,
     pixel_count: u32,
     enabled: bool,
-    gp0_buffer: [u32; 20480],
-    gp0_buffer_address: usize,
+    gp0_buffer: Vec<u32>,
 
     texpage_x_base: u16,
     texpage_y_base: u16,
@@ -102,8 +101,7 @@ impl Gpu {
             status_reg: 0x1C000000,
             pixel_count: 0,
             enabled: false,
-            gp0_buffer: [0; 20480],
-            gp0_buffer_address: 0,
+            gp0_buffer: Vec::new(),
 
             texpage_x_base: 0,
             texpage_y_base: 0,
@@ -129,8 +127,7 @@ impl Gpu {
     pub fn reset(&mut self) {
         self.vram = vec![0; 1_048_576 / 2];
         self.status_reg = 0x1C000000;
-        self.gp0_buffer = [0; 20480];
-        self.gp0_buffer_address = 0;        
+        self.gp0_buffer = Vec::new();      
     }
 
     pub fn read_status_register(&mut self) -> u32 {
@@ -154,7 +151,7 @@ impl Gpu {
                 match command >> 24 {
                     0x2 => {
                         //Quick rectangle fill
-                        if self.gp0_buffer_address < 3 {
+                        if self.gp0_buffer.len() < 3 {
                             //Not enough commands
                             return;
                         }
@@ -192,7 +189,7 @@ impl Gpu {
 
                 let packets = 1 + (verts * is_textured as usize) + verts + if is_gouraud {verts - 1} else {0};
 
-                if self.gp0_buffer_address < packets {
+                if self.gp0_buffer.len() < packets {
                     // Not enough words for the command. Return early
                     return;
                 }
@@ -283,8 +280,22 @@ impl Gpu {
 
             0x2 => {
                 //Render line
-                //TODO Do this
-                panic!("Tried to render line. Also not doing this rn");
+                if command.get_bit(27) {
+                    println!("{:?}", self.gp0_buffer);
+                    if (self.gp0_buffer[self.gp0_buffer.len() - 1] & 0xF000F000) != 0x50005000 {
+                        //Wait until terminating vertex
+                        return;
+                    }
+                    //TODO draw polyline
+                } else {
+                    if self.gp0_buffer.len() < (3 + if command.get_bit(28) {2} else {0}) {
+                        //Not enough commands
+                        return;
+                    }
+
+                    //TODO draw line
+
+                }
             }
 
             0x3 => {
@@ -294,7 +305,7 @@ impl Gpu {
 
                 let length = 2 + if size == 0 { 1 } else { 0 } + if command.get_bit(26) {1} else {0};
 
-                if self.gp0_buffer_address < length {
+                if self.gp0_buffer.len() < length {
                     //Not enough commands
                     return;
                 }
@@ -375,7 +386,7 @@ impl Gpu {
 
             0x4 => {
                 //VRAM to VRAM blit
-                if self.gp0_buffer_address < 4 {
+                if self.gp0_buffer.len() < 4 {
                     //Not enough commands
                     return;
                 }
@@ -391,10 +402,14 @@ impl Gpu {
             }
             0x5 => {
                 //CPU To VRAM
+                if self.gp0_buffer.len() < 3 {
+                    //Not enough for the header
+                    return;
+                }
                 let width = (self.gp0_buffer[2] & 0xFFFF) as u16;
                 let height = (((self.gp0_buffer[2] >> 16) & 0xFFFF) as u16) * 2;
                 let length = (((width / 2) * height) / 2) + 3;
-                if self.gp0_buffer_address < length as usize {
+                if self.gp0_buffer.len() < length as usize {
                     //Not enough commands
                     return;
                 }
@@ -415,7 +430,7 @@ impl Gpu {
 
             0x6 => {
                 //VRAM to CPU
-                if self.gp0_buffer_address < 3 {
+                if self.gp0_buffer.len() < 3 {
                     return;
                 }
                 //Lets ignore this one for now
@@ -562,12 +577,11 @@ impl Gpu {
     }
 
     fn gp0_push(&mut self, val: u32) {
-        self.gp0_buffer[self.gp0_buffer_address] = val;
-        self.gp0_buffer_address += 1;
+        self.gp0_buffer.push(val);
     }
 
     fn gp0_clear(&mut self) {
-        self.gp0_buffer_address = 0;
+        self.gp0_buffer.clear();
     }
 
     fn copy_horizontal_line(

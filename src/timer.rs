@@ -147,7 +147,7 @@ impl TimerState {
             0x1F801124 => self.timer_2.read_mode(),
             0x1F801128 => self.timer_2.target,
             _ => {
-                println!("Unknown timer address. Returning 0");
+                println!("Unknown timer address {:#X}. Returning 0", addr);
                 0
             }
         }

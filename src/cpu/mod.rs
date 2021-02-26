@@ -118,7 +118,7 @@ impl R3000 {
         self.old_pc = self.pc;
         self.pc += 4;
 
-        //println!("Executing {:#X} (FUNCT {:#X}) at {:#X} (FULL {:#X})", instruction.opcode(), instruction.funct(), self.old_pc, instruction);
+        //println!("Executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} rt{} rd{} (FULL {:#X})", instruction.opcode(), instruction.funct(), self.old_pc, instruction.rs(), instruction.rt(), instruction.rd(), instruction);
         //self.trace_file.write(format!("{:08x}: {:08x}\n", self.old_pc, instruction).as_bytes());
         
         self.execute_instruction(instruction, timers);
@@ -126,7 +126,7 @@ impl R3000 {
         //Execute branch delay operation
         if self.delay_slot != 0 {
             let delay_instruction = self.main_bus.read_word(self.delay_slot);
-            //println!("DS executing {:#X} (FUNCT {:#X}) at {:#X}",delay_instruction.opcode(), delay_instruction.funct(), self.old_pc + 4);
+            //println!("DS executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} rt{} rd{}",delay_instruction.opcode(), delay_instruction.funct(), self.old_pc + 4, instruction.rs(), instruction.rt(), instruction.rd());
             //self.trace_file.write(format!("{:08x}: {:08x}\n", self.delay_slot, delay_instruction).as_bytes());
             self.execute_instruction(delay_instruction, timers);
             self.delay_slot = 0;
@@ -145,10 +145,10 @@ impl R3000 {
                 match instruction.funct() {
                     0x0 => {
                         //SLL
-                        if instruction == 0 {
-                            //Actually a NOP
-                            return;
-                        }
+                        // if instruction & 0x3F == 0 {
+                        //     //Actually a NOP
+                        //     return;
+                        // }
                         self.write_reg(
                             instruction.rd(),
                             self.read_reg(instruction.rt()) << instruction.shamt(),
@@ -378,14 +378,14 @@ impl R3000 {
             0x2 => {
                 //J
                 self.delay_slot = self.pc;
-                self.pc = (instruction.address() << 2)  | (self.delay_slot & 0xF0000000);
+                self.pc = (instruction.address() << 2)  | ((self.delay_slot) & 0xF0000000);
             }
 
             0x3 => {
                 //JAL
                 self.delay_slot = self.pc;
-                self.write_reg(31, self.pc + 4);
                 self.pc = (instruction.address() << 2) | (self.delay_slot & 0xF0000000);
+                self.write_reg(31, self.delay_slot + 4);
             }
 
             0x4 => {
@@ -481,12 +481,21 @@ impl R3000 {
                     self.read_reg(instruction.rs()) | instruction.immediate().zero_extended(),
                 );
             }
+
+            0xE => {
+                //XORI
+                self.write_reg(
+                    instruction.rt(),
+                    self.read_reg(instruction.rs()) ^ instruction.immediate().zero_extended(),
+                );
+            }
             0xF => {
                 //LUI
                 self.write_reg(instruction.rt(), (instruction.immediate() as u32) << 16);
             }
 
             0x10 => {
+                //COP0 instructions
                 match instruction.rs() {
                     0x4 => {
                         //MTC0
@@ -505,9 +514,20 @@ impl R3000 {
                         self.cop0.write_reg(12, (status & 0xfffffff0) | ((status & 0x3c) >> 2));
                         self.pc = self.cop0.read_reg(14);
                     }
-                    _ => (),
+                    _ => panic!("CPU: Unknown COP0 MFC instruction {:#X} ({0:#b}, {0})", instruction.rs()),
                 }
             }
+
+            0x12 => {
+                //COP2 (GTE) instructions
+                match instruction.rs() {
+                    0x6 => {
+                        //CTC2
+                        //Stubbed. Hopefully this doesn't break anything?
+                    }
+                    _ => panic!("CPU: Unknown COP2 MFC instruction {:#X} ({0:#b}, {0}) {:#b}", instruction.rs(), instruction),
+                }
+            } 
 
             0x20 => {
                 //LB
@@ -557,8 +577,7 @@ impl R3000 {
             0x28 => {
                 //SB
                 let addr = instruction
-                    .immediate()
-                    .sign_extended()
+                    .immediate_sign_extended()
                     .wrapping_add(self.read_reg(instruction.rs()));
                 let val = (self.read_reg(instruction.rt()) & 0xFF) as u8;
                 self.write_bus_byte(addr, val);
@@ -567,8 +586,7 @@ impl R3000 {
             0x29 => {
                 //SH
                 let addr = instruction
-                    .immediate()
-                    .sign_extended()
+                    .immediate_sign_extended()
                     .wrapping_add(self.read_reg(instruction.rs()));
                 let val = (self.read_reg(instruction.rt()) & 0xFFFF) as u16;
                 self.write_bus_half_word(addr, val, timers);
@@ -648,6 +666,7 @@ impl R3000 {
             0x2B => {
                 //SW
                 //println!("R{} value {:#X}", instruction.rs(), self.read_reg(instruction.rs()));
+                //println!("PC WAS {:#X}", self.pc - 4);
                 let addr = self
                     .read_reg(instruction.rs())
                     .wrapping_add(instruction.immediate_sign_extended());
@@ -689,13 +708,13 @@ impl R3000 {
     }
 
     fn read_bus_word(&mut self, addr: u32, timers: &mut TimerState) -> u32 {
-        match addr {
+        match addr & 0x1fffffff {
             0x1F801070 => {
                 //println!("Reading ISTATUS");
                 self.i_status
             },
             0x1F801074 => self.i_mask,
-            0x1F801100..=0x1F801128 => timers.read_word(addr),
+            0x1F801100..=0x1F801128 => timers.read_word(addr & 0x1fffffff),
             _ => self.main_bus.read_word(addr),
         }
     }
@@ -707,7 +726,7 @@ impl R3000 {
             return;
         }
 
-        match addr {
+        match addr & 0x1fffffff {
             0x1F801070 => {
                 //println!("Writing I_STAT. val {:#X} pc {:#X} oldpc {:#X}", val, self.pc, self.old_pc);
                 self.i_status &= val;
@@ -716,18 +735,18 @@ impl R3000 {
                 //println!("Writing I_MASK val {:#X}", val);
                 self.i_mask = val;
             },
-            0x1F801100..=0x1F801128 => timers.write_word(addr, val),
+            0x1F801100..=0x1F801128 => timers.write_word(addr & 0x1fffffff, val),
             _ => self.main_bus.write_word(addr, val),
         };
     }
 
     fn read_bus_half_word(&mut self, addr: u32, timers: &mut TimerState) -> u16 {
-        match addr {
+        match addr & 0x1fffffff {
             0x1F801070 => {
                 self.i_status as u16
             },
             0x1F801074 => self.i_mask as u16,
-            0x1F801100..=0x1F801128 => timers.read_half_word(addr),
+            0x1F801100..=0x1F801128 => timers.read_half_word(addr & 0x1fffffff),
             _ => self.main_bus.read_half_word(addr),
         }
     }
@@ -737,10 +756,10 @@ impl R3000 {
             //Cache is isolated, so don't write
             return;
         }
-        match addr {
+        match addr & 0x1fffffff {
             0x1F801070 => self.i_status &= val as u32,
             0x1F801074 => self.i_mask = val as u32,
-            0x1F801100..=0x1F801128 => timers.write_half_word(addr, val),
+            0x1F801100..=0x1F801128 => timers.write_half_word(addr & 0x1fffffff, val),
             _ => self.main_bus.write_half_word(addr, val),
         };
 
@@ -751,7 +770,7 @@ impl R3000 {
             //Cache is isolated, so don't write
             return;
         }
-        match addr {
+        match addr & 0x1fffffff {
             0x1F801070 => self.i_status &= val as u32,
             0x1F801074 => self.i_mask = val as u32,
             _ => self.main_bus.write_byte(addr, val),
@@ -761,7 +780,11 @@ impl R3000 {
 
     /// Returns the value stored within the given register. Will panic if register_number > 31
     fn read_reg(&self, register_number: u8) -> u32 {
-        self.gen_registers[register_number as usize]
+        if register_number != 0 {
+            self.gen_registers[register_number as usize]
+        } else {
+            0
+        }
     }
 
     /// Sets register to given value. Prevents setting R0, which should always be zero. Will panic if register_number > 31

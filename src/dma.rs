@@ -182,6 +182,24 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                         cpu.main_bus.dma.raise_irq(num);
                         cpu.fire_external_interrupt(InterruptSource::DMA);
                     }
+                    0x1000200 => {
+                        //VramRead
+                        //TODO: Implement properly
+
+                        let entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
+                        let block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
+                        let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
+                        for i in 0..entries {
+                            for j in 0..block_size {
+                                //Lets just write all zeros for now
+                                cpu.main_bus.write_word(base_addr + ((i * block_size) * 4) + (j * 4), 0);
+                            }
+                        }
+
+                        cpu.main_bus.dma.channels[num].complete();
+                        cpu.main_bus.dma.raise_irq(num);
+                        cpu.fire_external_interrupt(InterruptSource::DMA);
+                    }
                     _ => {
                         panic!("Unknown gpu DMA mode. This must be a custom transfer. Control was {:#X}", cpu.main_bus.dma.channels[num].control)
                     }

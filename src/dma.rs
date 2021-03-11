@@ -89,8 +89,8 @@ impl DMAState {
                 match addr & 0xFFFFFF0F {
                     0x1F801000 => {
                         //Set base address
-                        //println!("Wrote DMA base {} with {:#X}", channel_num, value);
-                        self.channels[channel_num].base_addr = value;
+                        //println!("Wrote DMA base {} with {:#X} addr {:#X}", channel_num, value, addr);
+                        self.channels[channel_num].base_addr = value & 0xFFFFFF;
                     }
                     0x1F801004 => {
                         //Set block control
@@ -144,8 +144,8 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                     0x01000401 => {
                         //Linked list mode. mem -> gpu
                         let mut addr= cpu.main_bus.dma.channels[num].base_addr;
+                        //println!("Starting linked list transfer. addr {:#X}", addr);
                         let mut header = cpu.main_bus.read_word(addr);
-                        //println!("Starting linked list transfer");
                         //println!("base addr: {:#X}. base header: {:#X}", addr, header);
                         loop {
                             let num_words = (header >> 24) & 0xFF;
@@ -160,7 +160,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                             addr = header & 0xFFFFFF;
                             header = cpu.main_bus.read_word(addr);
                         }
-                        // println!("DMA2 linked list transfer done.");
+                        //println!("DMA2 linked list transfer done.");
                         cpu.main_bus.dma.channels[num].complete();
                         cpu.main_bus.dma.raise_irq(num);
                         cpu.fire_external_interrupt(InterruptSource::DMA);
@@ -192,7 +192,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                         for i in 0..entries {
                             for j in 0..block_size {
                                 //Lets just write all zeros for now
-                                cpu.main_bus.write_word(base_addr + ((i * block_size) * 4) + (j * 4), 0);
+                                cpu.main_bus.write_word(base_addr + ((i * block_size) * 4) + (j * 4), 0x50005000);
                             }
                         }
 

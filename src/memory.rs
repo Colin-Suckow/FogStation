@@ -8,7 +8,14 @@ impl Memory {
     /// Initializes 2MiB of system memory
     pub fn new() -> Memory {
         Memory {
-            data: vec![0; 2_097_152],
+            data: vec![0; 2_100_000],
+        }
+    }
+
+    //1K scratchpad memory
+    pub fn new_scratchpad() -> Memory {
+        Memory {
+            data: vec![0; 1024],
         }
     }
 

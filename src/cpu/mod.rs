@@ -55,6 +55,7 @@ pub struct R3000 {
     delay_slot: u32,
     cop0: Cop0,
     load_delay: Option<LoadDelay>,
+    set_load_delay_this_cycle: bool,
     i_mask: u32,
     pub i_status: u32,
 }
@@ -71,6 +72,7 @@ impl R3000 {
             delay_slot: 0,
             cop0: Cop0::new(),
             load_delay: None,
+            set_load_delay_this_cycle: false,
             i_mask: 0,
             i_status: 0,
         }
@@ -100,6 +102,10 @@ impl R3000 {
         //Update the cdrom drive
         cdrom::step_cycle(self);
 
+        if self.pc == 0x80050f18 {
+            println!("Calling DMA func with param (a0, R4): {:#X}", self.read_reg(4));
+        }
+
         //Handle interrupts
         if self.cop0.interrupt_enabled() {
             for i in 0..=10 {
@@ -109,35 +115,46 @@ impl R3000 {
             }
         }
 
-        //Execute delayed load
-        if let Some(load) = self.load_delay.take() {
-            self.write_reg(load.register, load.value);
-        }
-
         let instruction = self.main_bus.read_word(self.pc);
         self.old_pc = self.pc;
         self.pc += 4;
 
-        //println!("Executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} rt{} rd{} (FULL {:#X})", instruction.opcode(), instruction.funct(), self.old_pc, instruction.rs(), instruction.rt(), instruction.rd(), instruction);
+        //println!("Executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} rt: {} rd: {} (FULL {:#X})", instruction.opcode(), instruction.funct(), self.old_pc, instruction.rs(), instruction.rt(), instruction.rd(), instruction);
         //self.trace_file.write(format!("{:08x}: {:08x}\n", self.old_pc, instruction).as_bytes());
+        //println!("{:08x}: {:08x}", self.old_pc, instruction);
         
         self.execute_instruction(instruction, timers);
 
         //Execute branch delay operation
         if self.delay_slot != 0 {
             let delay_instruction = self.main_bus.read_word(self.delay_slot);
-            //println!("DS executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} rt{} rd{}",delay_instruction.opcode(), delay_instruction.funct(), self.old_pc + 4, instruction.rs(), instruction.rt(), instruction.rd());
+            //println!("DS executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} ({:#}) rt: {} rd: {}",delay_instruction.opcode(), delay_instruction.funct(), self.old_pc + 4, instruction.rs(), self.gen_registers[instruction.rs() as usize], instruction.rt(), instruction.rd());
             //self.trace_file.write(format!("{:08x}: {:08x}\n", self.delay_slot, delay_instruction).as_bytes());
+            //println!("{:08x}: {:08x}", self.delay_slot, delay_instruction);
             self.execute_instruction(delay_instruction, timers);
             self.delay_slot = 0;
+        }
+
+        //Execute delayed load
+        //Two separate if's because rust doesn't let you have 'if let' with other conditionals 
+        if !self.set_load_delay_this_cycle {
+            if let Some(load) = self.load_delay.take() {
+                self.write_reg(load.register, load.value);
+            }
         }
     }
 
     pub fn execute_instruction(&mut self, instruction: u32, timers: &mut TimerState) {
 
         if self.pc % 4 != 0 || self.delay_slot % 4 != 0 {
-            panic!("CPU: Address is not aligned!");
+            self.fire_exception(Exception::AdEL);
+            return;
         }
+
+        //Fast load exe
+        // if self.old_pc == 0xbfc0700c {
+        //     self.pc = 0x80010000;
+        // }
 
         match instruction.opcode() {
             0x0 => {
@@ -145,7 +162,7 @@ impl R3000 {
                 match instruction.funct() {
                     0x0 => {
                         //SLL
-                        // if instruction & 0x3F == 0 {
+                        // if instruction.rt() == 0 {
                         //     //Actually a NOP
                         //     return;
                         // }
@@ -153,6 +170,7 @@ impl R3000 {
                             instruction.rd(),
                             self.read_reg(instruction.rt()) << instruction.shamt(),
                         );
+                        //println!("{:#X} << {:#X} = {:#X}", self.read_reg(instruction.rt()), instruction.shamt(), self.read_reg(instruction.rd()));
                     }
 
                     0x2 => {
@@ -240,7 +258,15 @@ impl R3000 {
                         //DIV
                         let rs = self.read_reg(instruction.rs()) as i32;
                         let rt = self.read_reg(instruction.rt()) as i32;
-                        self.lo = (rs / rt) as u32;
+                        self.lo = (match rs.checked_div(rt) {
+                            Some(val) => val,
+                            None => {
+                                println!("CPU: Tried to divide by zero!");
+                                self.lo = 0;
+                                self.hi = 0xFFFFFFFF;
+                                return;
+                            }
+                        }) as u32;
                         self.hi = (rs % rt) as u32;
                     }
 
@@ -248,7 +274,15 @@ impl R3000 {
                         //DIVU
                         let rs = self.read_reg(instruction.rs());
                         let rt = self.read_reg(instruction.rt());
-                        self.lo = rs / rt;
+                        self.lo = match rs.checked_div(rt) {
+                            Some(val) => val,
+                            None => {
+                                println!("CPU: Tried to divide by zero!");
+                                self.lo = 0;
+                                self.hi = 0xFFFFFFFF;
+                                return;
+                            }
+                        };
                         self.hi = rs % rt;
                     }
 
@@ -260,7 +294,20 @@ impl R3000 {
                                 .checked_add(self.read_reg(instruction.rt()) as i32)
                             {
                                 Some(val) => val as u32,
-                                None => panic!("CPU: ADD overflowed"),
+                                None => { self.fire_exception(Exception::Ovf); return; },
+                            },
+                        )
+                    }
+
+                    0x22 => {
+                        //SUB
+                        self.write_reg(
+                            instruction.rd(),
+                            match (self.read_reg(instruction.rs()) as i32)
+                                .checked_sub(self.read_reg(instruction.rt()) as i32)
+                            {
+                                Some(val) => val as u32,
+                                None => { self.fire_exception(Exception::Ovf); return; },
                             },
                         )
                     }
@@ -325,12 +372,20 @@ impl R3000 {
                         );
                     }
 
+                    0x18 => {
+                        //MULT
+                        let result = (self.read_reg(instruction.rs()) as u64) as i32 * (self.read_reg(instruction.rt()) as u64) as i32;
+                        self.lo = (result as u64 & 0xFFFF_FFFF) as u32;
+                        self.hi = ((result as u64 >> 32) & 0xFFFF_FFFF) as u32;
+                    }
+
                     0x19 => {
                         //MULTU
                         let result = (self.read_reg(instruction.rs()) as u64) * (self.read_reg(instruction.rt()) as u64);
                         self.lo = (result & 0xFFFF_FFFF) as u32;
                         self.hi = ((result >> 32) & 0xFFFF_FFFF) as u32;
                     }
+
 
                     0x2A => {
                         //SLT
@@ -354,7 +409,7 @@ impl R3000 {
                 match instruction.rt() {
                     0x0 => {
                         //BLTZ
-                        if (self.read_reg(instruction.rs()) as i32) < 0 {
+                        if self.read_reg(instruction.rs()).get_bit(31) {
                             self.delay_slot = self.pc;
                             self.pc = (instruction.immediate_sign_extended() << 2)
                                 .wrapping_add(self.delay_slot);
@@ -364,6 +419,26 @@ impl R3000 {
                         //BGEZ
                         if self.read_reg(instruction.rs()) as i32 >= 0 {
                             self.delay_slot = self.pc;
+                            self.pc = (instruction.immediate_sign_extended() << 2)
+                                .wrapping_add(self.delay_slot);
+                        }
+                    }
+
+                    0x10 => {
+                        //BLTZAL
+                        self.write_reg(31, self.pc);
+                        if (self.read_reg(instruction.rs()) as i32) < 0 {
+                            self.delay_slot = self.pc;
+                            self.pc = (instruction.immediate_sign_extended() << 2)
+                                .wrapping_add(self.delay_slot);
+                        }
+                    }
+
+                    0x11 => {
+                        //BGEZAL
+                        if self.read_reg(instruction.rs()) as i32 >= 0 {
+                            self.delay_slot = self.pc;
+                            self.write_reg(31, self.pc);
                             self.pc = (instruction.immediate_sign_extended() << 2)
                                 .wrapping_add(self.delay_slot);
                         }
@@ -432,7 +507,7 @@ impl R3000 {
                         .checked_add(instruction.immediate_sign_extended() as i32)
                     {
                         Some(val) => val as u32,
-                        None => panic!("CPU: ADDI overflowed"),
+                        None => {self.fire_exception(Exception::Ovf); return;},
                     },
                 );
             }
@@ -550,7 +625,7 @@ impl R3000 {
                 let addr = (instruction.immediate_sign_extended())
                     .wrapping_add(self.read_reg(instruction.rs()));
                 let val = self.read_bus_word(addr, timers);
-                //println!("LW read {:#X}. Storing in {}", val, instruction.rt());
+                
                 self.write_reg(instruction.rt(), val);
                 // self.load_delay = Some(LoadDelay {
                 //     register: instruction.rt(),
@@ -667,6 +742,7 @@ impl R3000 {
                 //SW
                 //println!("R{} value {:#X}", instruction.rs(), self.read_reg(instruction.rs()));
                 //println!("PC WAS {:#X}", self.pc - 4);
+                
                 let addr = self
                     .read_reg(instruction.rs())
                     .wrapping_add(instruction.immediate_sign_extended());
@@ -681,10 +757,11 @@ impl R3000 {
 
     pub fn fire_exception(&mut self, exception: Exception) {
         if self.delay_slot != 0 {
-            panic!("CPU: Branch delay exception rollback is not implemented!");
+            self.cop0.write_reg(14, self.pc - 4);
+        } else {
+            self.cop0.write_reg(14, self.pc);
         }
         self.cop0.set_cause_execode(exception);
-        self.cop0.write_reg(14, self.pc);
         let old_status = self.cop0.read_reg(12);
         self.cop0.write_reg(12, (old_status & !0x3F) | (((old_status & 0x3f) << 2) & 0x3f));
         self.pc = if self.cop0.read_reg(12).get_bit(23) {
@@ -789,6 +866,7 @@ impl R3000 {
 
     /// Sets register to given value. Prevents setting R0, which should always be zero. Will panic if register_number > 31
     fn write_reg(&mut self, register_number: u8, value: u32) {
+        
         match register_number {
             0 => (), //Prevent writing to the zero register
             _ => self.gen_registers[register_number as usize] = value,

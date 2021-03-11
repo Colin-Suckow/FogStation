@@ -12,42 +12,43 @@ pub struct MainBus {
     pub dma: DMAState,
     spu: SPU,
     pub cd_drive: CDDrive,
+    scratchpad: Memory,
 }
 
 impl MainBus {
     pub fn new(bios: Bios, memory: Memory, gpu: Gpu) -> MainBus {
-        MainBus { bios, memory, gpu, dma: DMAState::new(), spu: SPU::new(), cd_drive: CDDrive::new() }
+        MainBus { bios, memory, gpu, dma: DMAState::new(), spu: SPU::new(), cd_drive: CDDrive::new(), scratchpad: Memory::new_scratchpad() }
     }
 
     pub fn read_word(&mut self, og_addr: u32) -> u32 {
         let addr = og_addr & 0x1fffffff;
-        match addr {
-            0x1F801070 => {
-                println!("Tried to read i_status word");
-                0
-            },
-            0x0..=0x001f_ffff => self.memory.read_word(addr), //KUSEG
+        let word = match addr {
+            0x0..=0x001f_ffff => self.memory.read_word(addr),
             0x1f801810 => self.gpu.read_word_gp0(),
             0x1f801814 => self.gpu.read_status_register(),
             0x1F801080..=0x1F8010F4 => self.dma.read_word(addr),
-            0x1F80101C => 0, //Expansion 2 delay/size
-            0x1f80_1000..=0x1f80_2fff => {
-                println!("Something tried to read the hardware control registers. These are not currently emulated, so a 0 is being returned. The address was {:#X}", addr);
-                0
-            }
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_word(addr - 0x1fc0_0000),
+            0x1F800000..=0x1F8003FF => self.scratchpad.read_word(addr - 0x1F800000),
             _ => panic!(
                 "Invalid word read at address {:#X}! This address is not mapped to any device.",
                 addr
             ),
-        }
+        };
+        //println!("Read {:#X} word from bus address {:#X}", word, addr);
+        word
     }
 
     pub fn write_word(&mut self, og_addr: u32, word: u32) {
+        if og_addr == 0x800DE4A0 && word == 0x882F0EC8 {
+            println!("---- THE WRITE wrote 0x800DE4A0 with {:#X}", word);
+            println!("VALUE WAS {:#X}", self.read_word(og_addr));
+        }
         let addr = og_addr & 0x1fffffff;
+        //println!("Writing {:#X} to addr {:#X}", word, addr);
         match addr & 0x1fffffff {
+            0x1F802023 => println!("DUART A: {}", word),
+            0x1F80202B => println!("DUART B: {}", word),
             0x0..=0x001f_ffff => self.memory.write_word(addr, word), //KUSEG
-            0x1F801074 => println!("IRQ mask write {:#b}", word),
             0x1F801000 => println!("Expansion 1 base write"),
             0x1F801004 => println!("Expansion 2 base write"),
             0x1F801008 => println!("Expansion 1 delay/size write"),
@@ -61,6 +62,7 @@ impl MainBus {
             0x1F80100C => println!("Expansion 3 Delay/size write"),
             0x1F801810 => self.gpu.send_gp0_command(word),
             0x1F801814 => self.gpu.send_gp1_command(word),
+            0x1F800000..=0x1F8003FF => self.scratchpad.write_word(addr - 0x1F800000, word),
             0x1f80_1000..=0x1f80_2fff => println!("Something tried to write to the hardware control registers. These are not currently emulated. The address was {:#X}. Value {:#X}", addr, word),
             0x1FFE0000..=0x1FFE0200 => (), //println!("Something tried to write to the cache control registers. These are not currently emulated. The address was {:#X}", addr),
             _ => {
@@ -81,6 +83,7 @@ impl MainBus {
             0x0..=0x001f_ffff => self.memory.read_half_word(addr),
             0x1F801C00..=0x1F801E80 => self.spu.read_half_word(addr),
             0x1F801044 => 0xFFFF, //JOY_STAT
+            0x1F800000..=0x1F8003FF => self.scratchpad.read_half_word(addr - 0x1F800000),
             0x1f80_1000..=0x1f80_2fff => {
                 println!("Something tried to half word read an undefined IO address. The address was {:#X}", addr);
                 0
@@ -92,8 +95,11 @@ impl MainBus {
     pub fn write_half_word(&mut self, og_addr: u32, value: u16) {
         let addr = og_addr & 0x1fffffff;
         match addr & 0x1fffffff {
+            0x1F802023 => println!("DUART A: {}", value),
+            0x1F80202B => println!("DUART B: {}", value),
             0x0..=0x001f_ffff => self.memory.write_half_word(addr, value), //KUSEG
             0x1F801C00..=0x1F801E80 => self.spu.write_half_word(addr, value),
+            0x1F800000..=0x1F8003FF => self.scratchpad.write_half_word(addr - 0x1F800000, value),
             0x1F80_1000..=0x1F80_2000 => println!("Something tried to half word write to the I/O ports. This is not currently emulated. The address was {:#X}. value was {:#X}", addr, value),
             _ => panic!("Invalid half word write at address {:#X}! This address is not mapped to any device.", addr)
         }
@@ -120,7 +126,8 @@ impl MainBus {
             0x1f80_1000..=0x1f80_2fff => {
                 println!("Something tried to read the hardware control registers. These are not currently emulated, so a 0 is being returned. The address was {:#X}", addr);
                 0
-            }
+            },
+            0x1F800000..=0x1F8003FF => self.scratchpad.read_byte(addr - 0x1F800000),
             _ => panic!(
                 "Invalid byte read at address {:#X}! This address is not mapped to any device.",
                 addr
@@ -133,8 +140,11 @@ impl MainBus {
         match addr & 0x1fffffff {
             0x0..=0x001f_ffff => self.memory.write_byte(addr, value), //KUSEG
             0x1F801800..=0x1F801803 => self.cd_drive.write_byte(addr, value), //CDROM
+            0x1F802023 => println!("DUART A: {}", value),
+            0x1F80202B => println!("DUART B: {}", value),
             0x1F802000..=0x1F803000 => (), //Expansion port 2
             0x1F801040 => (), //JOY_DATA
+            0x1F800000..=0x1F8003FF => self.scratchpad.write_byte(addr - 0x1F800000, value),
             _ => panic!(
                 "Invalid byte write at address {:#X}! This address is not mapped to any device.",
                 addr

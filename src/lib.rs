@@ -55,7 +55,6 @@ impl PSXEmu {
                 self.timers.update_sys_div_8(&mut self.r3000);
             }
         }
-
         self.r3000.main_bus.gpu.execute_cycle();
         self.timers.update_dot_clock(&mut self.r3000);
         if self.r3000.main_bus.gpu.consume_hblank() {
@@ -77,7 +76,7 @@ impl PSXEmu {
         for (index, val) in data.iter().enumerate() {
             self.r3000.main_bus.write_byte((index + start_addr as usize) as u32, val.clone());
         }
-        self.r3000.pc = entrypoint;
+        //self.r3000.pc = entrypoint;
         // self.r3000.gen_registers[29] = sp;
         // self.r3000.gen_registers[30] = sp;
     }

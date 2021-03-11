@@ -137,7 +137,7 @@ impl Gpu {
     }
 
     pub fn read_word_gp0(&mut self) -> u32 {
-        0xFF as u32
+        0x0 as u32
     }
 
     pub fn send_gp0_command(&mut self, value: u32) {

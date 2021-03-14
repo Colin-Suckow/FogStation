@@ -201,7 +201,7 @@ impl Gpu {
                 if is_quad {
                     if is_textured && is_gouraud {
                         //Should be blending in colors. Do that later
-                        
+                        println!("Tried to try draw texture blended quad!");
                     } else if is_textured {
                         let points: Vec<Point> = vec![
                             Point::new_textured_point(self.gp0_buffer[1], ((self.gp0_buffer[2] >> 8) & 0xFF) as i16, (self.gp0_buffer[2] & 0xFF) as i16),
@@ -238,7 +238,7 @@ impl Gpu {
                     
                 } else {
                     if is_gouraud && is_textured {
-                        
+                        println!("Tried to try draw texture blended tri!");
                     } else if is_textured {
                         let points: Vec<Point> = vec![
                                 Point::new_textured_point(self.gp0_buffer[1], ((self.gp0_buffer[2] >> 8) & 0xFF) as i16, (self.gp0_buffer[2] & 0xFF) as i16),

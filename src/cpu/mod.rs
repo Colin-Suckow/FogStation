@@ -90,10 +90,46 @@ impl R3000 {
             .write_reg(12, self.cop0.read_reg(12).set_bit(23, true).clone());
     }
 
+    fn print_string(&mut self, addr: u32) {
+        let val = self.main_bus.read_byte(addr);
+        if val == 0 {
+            //Null, end of string
+            return;
+        }
+        print!("{}", std::str::from_utf8(&[val]).unwrap());
+        self.print_string(addr + 1);
+    }
+
     /// Runs the next instruction based on the PC location. Only useful for testing because it is not at all accurate to
     /// how the cpu actually works.
     pub fn step_instruction(&mut self, timers: &mut TimerState) {
 
+        //Fast load exe
+        if self.pc == 0xbfc0700c {
+            println!("Jumping to exe...");
+            self.pc = 0x80010000;
+        }
+
+        if self.pc == 0x000000A0 {
+            if self.read_reg(9) == 0x3F {
+                //printf
+                self.print_string(self.read_reg(4));
+            } else {
+                println!("SYSCALL A({:#X})", self.read_reg(9));
+            }
+        }
+
+        if self.pc == 0x000000B0 {
+            if self.read_reg(9) == 0x3D {
+                print!("{}", std::str::from_utf8(&[self.read_reg(4) as u8]).unwrap());
+            } else {
+                println!("SYSCALL B({:#X})", self.read_reg(9));
+            }
+        }
+
+        if self.pc == 0x000000C0 {
+            println!("SYSCALL C({:#X})", self.read_reg(9));
+        }
         //Check for vblank
         if self.main_bus.gpu.consume_vblank() {
             self.i_status.set_bit(0, true);
@@ -101,10 +137,6 @@ impl R3000 {
 
         //Update the cdrom drive
         cdrom::step_cycle(self);
-
-        if self.pc == 0x80050f18 {
-            println!("Calling DMA func with param (a0, R4): {:#X}", self.read_reg(4));
-        }
 
         //Handle interrupts
         if self.cop0.interrupt_enabled() {
@@ -150,11 +182,6 @@ impl R3000 {
             self.fire_exception(Exception::AdEL);
             return;
         }
-
-        //Fast load exe
-        // if self.old_pc == 0xbfc0700c {
-        //     self.pc = 0x80010000;
-        // }
 
         match instruction.opcode() {
             0x0 => {
@@ -231,6 +258,7 @@ impl R3000 {
 
                     0xC => {
                         //SYSCALL
+                        println!("SYSCALL {:#X}", self.read_reg(9));
                         self.fire_exception(Exception::Sys);
                     }
 
@@ -261,9 +289,9 @@ impl R3000 {
                         self.lo = (match rs.checked_div(rt) {
                             Some(val) => val,
                             None => {
-                                println!("CPU: Tried to divide by zero!");
-                                self.lo = 0;
-                                self.hi = 0xFFFFFFFF;
+                                println!("CPU: Tried to divide by zero at pc: {:#X}!", self.old_pc);
+                                self.hi = rs as u32;
+                                self.lo = 0xFFFFFFFF;
                                 return;
                             }
                         }) as u32;
@@ -277,9 +305,9 @@ impl R3000 {
                         self.lo = match rs.checked_div(rt) {
                             Some(val) => val,
                             None => {
-                                println!("CPU: Tried to divide by zero!");
-                                self.lo = 0;
-                                self.hi = 0xFFFFFFFF;
+                                println!("CPU: Tried to divide by zero at pc: {:#X}!", self.old_pc);
+                                self.hi = rs as u32;
+                                self.lo = 0xFFFFFFFF;
                                 return;
                             }
                         };

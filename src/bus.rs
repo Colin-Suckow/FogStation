@@ -39,15 +39,13 @@ impl MainBus {
     }
 
     pub fn write_word(&mut self, og_addr: u32, word: u32) {
-        if og_addr == 0x800DE4A0 && word == 0x882F0EC8 {
-            println!("---- THE WRITE wrote 0x800DE4A0 with {:#X}", word);
-            println!("VALUE WAS {:#X}", self.read_word(og_addr));
-        }
         let addr = og_addr & 0x1fffffff;
         //println!("Writing {:#X} to addr {:#X}", word, addr);
         match addr & 0x1fffffff {
+            0x1F802002 => println!("Serial: {}", word),
             0x1F802023 => println!("DUART A: {}", word),
             0x1F80202B => println!("DUART B: {}", word),
+            0x1F801050 => println!("SIO: {}", word),
             0x0..=0x001f_ffff => self.memory.write_word(addr, word), //KUSEG
             0x1F801000 => println!("Expansion 1 base write"),
             0x1F801004 => println!("Expansion 2 base write"),
@@ -95,8 +93,10 @@ impl MainBus {
     pub fn write_half_word(&mut self, og_addr: u32, value: u16) {
         let addr = og_addr & 0x1fffffff;
         match addr & 0x1fffffff {
+            0x1F802002 => println!("Serial: {}", value),
             0x1F802023 => println!("DUART A: {}", value),
             0x1F80202B => println!("DUART B: {}", value),
+            0x1F801050 => println!("SIO: {}", value),
             0x0..=0x001f_ffff => self.memory.write_half_word(addr, value), //KUSEG
             0x1F801C00..=0x1F801E80 => self.spu.write_half_word(addr, value),
             0x1F800000..=0x1F8003FF => self.scratchpad.write_half_word(addr - 0x1F800000, value),
@@ -140,8 +140,10 @@ impl MainBus {
         match addr & 0x1fffffff {
             0x0..=0x001f_ffff => self.memory.write_byte(addr, value), //KUSEG
             0x1F801800..=0x1F801803 => self.cd_drive.write_byte(addr, value), //CDROM
+            0x1F802002 => println!("Serial: {}", value),
             0x1F802023 => println!("DUART A: {}", value),
             0x1F80202B => println!("DUART B: {}", value),
+            0x1F801050 => println!("SIO: {}", value),
             0x1F802000..=0x1F803000 => (), //Expansion port 2
             0x1F801040 => (), //JOY_DATA
             0x1F800000..=0x1F8003FF => self.scratchpad.write_byte(addr - 0x1F800000, value),

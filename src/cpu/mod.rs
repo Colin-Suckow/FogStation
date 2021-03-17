@@ -454,8 +454,8 @@ impl R3000 {
 
                     0x10 => {
                         //BLTZAL
-                        self.write_reg(31, self.pc);
                         if (self.read_reg(instruction.rs()) as i32) < 0 {
+                            self.write_reg(31, self.pc + 4);
                             self.delay_slot = self.pc;
                             self.pc = (instruction.immediate_sign_extended() << 2)
                                 .wrapping_add(self.delay_slot);
@@ -465,8 +465,8 @@ impl R3000 {
                     0x11 => {
                         //BGEZAL
                         if self.read_reg(instruction.rs()) as i32 >= 0 {
+                            self.write_reg(31, self.pc + 4);
                             self.delay_slot = self.pc;
-                            self.write_reg(31, self.pc);
                             self.pc = (instruction.immediate_sign_extended() << 2)
                                 .wrapping_add(self.delay_slot);
                         }
@@ -554,8 +554,7 @@ impl R3000 {
                 //SLTI
                 self.write_reg(
                     instruction.rt(),
-                    (((self.read_reg(instruction.rs())) as i32)
-                        < (instruction.immediate() as i32))
+                    ((self.read_reg(instruction.rs()) as i32) < instruction.immediate_sign_extended() as i32)
                         as u32,
                 );
             }

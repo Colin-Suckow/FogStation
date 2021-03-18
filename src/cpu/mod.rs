@@ -289,7 +289,7 @@ impl R3000 {
                         self.lo = (match rs.checked_div(rt) {
                             Some(val) => val,
                             None => {
-                                println!("CPU: Tried to divide by zero at pc: {:#X}!", self.old_pc);
+                                //println!("CPU: Tried to divide by zero at pc: {:#X}!", self.old_pc);
                                 self.hi = rs as u32;
                                 self.lo = 0xFFFFFFFF;
                                 return;
@@ -305,7 +305,7 @@ impl R3000 {
                         self.lo = match rs.checked_div(rt) {
                             Some(val) => val,
                             None => {
-                                println!("CPU: Tried to divide by zero at pc: {:#X}!", self.old_pc);
+                                //println!("CPU: Tried to divide by zero at pc: {:#X}!", self.old_pc);
                                 self.hi = rs as u32;
                                 self.lo = 0xFFFFFFFF;
                                 return;
@@ -643,21 +643,24 @@ impl R3000 {
                 //LH
                 let addr = (instruction.immediate_sign_extended())
                     .wrapping_add(self.read_reg(instruction.rs()));
-                let val = self.read_bus_half_word(addr, timers).sign_extended();
-                self.write_reg(instruction.rt(), val);
+                if addr % 2 != 0 {
+                    self.fire_exception(Exception::AdEL);
+                } else {
+                    let val = self.read_bus_half_word(addr, timers).sign_extended();
+                    self.write_reg(instruction.rt(), val);
+                }
             }
 
             0x23 => {
                 //LW
                 let addr = (instruction.immediate_sign_extended())
                     .wrapping_add(self.read_reg(instruction.rs()));
-                let val = self.read_bus_word(addr, timers);
-                
-                self.write_reg(instruction.rt(), val);
-                // self.load_delay = Some(LoadDelay {
-                //     register: instruction.rt(),
-                //     value: val,
-                // });
+                if addr % 4 != 0 {
+                    self.fire_exception(Exception::AdEL);
+                } else {
+                    let val = self.read_bus_word(addr, timers);
+                    self.write_reg(instruction.rt(), val);
+                }
             }
 
             0x24 => {
@@ -672,8 +675,12 @@ impl R3000 {
                 //LHU
                 let addr = (instruction.immediate_sign_extended())
                     .wrapping_add(self.read_reg(instruction.rs()));
-                let val = self.read_bus_half_word(addr, timers).zero_extended();
-                self.write_reg(instruction.rt(), val);
+                if addr % 2 != 0 {
+                    self.fire_exception(Exception::AdEL);
+                } else {
+                    let val = self.read_bus_half_word(addr, timers).zero_extended();
+                    self.write_reg(instruction.rt(), val);
+                }
             }
 
             0x28 => {
@@ -690,8 +697,13 @@ impl R3000 {
                 let addr = instruction
                     .immediate_sign_extended()
                     .wrapping_add(self.read_reg(instruction.rs()));
-                let val = (self.read_reg(instruction.rt()) & 0xFFFF) as u16;
-                self.write_bus_half_word(addr, val, timers);
+                if addr % 2 != 0 {
+                    //unaligned address
+                    self.fire_exception(Exception::AdES);
+                } else {
+                    let val = (self.read_reg(instruction.rt()) & 0xFFFF) as u16;
+                    self.write_bus_half_word(addr, val, timers);
+                }
             }
 
             0x22 => {
@@ -700,7 +712,7 @@ impl R3000 {
                     .immediate()
                     .sign_extended()
                     .wrapping_add(self.read_reg(instruction.rs()));
-
+               
                 let word = self.read_bus_word(addr & !3, timers);
                 let reg_val = self.read_reg(instruction.rt());
                 self.write_reg(instruction.rt(), match addr & 3 {
@@ -710,7 +722,7 @@ impl R3000 {
                     3 => (reg_val & 0x00000000) | (word << 0),
                     _ => unreachable!(),
                 });
-                
+            
             }
 
             0x26 => {
@@ -719,7 +731,7 @@ impl R3000 {
                     .immediate()
                     .sign_extended()
                     .wrapping_add(self.read_reg(instruction.rs()));
-
+               
                 let word = self.read_bus_word(addr & !3, timers);
                 let reg_val = self.read_reg(instruction.rt());
                 self.write_reg(instruction.rt(), match addr & 3 {
@@ -770,10 +782,17 @@ impl R3000 {
                 //println!("R{} value {:#X}", instruction.rs(), self.read_reg(instruction.rs()));
                 //println!("PC WAS {:#X}", self.pc - 4);
                 
-                let addr = self
-                    .read_reg(instruction.rs())
-                    .wrapping_add(instruction.immediate_sign_extended());
-                self.write_bus_word(addr, self.read_reg(instruction.rt()), timers);
+                let addr = instruction
+                    .immediate()
+                    .sign_extended()
+                    .wrapping_add(self.read_reg(instruction.rs()));
+
+                if addr % 4 != 0 {
+                    //unaligned address
+                    self.fire_exception(Exception::AdES);
+                } else {
+                    self.write_bus_word(addr, self.read_reg(instruction.rt()), timers);
+                }
             }
             _ => panic!(
                 "CPU: Unknown opcode {0} ({0:#08b}, {0:#X})",

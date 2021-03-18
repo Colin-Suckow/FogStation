@@ -105,10 +105,10 @@ impl R3000 {
     pub fn step_instruction(&mut self, timers: &mut TimerState) {
 
         //Fast load exe
-        if self.pc == 0xbfc0700c {
-            println!("Jumping to exe...");
-            self.pc = 0x80010000;
-        }
+        // if self.pc == 0xbfc0700c {
+        //     println!("Jumping to exe...");
+        //     self.pc = 0x80010000;
+        // }
 
         if self.pc == 0x000000A0 {
             if self.read_reg(9) == 0x3F {
@@ -179,6 +179,7 @@ impl R3000 {
     pub fn execute_instruction(&mut self, instruction: u32, timers: &mut TimerState) {
 
         if self.pc % 4 != 0 || self.delay_slot % 4 != 0 {
+            println!("Tried to execute out of alignment");
             self.fire_exception(Exception::AdEL);
             return;
         }
@@ -245,15 +246,25 @@ impl R3000 {
 
                     0x8 => {
                         //JR
-                        self.delay_slot = self.pc;
-                        self.pc = self.read_reg(instruction.rs());
+                        let target = self.read_reg(instruction.rs());
+                        if target % 4 != 0 {
+                            self.fire_exception(Exception::AdEL);
+                        } else {
+                            self.delay_slot = self.pc;
+                            self.pc = target;
+                        }
                     }
 
                     0x9 => {
                         //JALR
-                        self.delay_slot = self.pc;
-                        self.pc = self.read_reg(instruction.rs());
-                        self.write_reg(instruction.rd(), self.delay_slot + 4);
+                        let target = self.read_reg(instruction.rs());
+                        if target % 4 != 0 {
+                            self.fire_exception(Exception::AdEL);
+                        } else {
+                            self.delay_slot = self.pc;
+                            self.pc = target;
+                            self.write_reg(instruction.rd(), self.delay_slot + 4);
+                        }
                     }
 
                     0xC => {
@@ -454,7 +465,7 @@ impl R3000 {
 
                     0x10 => {
                         //BLTZAL
-                        if (self.read_reg(instruction.rs()) as i32) < 0 {
+                        if self.read_reg(instruction.rs()).get_bit(31) {
                             self.write_reg(31, self.pc + 4);
                             self.delay_slot = self.pc;
                             self.pc = (instruction.immediate_sign_extended() << 2)

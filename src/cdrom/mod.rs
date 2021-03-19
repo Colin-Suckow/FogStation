@@ -11,6 +11,7 @@ pub(super) enum DriveState {
     Play,
     Seek,
     Read,
+    Idle,
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -87,9 +88,9 @@ impl CDDrive {
             response_queue: VecDeque::new(),
             status_index: 0,
 
-            drive_state: DriveState::Seek,
-            motor_state: MotorState::Off,
-            disk_inserted: false,
+            drive_state: DriveState::Idle,
+            motor_state: MotorState::On,
+            disk_inserted: true,
 
             reg_interrupt_flag: 0,
             reg_interrupt_enable: 0,
@@ -195,6 +196,22 @@ impl CDDrive {
         status |= (!self.data_queue.is_empty() as u8) << 6;
         // 7 BUSYSTS
         //TODO when I find out what it means to be busy
+
+        status
+    }
+
+    fn get_stat(&self) -> u8 {
+        let mut status: u8 = 0;
+        status |= match self.drive_state {
+            DriveState::Play => 0x80,
+            DriveState::Seek => 0x40,
+            DriveState::Read => 0x20,
+            DriveState::Idle => 0,
+        };
+
+        if self.motor_state == MotorState::On {
+            status |= 0x2;
+        };
 
         status
     }

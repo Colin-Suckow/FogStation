@@ -45,8 +45,8 @@ impl PSXEmu {
     /// Runs the next cpu instruction.
     /// This function is only here for testing and is not at all accurate to how the cpu actually works
     pub fn step_instruction(&mut self) {
-        //Threeish cpu per gpu clock
-        for _ in 0..3 {
+        //Twoish cpu per gpu clock
+        for _ in 0..2 {
             self.r3000.step_instruction(&mut self.timers);
             execute_dma_cycle(&mut self.r3000);
             self.cycle_count += 1;

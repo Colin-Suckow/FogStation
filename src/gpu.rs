@@ -1,7 +1,7 @@
 use bit_field::BitField;
 
-const H_RES: u32 = H_BLANK_START + 40;
-const V_RES: u32 = V_BLANK_START + 60;
+const H_RES: u32 = H_BLANK_START + 20;
+const V_RES: u32 = V_BLANK_START + 40;
 const H_BLANK_START: u32 = 640;
 const V_BLANK_START: u32 = 480;
 
@@ -533,7 +533,7 @@ impl Gpu {
     }
 
     pub fn is_vblank(&self) -> bool {
-        self.pixel_count > H_RES * V_BLANK_START && self.pixel_count < H_RES * V_RES
+        self.pixel_count > H_RES * V_BLANK_START
     }
 
     pub fn is_hblank(&self) -> bool {

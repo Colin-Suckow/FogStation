@@ -29,6 +29,7 @@ fn main() {
     };
 
     let mut emu = PSXEmu::new(bios_data);
+    let mut halted = false;
     emu.reset();
 
     if args.len() == 2 {
@@ -47,7 +48,9 @@ fn main() {
 
     system.main_loop(move |_, ui, gl_ctx, textures| {
         start = SystemTime::now();
-        emu.run_frame();
+        if !halted {
+            emu.run_frame();
+        }
         frame_time = SystemTime::now().duration_since(start).expect("Error getting frame duration").as_millis();
         
         Window::new(im_str!("Registers"))
@@ -82,7 +85,16 @@ fn main() {
                 if ui.button(im_str!("Reset"), [80.0, 20.0]) {
                     emu.reset();
                 }
-                ui.text(format!("{:.1} FPS", (1000.0 / frame_time as f64)));
+
+                if ui.button(if halted {im_str!("Resume")} else {im_str!("Halt")}, [80.0, 20.0]) {
+                   halted = !halted;
+                }
+                if !halted {
+                    ui.text(format!("{:.1} FPS", (1000.0 / frame_time as f64)));
+                } else {
+                    ui.text("Halted");
+                }
+
             });
     });
 }

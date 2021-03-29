@@ -1,10 +1,12 @@
 use std::collections::VecDeque;
 use bit_field::BitField;
 use commands::*;
+use format::*;
 
 use crate::cpu::{InterruptSource, R3000};
 
 mod commands;
+mod format;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub(super) enum DriveState {
@@ -70,6 +72,8 @@ pub struct CDDrive {
 
     status_index: u8,
 
+    seek_target: DiscIndex,
+
     reg_interrupt_flag: u8,
     reg_interrupt_enable: u8,
 
@@ -91,6 +95,8 @@ impl CDDrive {
             drive_state: DriveState::Idle,
             motor_state: MotorState::On,
             disk_inserted: true,
+
+            seek_target: DiscIndex::new(0, 0, 0),
 
             reg_interrupt_flag: 0,
             reg_interrupt_enable: 0,
@@ -163,9 +169,10 @@ impl CDDrive {
     fn execute_command(&mut self, command: u8) {
         //Execute
         {
-            let parameters: Vec<&u8> = self.parameter_queue.iter().collect();
+            let parameters: Vec<u8> = self.parameter_queue.iter().map(|v| v.clone()).collect();
             let response = match command {
                 0x1 => get_stat(self),
+                0x2 => set_loc(self, parameters[0], parameters[1], parameters[2]),
                 0xA => init(self),
                 0x1A => get_id(self),
                 0x19 => {

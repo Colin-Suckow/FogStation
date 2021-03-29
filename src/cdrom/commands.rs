@@ -1,4 +1,5 @@
 use super::{CDDrive, DriveState, IntCause, MotorState, PendingResponse};
+use crate::cdrom::format::DiscIndex;
 
 const AVG_FIRST_RESPONSE_TIME: u32 =  0xc4e1;
 const AVG_SECOND_RESPONSE_TIME: u32 =  0xc4e1;
@@ -54,4 +55,9 @@ pub(super) fn init(state: &mut CDDrive) -> PendingResponse {
     let second_response = get_stat(state);
     first_response.extra_response = Some(Box::new(second_response));
     first_response
+}
+
+pub(super) fn set_loc(state: &mut CDDrive, minutes: u8, seconds: u8, frames: u8) -> PendingResponse {
+    state.seek_target = DiscIndex::new(minutes as usize, seconds as usize, frames as usize);
+    get_stat(state)
 }

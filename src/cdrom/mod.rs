@@ -161,25 +161,32 @@ impl CDDrive {
     }
 
     fn execute_command(&mut self, command: u8) {
-        let parameters: Vec<&u8> = self.parameter_queue.iter().collect();
-        let response = match command {
-            0x1 => get_stat(self),
-            0xA => init(self),
-            0x1A => get_id(self),
-            0x19 => {
-                //sub_function commands
-                match parameters[0] {
-                    0x20 => commands::get_bios_date(),
-                    _ => panic!("CD: Unknown sub_function command {:#X}", parameters[0])
+        //Execute
+        {
+            let parameters: Vec<&u8> = self.parameter_queue.iter().collect();
+            let response = match command {
+                0x1 => get_stat(self),
+                0xA => init(self),
+                0x1A => get_id(self),
+                0x19 => {
+                    //sub_function commands
+                    match parameters[0] {
+                        0x20 => commands::get_bios_date(),
+                        _ => panic!("CD: Unknown sub_function command {:#X}", parameters[0])
+                    }
                 }
-            }
-            _ => panic!("CD: Unknown command {:#X}!", command)
-        };
-        self.pending_responses.push_back(response);
+                _ => panic!("CD: Unknown command {:#X}!", command)
+            };
+            self.pending_responses.push_back(response);
+        }
 
+        //If this is the first response added to the queue, update the cycle counter
         if self.pending_responses.len() == 1 {
             self.cycle_counter = self.pending_responses[0].execution_cycles;
         }
+
+        //Clear out old parameters
+        self.parameter_queue.clear();
     }
 
     fn get_status_register(&self) -> u8 {
@@ -239,7 +246,7 @@ impl CDDrive {
     }
 
     fn write_interrupt_enable_register(&mut self, val: u8) {
-        self.reg_interrupt_enable = val;
+        self.reg_interrupt_enable = val & 0x1f;
     }
 }
 

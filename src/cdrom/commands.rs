@@ -29,7 +29,7 @@ pub(super) fn get_id(state: &CDDrive) -> PendingResponse {
         let mut first_response = get_stat(state);
         let second_response = PendingResponse {
             cause: IntCause::INT2,
-            response: vec![state.get_stat(),0x00, 0x20,0x00, 0x53,0x43,0x45,0x41], //SCEA disk inserted
+            response: vec![state.get_stat(), 0x00, 0x20,0x00, 0x53,0x43,0x45,0x41], //SCEA disk inserted
             execution_cycles: AVG_SECOND_RESPONSE_TIME,
             extra_response: None,
         };

@@ -1,9 +1,7 @@
+use glium::glutin::event::{Event, WindowEvent};
 use glium::glutin::event_loop::{ControlFlow, EventLoop};
 use glium::glutin::window::WindowBuilder;
 use glium::{backend::Facade, glutin};
-use glium::{
-    glutin::event::{Event, WindowEvent}
-};
 use glium::{Display, Surface};
 use imgui::{Context, FontConfig, FontSource, Textures, Ui};
 use imgui_glium_renderer::{Renderer, Texture};

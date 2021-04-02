@@ -3,20 +3,20 @@ use bus::MainBus;
 use cpu::R3000;
 use timer::TimerState;
 
+use crate::cpu::InterruptSource;
+use crate::dma::execute_dma_cycle;
 use crate::gpu::Gpu;
 use crate::memory::Memory;
-use crate::dma::execute_dma_cycle;
-use crate::cpu::InterruptSource;
 
 mod bios;
 mod bus;
+mod cdrom;
 pub mod cpu;
+mod dma;
 mod gpu;
 mod memory;
-mod dma;
-mod timer;
 mod spu;
-mod cdrom;
+mod timer;
 
 pub struct PSXEmu {
     pub r3000: R3000,
@@ -33,7 +33,11 @@ impl PSXEmu {
         let gpu = Gpu::new();
         let bus = MainBus::new(bios, memory, gpu);
         let r3000 = R3000::new(bus);
-        PSXEmu { r3000: r3000, timers: TimerState::new(), cycle_count: 0 }
+        PSXEmu {
+            r3000: r3000,
+            timers: TimerState::new(),
+            cycle_count: 0,
+        }
     }
 
     /// Resets system to startup condition
@@ -60,7 +64,6 @@ impl PSXEmu {
         if self.r3000.main_bus.gpu.consume_hblank() {
             self.timers.update_h_blank(&mut self.r3000);
         }
-
     }
 
     ///Runs the emulator till one frame has been generated
@@ -74,7 +77,9 @@ impl PSXEmu {
 
     pub fn load_executable(&mut self, start_addr: u32, entrypoint: u32, _sp: u32, data: &Vec<u8>) {
         for (index, val) in data.iter().enumerate() {
-            self.r3000.main_bus.write_byte((index + start_addr as usize) as u32, val.clone());
+            self.r3000
+                .main_bus
+                .write_byte((index + start_addr as usize) as u32, val.clone());
         }
         //self.r3000.pc = entrypoint;
         // self.r3000.gen_registers[29] = sp;

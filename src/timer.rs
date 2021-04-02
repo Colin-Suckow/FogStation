@@ -1,5 +1,5 @@
+use crate::cpu::{InterruptSource, R3000};
 use bit_field::BitField;
-use crate::cpu::{R3000, InterruptSource};
 
 #[derive(PartialEq, Debug)]
 enum Cause {
@@ -45,13 +45,15 @@ impl Timer {
     fn trigger(&mut self, cpu: &mut R3000, cause: Cause) {
         match cause {
             Cause::Full => self.mode.set_bit(12, true),
-            Cause::Target => self.mode.set_bit(11, true)
+            Cause::Target => self.mode.set_bit(11, true),
         };
 
         // println!("Timer {} triggered because of {:?}", self.timer_number, cause);
         // println!("Timer {} mode is {:#X}", self.timer_number, self.mode);
 
-        if (self.mode.get_bit(4) == true && cause == Cause::Target) || (self.mode.get_bit(5) == true && cause == Cause::Full) {
+        if (self.mode.get_bit(4) == true && cause == Cause::Target)
+            || (self.mode.get_bit(5) == true && cause == Cause::Full)
+        {
             println!("Firing timer interrupt");
             let source = match self.timer_number {
                 0 => InterruptSource::TMR0,
@@ -117,7 +119,7 @@ impl TimerState {
         }
     }
 
-    pub fn update_h_blank(&mut self, cpu: &mut R3000)  {
+    pub fn update_h_blank(&mut self, cpu: &mut R3000) {
         let mode1 = self.timer_1.mode.get_bits(8..=9);
 
         if mode1 == 1 || mode1 == 3 {
@@ -125,7 +127,7 @@ impl TimerState {
         }
     }
 
-    pub fn update_sys_div_8(&mut self, cpu: &mut R3000)  {
+    pub fn update_sys_div_8(&mut self, cpu: &mut R3000) {
         let mode2 = self.timer_2.mode.get_bits(8..=9);
 
         if mode2 == 2 || mode2 == 3 {
@@ -166,7 +168,7 @@ impl TimerState {
             0x1F801120 => self.timer_2.value = val,
             0x1F801124 => self.timer_2.write_mode(val),
             0x1F801128 => self.timer_2.target = val,
-            _ => println!("Unknown timer address")
+            _ => println!("Unknown timer address"),
         }
     }
 
@@ -183,8 +185,6 @@ impl TimerState {
         //     0x1F801108 => self.timer_0.target as u16,
         //     //0x1F80110A => (self.timer_0.target >> 16) as u16,
 
-
-
         //     0x1F801110 => self.timer_1.value as u16,
         //     //0x1F801112 => (self.timer_1.value >> 16) as u16,
 
@@ -193,7 +193,6 @@ impl TimerState {
 
         //     0x1F801118 => self.timer_1.target as u16,
         //     //0x1F80111A => (self.timer_1.target >> 16) as u16,
-
 
         //     0x1F801120 => self.timer_2.value as u16,
         //     //0x1F801122 => (self.timer_2.value >> 16) as u16,
@@ -218,28 +217,20 @@ impl TimerState {
 
             0x1F801104 => self.timer_0.write_mode(value as u32),
             //0x1F801106 => self.timer_0.read_mode(value as u32),
-
             0x1F801108 => self.timer_0.target = value as u32,
             0x1F80110A => self.timer_0.target &= (value as u32) << 16,
-
-
 
             0x1F801110 => self.timer_1.value = value as u32,
             0x1F801112 => self.timer_1.value &= (value as u32) << 16,
 
             0x1F801114 => self.timer_1.write_mode(value as u32),
             //0x1F801116 => self.timer_1.read_mode(value as u32),
-
             0x1F801118 => self.timer_1.target = value as u32,
             //0x1F80111A => (self.timer_1.target >> 16) as u16,
-
-
             0x1F801120 => self.timer_2.value = value as u32,
             //0x1F801122 => (self.timer_2.value >> 16) as u16,
-
             0x1F801124 => self.timer_2.write_mode(value as u32),
             //0x1F801126 => (self.timer_2.read_mode() >> 16) as u16,
-
             0x1F801128 => self.timer_2.target = value as u32,
             //0x1F80112A => (self.timer_2.target >> 16) as u16,
             _ => {
@@ -248,4 +239,3 @@ impl TimerState {
         }
     }
 }
-

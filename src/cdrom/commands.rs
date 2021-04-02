@@ -1,8 +1,8 @@
 use super::{CDDrive, DriveState, IntCause, MotorState, PendingResponse};
 use crate::cdrom::format::DiscIndex;
 
-const AVG_FIRST_RESPONSE_TIME: u32 =  0xc4e1;
-const AVG_SECOND_RESPONSE_TIME: u32 =  0xc4e1;
+const AVG_FIRST_RESPONSE_TIME: u32 = 0xc4e1;
+const AVG_SECOND_RESPONSE_TIME: u32 = 0xc4e1;
 
 pub(super) fn get_bios_date() -> PendingResponse {
     PendingResponse {
@@ -30,7 +30,7 @@ pub(super) fn get_id(state: &CDDrive) -> PendingResponse {
         let mut first_response = get_stat(state);
         let second_response = PendingResponse {
             cause: IntCause::INT2,
-            response: vec![state.get_stat(), 0x00, 0x20,0x00, 0x53,0x43,0x45,0x41], //SCEA disk inserted
+            response: vec![state.get_stat(), 0x00, 0x20, 0x00, 0x53, 0x43, 0x45, 0x41], //SCEA disk inserted
             execution_cycles: AVG_SECOND_RESPONSE_TIME,
             extra_response: None,
         };
@@ -57,7 +57,12 @@ pub(super) fn init(state: &mut CDDrive) -> PendingResponse {
     first_response
 }
 
-pub(super) fn set_loc(state: &mut CDDrive, minutes: u8, seconds: u8, frames: u8) -> PendingResponse {
+pub(super) fn set_loc(
+    state: &mut CDDrive,
+    minutes: u8,
+    seconds: u8,
+    frames: u8,
+) -> PendingResponse {
     state.seek_target = DiscIndex::new(minutes as usize, seconds as usize, frames as usize);
     get_stat(state)
 }

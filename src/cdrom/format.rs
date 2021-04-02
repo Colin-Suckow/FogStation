@@ -12,7 +12,7 @@ impl DiscIndex {
         Self {
             minutes,
             seconds,
-            frames
+            frames,
         }
     }
 

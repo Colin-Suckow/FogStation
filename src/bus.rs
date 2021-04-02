@@ -1,9 +1,9 @@
 use crate::bios::Bios;
+use crate::cdrom::CDDrive;
+use crate::dma::DMAState;
 use crate::gpu::Gpu;
 use crate::memory::Memory;
-use crate::dma::DMAState;
 use crate::spu::SPU;
-use crate::cdrom::CDDrive;
 
 pub struct MainBus {
     pub bios: Bios,
@@ -17,7 +17,15 @@ pub struct MainBus {
 
 impl MainBus {
     pub fn new(bios: Bios, memory: Memory, gpu: Gpu) -> MainBus {
-        MainBus { bios, memory, gpu, dma: DMAState::new(), spu: SPU::new(), cd_drive: CDDrive::new(), scratchpad: Memory::new_scratchpad() }
+        MainBus {
+            bios,
+            memory,
+            gpu,
+            dma: DMAState::new(),
+            spu: SPU::new(),
+            cd_drive: CDDrive::new(),
+            scratchpad: Memory::new_scratchpad(),
+        }
     }
 
     pub fn read_word(&mut self, og_addr: u32) -> u32 {
@@ -111,11 +119,11 @@ impl MainBus {
             0x1F801070 => {
                 println!("Tried to read i_status word");
                 0
-            },
+            }
             0x1F801074 => {
                 println!("Tried to read i_mask byte");
                 0
-            },
+            }
             0x0..=0x001f_ffff => self.memory.read_byte(addr), //KUSEG
             0x1F00_0000..=0x1f00_FFFF => {
                 //println!("Something tried to read the parallel port. This is not currently emulated, so a 0 was returned. The address was {:#X}", addr);
@@ -126,7 +134,7 @@ impl MainBus {
             0x1f80_1000..=0x1f80_2fff => {
                 println!("Something tried to read the hardware control registers. These are not currently emulated, so a 0 is being returned. The address was {:#X}", addr);
                 0
-            },
+            }
             0x1F800000..=0x1F8003FF => self.scratchpad.read_byte(addr - 0x1F800000),
             _ => panic!(
                 "Invalid byte read at address {:#X}! This address is not mapped to any device.",
@@ -145,7 +153,7 @@ impl MainBus {
             0x1F80202B => println!("DUART B: {}", value),
             0x1F801050 => println!("SIO: {}", value),
             0x1F802000..=0x1F803000 => (), //Expansion port 2
-            0x1F801040 => (), //JOY_DATA
+            0x1F801040 => (),              //JOY_DATA
             0x1F800000..=0x1F8003FF => self.scratchpad.write_byte(addr - 0x1F800000, value),
             _ => panic!(
                 "Invalid byte write at address {:#X}! This address is not mapped to any device.",

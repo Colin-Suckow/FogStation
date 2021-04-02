@@ -1,7 +1,7 @@
-use std::collections::VecDeque;
 use bit_field::BitField;
 use commands::*;
 use format::*;
+use std::collections::VecDeque;
 
 use crate::cpu::{InterruptSource, R3000};
 
@@ -55,7 +55,7 @@ pub(super) struct PendingResponse {
     cause: IntCause,
     response: Vec<u8>,
     execution_cycles: u32,
-    extra_response: Option<Box<PendingResponse>>
+    extra_response: Option<Box<PendingResponse>>,
 }
 
 pub struct CDDrive {
@@ -100,8 +100,7 @@ impl CDDrive {
 
             reg_interrupt_flag: 0,
             reg_interrupt_enable: 0,
-            
-            
+
             //Probably useless registers
             reg_sound_map_data_out: 0,
         }
@@ -110,59 +109,57 @@ impl CDDrive {
     pub fn write_byte(&mut self, addr: u32, val: u8) {
         match addr {
             0x1F801800 => self.status_index = val & 0x3, //Status
-            0x1F801801 => {
-                match self.status_index {
-                    0 => self.execute_command(val),
-                    1 => self.reg_sound_map_data_out = val,
-                    2 => panic!("CD: 0x1F801801 write byte unknown index 2"),
-                    3 => panic!("CD: 0x1F801801 write byte unknown index 3"),
-                    _ => unreachable!()
-                }
-            }
-            0x1F801802 => {
-                match self.status_index {
-                    0 => self.push_parameter(val),
-                    1 => self.write_interrupt_enable_register(val),
-                    2 => panic!("CD: 0x1F801802 write byte unknown index 2"),
-                    3 => panic!("CD: 0x1F801802 write byte unknown index 3"),
-                    _ => unreachable!()
-                }
-            }
-            0x1F801803 => {
-                match self.status_index {
-                    0 => panic!("CD: 0x1F801803 write byte unknown index 0"),
-                    1 => self.write_interrupt_flag_register(val),
-                    2 => panic!("CD: 0x1F801803 write byte unknown index 2"),
-                    3 => panic!("CD: Cannot read Interrupt Flag Register in write command"),
-                    _ => unreachable!()
-                }
-            }
-            _ => panic!("CD: Tried to write unknown byte. Address: {:#X} Value: {:#X} Index: {}", addr, val, self.status_index)
+            0x1F801801 => match self.status_index {
+                0 => self.execute_command(val),
+                1 => self.reg_sound_map_data_out = val,
+                2 => panic!("CD: 0x1F801801 write byte unknown index 2"),
+                3 => panic!("CD: 0x1F801801 write byte unknown index 3"),
+                _ => unreachable!(),
+            },
+            0x1F801802 => match self.status_index {
+                0 => self.push_parameter(val),
+                1 => self.write_interrupt_enable_register(val),
+                2 => panic!("CD: 0x1F801802 write byte unknown index 2"),
+                3 => panic!("CD: 0x1F801802 write byte unknown index 3"),
+                _ => unreachable!(),
+            },
+            0x1F801803 => match self.status_index {
+                0 => panic!("CD: 0x1F801803 write byte unknown index 0"),
+                1 => self.write_interrupt_flag_register(val),
+                2 => panic!("CD: 0x1F801803 write byte unknown index 2"),
+                3 => panic!("CD: Cannot read Interrupt Flag Register in write command"),
+                _ => unreachable!(),
+            },
+            _ => panic!(
+                "CD: Tried to write unknown byte. Address: {:#X} Value: {:#X} Index: {}",
+                addr, val, self.status_index
+            ),
         }
     }
 
     pub fn read_byte(&mut self, addr: u32) -> u8 {
         match addr {
             0x1F801800 => self.get_status_register(),
-            0x1F801801 => {
-                match self.status_index {
-                    0 => panic!("CD: 0x1F801801 read byte unknown index 0"),
-                    1 => self.pop_response(),
-                    2 => panic!("CD: 0x1F801803 read byte unknown index 2"),
-                    3 => panic!("CD: 0x1F801801 read byte unknown index 3"),
-                    _ => unreachable!()
-                }
-            }
+            0x1F801801 => match self.status_index {
+                0 => panic!("CD: 0x1F801801 read byte unknown index 0"),
+                1 => self.pop_response(),
+                2 => panic!("CD: 0x1F801803 read byte unknown index 2"),
+                3 => panic!("CD: 0x1F801801 read byte unknown index 3"),
+                _ => unreachable!(),
+            },
             0x1F801803 => {
                 match self.status_index {
                     0 => panic!("CD: 0x1F801803 read byte unknown index 0"),
                     1 => self.reg_interrupt_flag,
                     2 => panic!("CD: 0x1F801803 read byte unknown index 2"),
                     3 => self.reg_interrupt_flag, //Register mirror
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             }
-            _ => panic!("CD: Tried to read unknown byte. Address: {:#X} Index: {}", addr, self.status_index),
+            _ => panic!(
+                "CD: Tried to read unknown byte. Address: {:#X} Index: {}",
+                addr, self.status_index
+            ),
         }
     }
 
@@ -179,10 +176,10 @@ impl CDDrive {
                     //sub_function commands
                     match parameters[0] {
                         0x20 => commands::get_bios_date(),
-                        _ => panic!("CD: Unknown sub_function command {:#X}", parameters[0])
+                        _ => panic!("CD: Unknown sub_function command {:#X}", parameters[0]),
                     }
                 }
-                _ => panic!("CD: Unknown command {:#X}!", command)
+                _ => panic!("CD: Unknown command {:#X}!", command),
             };
             self.pending_responses.push_back(response);
         }
@@ -267,19 +264,32 @@ pub fn step_cycle(cpu: &mut R3000) {
             return;
         }
 
-        let response = cpu.main_bus.cd_drive.pending_responses.pop_front().expect("CD: Unable to pop pending response!");
+        let response = cpu
+            .main_bus
+            .cd_drive
+            .pending_responses
+            .pop_front()
+            .expect("CD: Unable to pop pending response!");
         cpu.main_bus.cd_drive.response_queue = VecDeque::with_capacity(response.response.len()); //Clear queue
-        cpu.main_bus.cd_drive.response_queue.extend(response.response.iter());
+        cpu.main_bus
+            .cd_drive
+            .response_queue
+            .extend(response.response.iter());
         cpu.main_bus.cd_drive.reg_interrupt_flag = response.cause.bitflag();
 
         //Check if interrupt enabled. If so, fire interrupt
-        if cpu.main_bus.cd_drive.reg_interrupt_enable & response.cause.bitflag() == response.cause.bitflag() {
+        if cpu.main_bus.cd_drive.reg_interrupt_enable & response.cause.bitflag()
+            == response.cause.bitflag()
+        {
             cpu.fire_external_interrupt(InterruptSource::CDROM);
         }
 
         //If the response has an extra response, push that to the front of the line
         if let Some(ext_response) = response.extra_response {
-            cpu.main_bus.cd_drive.pending_responses.push_front(*ext_response);
+            cpu.main_bus
+                .cd_drive
+                .pending_responses
+                .push_front(*ext_response);
         }
 
         //Set cycle counter for next pending response
@@ -287,7 +297,8 @@ pub fn step_cycle(cpu: &mut R3000) {
         //it is at the front of the queue. Realistically, the delay should
         //start counting from the moment the command is fired.
         if cpu.main_bus.cd_drive.pending_responses.len() > 0 {
-            cpu.main_bus.cd_drive.cycle_counter = cpu.main_bus.cd_drive.pending_responses[0].execution_cycles;
+            cpu.main_bus.cd_drive.cycle_counter =
+                cpu.main_bus.cd_drive.pending_responses[0].execution_cycles;
         }
     }
 }

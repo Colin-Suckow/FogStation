@@ -3,7 +3,7 @@ use commands::*;
 use disc::*;
 
 use crate::cpu::{InterruptSource, R3000};
-use std::borrow::Borrow;
+use std::{borrow::Borrow, collections::VecDeque};
 
 mod commands;
 pub mod disc;
@@ -302,7 +302,6 @@ pub fn step_cycle(cpu: &mut R3000) {
             return;
         }
 
-<<<<<<< HEAD
         let mut response = cpu.main_bus.cd_drive.pending_responses.pop_front().expect("CD: Unable to pop pending response!");
         match &response {
             Response::Packet(packet) => {
@@ -316,7 +315,7 @@ pub fn step_cycle(cpu: &mut R3000) {
             }
         }
 
-        if let Response::Packet(packet) = response {
+        if let Response::Packet(packet) = &response {
             match packet.command {
                 0x15 => {
                     //Make sure this is the second response
@@ -337,29 +336,33 @@ pub fn step_cycle(cpu: &mut R3000) {
             //Datablock
         }
 
-
-        //Check if interrupt enabled. If so, fire interrupt
-        if cpu.main_bus.cd_drive.reg_interrupt_enable & response.cause.bitflag()
-            == response.cause.bitflag()
-        {
+        if let Response::Packet(packet) = &mut response {
+            //Check if interrupt enabled. If so, fire interrupt
+            if cpu.main_bus.cd_drive.reg_interrupt_enable & packet.cause.bitflag()
+            == packet.cause.bitflag()
+            {
             cpu.fire_external_interrupt(InterruptSource::CDROM);
-        }
+            }
 
-        //If the response has an extra response, push that to the front of the line
-        if let Some(ext_response) = response.extra_response {
+            //If the response has an extra response, push that to the front of the line
+            if let Some(ext_response) = packet.extra_response.take() {
             cpu.main_bus
                 .cd_drive
                 .pending_responses
                 .push_front(*ext_response);
+            }
         }
+        
 
         //Set cycle counter for next pending response
         //This seems inaccurate. It doesn't start counting the delay till
         //it is at the front of the queue. Realistically, the delay should
         //start counting from the moment the command is fired.
         if cpu.main_bus.cd_drive.pending_responses.len() > 0 {
-            cpu.main_bus.cd_drive.cycle_counter =
-                cpu.main_bus.cd_drive.pending_responses[0].execution_cycles;
+            cpu.main_bus.cd_drive.cycle_counter = match &cpu.main_bus.cd_drive.pending_responses[0] {
+                Response::Packet(packet) => packet.execution_cycles,
+                Response::Datablock(_) => 0,
+            }
         }
     }
 }

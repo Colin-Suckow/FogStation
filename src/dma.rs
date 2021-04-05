@@ -1,5 +1,5 @@
+use crate::cpu::{InterruptSource, R3000};
 use bit_field::BitField;
-use crate::cpu::{R3000, InterruptSource};
 
 const NUM_CHANNELS: usize = 7;
 
@@ -51,7 +51,7 @@ impl DMAState {
             0x1F8010F4 => {
                 //println!("Reading DMA interrupt. val {:#X}", self.interrupt);
                 self.interrupt
-            },
+            }
             _ => {
                 match addr & 0xFFFFFF0F {
                     0x1F801000 => {
@@ -67,7 +67,7 @@ impl DMAState {
                         //println!("Reading dma control {} val {:#X}", channel_num, self.channels[channel_num].control);
                         self.channels[channel_num].control
                     }
-                    _ => panic!("Unknown dma read {:#X}", addr)
+                    _ => panic!("Unknown dma read {:#X}", addr),
                 }
             }
         }
@@ -76,15 +76,13 @@ impl DMAState {
     pub fn write_word(&mut self, addr: u32, value: u32) {
         let channel_num = (((addr & 0x000000F0) >> 4) - 0x8) as usize;
         match addr {
-            0x1F8010F0 => {
-                self.control = value
-            },
-            0x1F8010F4 =>  {
+            0x1F8010F0 => self.control = value,
+            0x1F8010F4 => {
                 let normal_bits = value & 0x80FFFFFF; //These bits are written normally
                 let ack_bits = (value >> 24) & 0x7F; //These bits are written as a one to clear. 0x7F0000
                 let acked_bits = ((self.interrupt >> 24) & 0x7F) & !ack_bits;
                 self.interrupt = normal_bits | (acked_bits << 24)
-            },
+            }
             _ => {
                 match addr & 0xFFFFFF0F {
                     0x1F801000 => {
@@ -102,14 +100,16 @@ impl DMAState {
                         //println!("Wrote DMA control {} with {:#X}", channel_num, value);
                         self.channels[channel_num].control = value;
                     }
-                    _ => panic!("Unknown dma write {:#X}", addr)
+                    _ => panic!("Unknown dma write {:#X}", addr),
                 };
             }
         };
     }
 
     pub fn update(&mut self) {
-        let should_flag = self.interrupt.get_bit(15) || (self.interrupt.get_bit(23) && (self.interrupt.get_bits(16..=22) > 0 && self.interrupt.get_bits(24..=30) > 0));
+        let should_flag = self.interrupt.get_bit(15)
+            || (self.interrupt.get_bit(23)
+                && (self.interrupt.get_bits(16..=22) > 0 && self.interrupt.get_bits(24..=30) > 0));
         self.interrupt.set_bit(31, should_flag);
     }
 
@@ -143,7 +143,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 match cpu.main_bus.dma.channels[num].control {
                     0x01000401 => {
                         //Linked list mode. mem -> gpu
-                        let mut addr= cpu.main_bus.dma.channels[num].base_addr;
+                        let mut addr = cpu.main_bus.dma.channels[num].base_addr;
                         //println!("Starting linked list transfer. addr {:#X}", addr);
                         let mut header = cpu.main_bus.read_word(addr);
                         //println!("base addr: {:#X}. base header: {:#X}", addr, header);
@@ -152,7 +152,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                             for i in 0..num_words {
                                 let packet = cpu.main_bus.read_word((addr + 4) + (i * 4));
                                 cpu.main_bus.gpu.send_gp0_command(packet);
-                            };
+                            }
                             //println!("addr {:#X}, header {:#X}, nw {}", addr, header, num_words);
                             if header & 0x800000 != 0 {
                                 break;
@@ -173,7 +173,9 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                         let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
                         for i in 0..entries {
                             for j in 0..block_size {
-                                let packet = cpu.main_bus.read_word(base_addr + ((i * block_size) * 4) + (j * 4));
+                                let packet = cpu
+                                    .main_bus
+                                    .read_word(base_addr + ((i * block_size) * 4) + (j * 4));
                                 cpu.main_bus.gpu.send_gp0_command(packet);
                             }
                         }
@@ -192,7 +194,10 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                         for i in 0..entries {
                             for j in 0..block_size {
                                 //Lets just write all zeros for now
-                                cpu.main_bus.write_word(base_addr + ((i * block_size) * 4) + (j * 4), 0x50005000);
+                                cpu.main_bus.write_word(
+                                    base_addr + ((i * block_size) * 4) + (j * 4),
+                                    0x50005000,
+                                );
                             }
                         }
 
@@ -228,9 +233,8 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 cpu.main_bus.dma.raise_irq(num);
                 cpu.fire_external_interrupt(InterruptSource::DMA);
             }
-            _ => panic!("Unable to transfer unknown DMA channel {}!", num)
+            _ => panic!("Unable to transfer unknown DMA channel {}!", num),
         }
     }
     cpu.main_bus.dma.update();
 }
-

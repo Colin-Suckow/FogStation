@@ -30,7 +30,8 @@ impl Cop0 {
     }
 
     pub fn set_cause_execode(&mut self, exception: Exception) {
-        self.gen_registers[13] = (!((0x1F as u32) << 2) & self.gen_registers[13]) | ((exception as u32) << 2);
+        self.gen_registers[13] =
+            (!((0x1F as u32) << 2) & self.gen_registers[13]) | ((exception as u32) << 2);
     }
 
     pub fn interrupt_enabled(&self) -> bool {

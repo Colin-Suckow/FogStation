@@ -2,9 +2,9 @@ use imgui_glium_renderer::Texture;
 use psx_emu::PSXEmu;
 use disc::*;
 
-use std::{fs, rc::Rc};
 use byteorder::{ByteOrder, LittleEndian};
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::{fs, rc::Rc};
 
 use imgui::*;
 use std::env;
@@ -23,7 +23,8 @@ use std::path::{Path, PathBuf};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let bios_data = match fs::read("SCPH1001.BIN") { //SCPH1001.BIN openbios.bin
+    let bios_data = match fs::read("SCPH1001.BIN") {
+        //SCPH1001.BIN openbios.bin
         Ok(data) => data,
         _ => {
             println!("Unable to read bios file. Make sure there is a file named SCPH1001.BIN in the same directory.");
@@ -44,7 +45,10 @@ fn main() {
         let destination = LittleEndian::read_u32(&exe[0x18..0x1C]);
         let entrypoint = LittleEndian::read_u32(&exe[0x10..0x14]);
         let init_sp = LittleEndian::read_u32(&exe[0x30..0x34]);
-        println!("Destination is {:#X}\nEntrypoint is {:#X}\nSP is {:#X}", destination, entrypoint, init_sp);
+        println!(
+            "Destination is {:#X}\nEntrypoint is {:#X}\nSP is {:#X}",
+            destination, entrypoint, init_sp
+        );
         emu.load_executable(destination, entrypoint, init_sp, &exe_data);
     }
 
@@ -57,8 +61,11 @@ fn main() {
         if !halted {
             emu.run_frame();
         }
-        frame_time = SystemTime::now().duration_since(start).expect("Error getting frame duration").as_millis();
-        
+        frame_time = SystemTime::now()
+            .duration_since(start)
+            .expect("Error getting frame duration")
+            .as_millis();
+
         Window::new(im_str!("Registers"))
             .size([300.0, 600.0], Condition::FirstUseEver)
             .build(ui, || {
@@ -92,20 +99,30 @@ fn main() {
                     emu.reset();
                 }
 
-                if ui.button(if halted {im_str!("Resume")} else {im_str!("Halt")}, [80.0, 20.0]) {
-                   halted = !halted;
+                if ui.button(
+                    if halted {
+                        im_str!("Resume")
+                    } else {
+                        im_str!("Halt")
+                    },
+                    [80.0, 20.0],
+                ) {
+                    halted = !halted;
                 }
                 if !halted {
                     ui.text(format!("{:.1} FPS", (1000.0 / frame_time as f64)));
                 } else {
                     ui.text("Halted");
                 }
+<<<<<<< HEAD
 
                 match emu.loaded_disc() {
                     Some(disc) => ui.text(format!("Drive loaded: {}", disc.title())),
                     None => ui.text("No disc in drive")
                 };
 
+=======
+>>>>>>> 61876a175da07f25522300c3b170e12d0112253d
             });
     });
 }
@@ -122,7 +139,9 @@ where
 {
     let mut gl_raw_data: Vec<u8> = Vec::new();
     for index in 0..(width * height) {
-        gl_raw_data.extend_from_slice(&ps_pixel_to_gl(&data[((index / width) * 1024) + index % width]));
+        gl_raw_data.extend_from_slice(&ps_pixel_to_gl(
+            &data[((index / width) * 1024) + index % width],
+        ));
     }
 
     let image = RawImage2d {

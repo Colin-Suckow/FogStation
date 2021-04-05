@@ -3,9 +3,8 @@ use bit_field::BitField;
 use cop0::Cop0;
 use instruction::{Instruction, NumberHelpers};
 
-use crate::{bus::MainBus, cdrom};
 use crate::timer::TimerState;
-
+use crate::{bus::MainBus, cdrom};
 
 mod cop0;
 mod instruction;
@@ -21,7 +20,7 @@ pub enum InterruptSource {
     Controller,
     SIO,
     SPU,
-    Lightpen
+    Lightpen,
 }
 
 pub enum Exception {
@@ -103,7 +102,6 @@ impl R3000 {
     /// Runs the next instruction based on the PC location. Only useful for testing because it is not at all accurate to
     /// how the cpu actually works.
     pub fn step_instruction(&mut self, timers: &mut TimerState) {
-
         //Fast load exe
         // if self.pc == 0xbfc0700c {
         //     println!("Jumping to exe...");
@@ -121,7 +119,10 @@ impl R3000 {
 
         if self.pc == 0x000000B0 {
             if self.read_reg(9) == 0x3D {
-                print!("{}", std::str::from_utf8(&[self.read_reg(4) as u8]).unwrap());
+                print!(
+                    "{}",
+                    std::str::from_utf8(&[self.read_reg(4) as u8]).unwrap()
+                );
             } else {
                 //println!("SYSCALL B({:#X})", self.read_reg(9));
             }
@@ -154,7 +155,7 @@ impl R3000 {
         //println!("Executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} rt: {} rd: {} (FULL {:#X})", instruction.opcode(), instruction.funct(), self.old_pc, instruction.rs(), instruction.rt(), instruction.rd(), instruction);
         //self.trace_file.write(format!("{:08x}: {:08x}\n", self.old_pc, instruction).as_bytes());
         //println!("{:08x}: {:08x}", self.old_pc, instruction);
-        
+
         self.execute_instruction(instruction, timers);
 
         //Execute branch delay operation
@@ -168,7 +169,7 @@ impl R3000 {
         }
 
         //Execute delayed load
-        //Two separate if's because rust doesn't let you have 'if let' with other conditionals 
+        //Two separate if's because rust doesn't let you have 'if let' with other conditionals
         if !self.set_load_delay_this_cycle {
             if let Some(load) = self.load_delay.take() {
                 self.write_reg(load.register, load.value);
@@ -177,7 +178,6 @@ impl R3000 {
     }
 
     pub fn execute_instruction(&mut self, instruction: u32, timers: &mut TimerState) {
-
         if self.pc % 4 != 0 || self.delay_slot % 4 != 0 {
             println!("Tried to execute out of alignment");
             self.fire_exception(Exception::AdEL);
@@ -325,7 +325,6 @@ impl R3000 {
                         self.op_multu(instruction);
                     }
 
-
                     0x2A => {
                         //SLT
                         self.op_slt(instruction);
@@ -453,7 +452,10 @@ impl R3000 {
                         //RFE
                         self.op_rfe();
                     }
-                    _ => panic!("CPU: Unknown COP0 MFC instruction {:#X} ({0:#b}, {0})", instruction.rs()),
+                    _ => panic!(
+                        "CPU: Unknown COP0 MFC instruction {:#X} ({0:#b}, {0})",
+                        instruction.rs()
+                    ),
                 }
             }
 
@@ -464,9 +466,13 @@ impl R3000 {
                         //CTC2
                         //Stubbed. Hopefully this doesn't break anything?
                     }
-                    _ => panic!("CPU: Unknown COP2 MFC instruction {:#X} ({0:#b}, {0}) {:#b}", instruction.rs(), instruction),
+                    _ => panic!(
+                        "CPU: Unknown COP2 MFC instruction {:#X} ({0:#b}, {0}) {:#b}",
+                        instruction.rs(),
+                        instruction
+                    ),
                 }
-            } 
+            }
 
             0x20 => {
                 //LB
@@ -558,13 +564,17 @@ impl R3000 {
             .wrapping_add(self.read_reg(instruction.rs()));
         let word = self.read_bus_word(addr & !3, timers);
         let reg_val = self.read_reg(instruction.rt());
-        self.write_bus_word(addr & !3, match addr & 3 {
-            0 => (word & 0x00000000) | (reg_val << 0),
-            1 => (word & 0x000000ff) | (reg_val << 8),
-            2 => (word & 0x0000ffff) | (reg_val << 16),
-            3 => (word & 0x00ffffff) | (reg_val << 24),
-            _ => unreachable!(),
-        }, timers);
+        self.write_bus_word(
+            addr & !3,
+            match addr & 3 {
+                0 => (word & 0x00000000) | (reg_val << 0),
+                1 => (word & 0x000000ff) | (reg_val << 8),
+                2 => (word & 0x0000ffff) | (reg_val << 16),
+                3 => (word & 0x00ffffff) | (reg_val << 24),
+                _ => unreachable!(),
+            },
+            timers,
+        );
     }
 
     fn op_swl(&mut self, instruction: u32, timers: &mut TimerState) {
@@ -574,13 +584,17 @@ impl R3000 {
             .wrapping_add(self.read_reg(instruction.rs()));
         let word = self.read_bus_word(addr & !3, timers);
         let reg_val = self.read_reg(instruction.rt());
-        self.write_bus_word(addr & !3, match addr & 3 {
-            0 => (word & 0xffffff00) | (reg_val >> 24),
-            1 => (word & 0xffff0000) | (reg_val >> 16),
-            2 => (word & 0xff000000) | (reg_val >> 8),
-            3 => (word & 0x00000000) | (reg_val >> 0),
-            _ => unreachable!(),
-        }, timers);
+        self.write_bus_word(
+            addr & !3,
+            match addr & 3 {
+                0 => (word & 0xffffff00) | (reg_val >> 24),
+                1 => (word & 0xffff0000) | (reg_val >> 16),
+                2 => (word & 0xff000000) | (reg_val >> 8),
+                3 => (word & 0x00000000) | (reg_val >> 0),
+                _ => unreachable!(),
+            },
+            timers,
+        );
     }
 
     fn op_lwr(&mut self, instruction: u32, timers: &mut TimerState) {
@@ -591,13 +605,16 @@ impl R3000 {
 
         let word = self.read_bus_word(addr & !3, timers);
         let reg_val = self.read_reg(instruction.rt());
-        self.write_reg(instruction.rt(), match addr & 3 {
-            3 => (reg_val & 0xffffff00) | (word >> 24),
-            2 => (reg_val & 0xffff0000) | (word >> 16),
-            1 => (reg_val & 0xff000000) | (word >> 8),
-            0 => (reg_val & 0x00000000) | (word >> 0),
-            _ => unreachable!(),
-        });
+        self.write_reg(
+            instruction.rt(),
+            match addr & 3 {
+                3 => (reg_val & 0xffffff00) | (word >> 24),
+                2 => (reg_val & 0xffff0000) | (word >> 16),
+                1 => (reg_val & 0xff000000) | (word >> 8),
+                0 => (reg_val & 0x00000000) | (word >> 0),
+                _ => unreachable!(),
+            },
+        );
     }
 
     fn op_lwl(&mut self, instruction: u32, timers: &mut TimerState) {
@@ -608,13 +625,16 @@ impl R3000 {
 
         let word = self.read_bus_word(addr & !3, timers);
         let reg_val = self.read_reg(instruction.rt());
-        self.write_reg(instruction.rt(), match addr & 3 {
-            0 => (reg_val & 0x00ffffff) | (word << 24),
-            1 => (reg_val & 0x0000ffff) | (word << 16),
-            2 => (reg_val & 0x000000ff) | (word << 8),
-            3 => (reg_val & 0x00000000) | (word << 0),
-            _ => unreachable!(),
-        });
+        self.write_reg(
+            instruction.rt(),
+            match addr & 3 {
+                0 => (reg_val & 0x00ffffff) | (word << 24),
+                1 => (reg_val & 0x0000ffff) | (word << 16),
+                2 => (reg_val & 0x000000ff) | (word << 8),
+                3 => (reg_val & 0x00000000) | (word << 0),
+                _ => unreachable!(),
+            },
+        );
     }
 
     fn op_sh(&mut self, instruction: u32, timers: &mut TimerState) {
@@ -639,8 +659,8 @@ impl R3000 {
     }
 
     fn op_lhu(&mut self, instruction: u32, timers: &mut TimerState) {
-        let addr = (instruction.immediate_sign_extended())
-            .wrapping_add(self.read_reg(instruction.rs()));
+        let addr =
+            (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         if addr % 2 != 0 {
             self.fire_exception(Exception::AdEL);
         } else {
@@ -650,15 +670,15 @@ impl R3000 {
     }
 
     fn op_lbu(&mut self, instruction: u32) {
-        let addr = (instruction.immediate_sign_extended())
-            .wrapping_add(self.read_reg(instruction.rs()));
+        let addr =
+            (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         let val = self.main_bus.read_byte(addr).zero_extended();
         self.write_reg(instruction.rt(), val);
     }
 
     fn op_lw(&mut self, instruction: u32, timers: &mut TimerState) {
-        let addr = (instruction.immediate_sign_extended())
-            .wrapping_add(self.read_reg(instruction.rs()));
+        let addr =
+            (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         if addr % 4 != 0 {
             self.fire_exception(Exception::AdEL);
         } else {
@@ -668,8 +688,8 @@ impl R3000 {
     }
 
     fn op_lh(&mut self, instruction: u32, timers: &mut TimerState) {
-        let addr = (instruction.immediate_sign_extended())
-            .wrapping_add(self.read_reg(instruction.rs()));
+        let addr =
+            (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         if addr % 2 != 0 {
             self.fire_exception(Exception::AdEL);
         } else {
@@ -679,15 +699,16 @@ impl R3000 {
     }
 
     fn op_lb(&mut self, instruction: u32) {
-        let addr = (instruction.immediate_sign_extended())
-            .wrapping_add(self.read_reg(instruction.rs()));
+        let addr =
+            (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         let val = self.main_bus.read_byte(addr).sign_extended();
         self.write_reg(instruction.rt(), val);
     }
 
     fn op_rfe(&mut self) {
         let status = self.cop0.read_reg(12);
-        self.cop0.write_reg(12, (status & 0xfffffff0) | ((status & 0x3c) >> 2));
+        self.cop0
+            .write_reg(12, (status & 0xfffffff0) | ((status & 0x3c) >> 2));
         self.pc = self.cop0.read_reg(14);
     }
 
@@ -728,24 +749,22 @@ impl R3000 {
     fn op_sltiu(&mut self, instruction: u32) {
         self.write_reg(
             instruction.rt(),
-            (self.read_reg(instruction.rs()) < instruction.immediate_sign_extended())
-                as u32,
+            (self.read_reg(instruction.rs()) < instruction.immediate_sign_extended()) as u32,
         );
     }
 
     fn op_slti(&mut self, instruction: u32) {
         self.write_reg(
             instruction.rt(),
-            ((self.read_reg(instruction.rs()) as i32) < instruction.immediate_sign_extended() as i32)
-                as u32,
+            ((self.read_reg(instruction.rs()) as i32)
+                < instruction.immediate_sign_extended() as i32) as u32,
         );
     }
 
     fn op_addiu(&mut self, instruction: u32) {
         self.write_reg(
             instruction.rt(),
-            (self.read_reg(instruction.rs()))
-                .wrapping_add(instruction.immediate_sign_extended()),
+            (self.read_reg(instruction.rs())).wrapping_add(instruction.immediate_sign_extended()),
         );
     }
 
@@ -759,7 +778,7 @@ impl R3000 {
                 None => {
                     self.fire_exception(Exception::Ovf);
                     return;
-                },
+                }
             },
         );
     }
@@ -767,32 +786,28 @@ impl R3000 {
     fn op_bgtz(&mut self, instruction: u32) {
         if (self.read_reg(instruction.rs()) as i32) > 0 {
             self.delay_slot = self.pc;
-            self.pc = (instruction.immediate_sign_extended() << 2)
-                .wrapping_add(self.delay_slot);
+            self.pc = (instruction.immediate_sign_extended() << 2).wrapping_add(self.delay_slot);
         };
     }
 
     fn op_blez(&mut self, instruction: u32) {
         if (self.read_reg(instruction.rs()) as i32) <= 0 {
             self.delay_slot = self.pc;
-            self.pc = (instruction.immediate_sign_extended() << 2)
-                .wrapping_add(self.delay_slot);
+            self.pc = (instruction.immediate_sign_extended() << 2).wrapping_add(self.delay_slot);
         };
     }
 
     fn op_bne(&mut self, instruction: u32) {
         if self.read_reg(instruction.rs()) != self.read_reg(instruction.rt()) {
             self.delay_slot = self.pc;
-            self.pc = (instruction.immediate_sign_extended() << 2)
-                .wrapping_add(self.delay_slot);
+            self.pc = (instruction.immediate_sign_extended() << 2).wrapping_add(self.delay_slot);
         };
     }
 
     fn op_beq(&mut self, instruction: u32) {
         if self.read_reg(instruction.rs()) == self.read_reg(instruction.rt()) {
             self.delay_slot = self.pc;
-            self.pc = (instruction.immediate_sign_extended() << 2)
-                .wrapping_add(self.delay_slot);
+            self.pc = (instruction.immediate_sign_extended() << 2).wrapping_add(self.delay_slot);
         };
     }
 
@@ -811,8 +826,7 @@ impl R3000 {
         if self.read_reg(instruction.rs()) as i32 >= 0 {
             self.write_reg(31, self.pc + 4);
             self.delay_slot = self.pc;
-            self.pc = (instruction.immediate_sign_extended() << 2)
-                .wrapping_add(self.delay_slot);
+            self.pc = (instruction.immediate_sign_extended() << 2).wrapping_add(self.delay_slot);
         }
     }
 
@@ -820,44 +834,42 @@ impl R3000 {
         if self.read_reg(instruction.rs()).get_bit(31) {
             self.write_reg(31, self.pc + 4);
             self.delay_slot = self.pc;
-            self.pc = (instruction.immediate_sign_extended() << 2)
-                .wrapping_add(self.delay_slot);
+            self.pc = (instruction.immediate_sign_extended() << 2).wrapping_add(self.delay_slot);
         }
     }
 
     fn op_bgez(&mut self, instruction: u32) {
         if self.read_reg(instruction.rs()) as i32 >= 0 {
             self.delay_slot = self.pc;
-            self.pc = (instruction.immediate_sign_extended() << 2)
-                .wrapping_add(self.delay_slot);
+            self.pc = (instruction.immediate_sign_extended() << 2).wrapping_add(self.delay_slot);
         }
     }
 
     fn op_bltz(&mut self, instruction: u32) {
         if self.read_reg(instruction.rs()).get_bit(31) {
             self.delay_slot = self.pc;
-            self.pc = (instruction.immediate_sign_extended() << 2)
-                .wrapping_add(self.delay_slot);
+            self.pc = (instruction.immediate_sign_extended() << 2).wrapping_add(self.delay_slot);
         }
     }
 
     fn op_slt(&mut self, instruction: u32) {
         self.write_reg(
             instruction.rd(),
-            ((self.read_reg(instruction.rs()) as i32)
-                < (self.read_reg(instruction.rt()) as i32))
+            ((self.read_reg(instruction.rs()) as i32) < (self.read_reg(instruction.rt()) as i32))
                 as u32,
         );
     }
 
     fn op_multu(&mut self, instruction: u32) {
-        let result = (self.read_reg(instruction.rs()) as u64) * (self.read_reg(instruction.rt()) as u64);
+        let result =
+            (self.read_reg(instruction.rs()) as u64) * (self.read_reg(instruction.rt()) as u64);
         self.lo = (result & 0xFFFF_FFFF) as u32;
         self.hi = ((result >> 32) & 0xFFFF_FFFF) as u32;
     }
 
     fn op_mult(&mut self, instruction: u32) {
-        let result = (self.read_reg(instruction.rs()) as u64) as i32 * (self.read_reg(instruction.rt()) as u64) as i32;
+        let result = (self.read_reg(instruction.rs()) as u64) as i32
+            * (self.read_reg(instruction.rt()) as u64) as i32;
         self.lo = (result as u64 & 0xFFFF_FFFF) as u32;
         self.hi = ((result as u64 >> 32) & 0xFFFF_FFFF) as u32;
     }
@@ -865,8 +877,7 @@ impl R3000 {
     fn op_addu(&mut self, instruction: u32) {
         self.write_reg(
             instruction.rd(),
-            (self.read_reg(instruction.rt()))
-                .wrapping_add(self.read_reg(instruction.rs())),
+            (self.read_reg(instruction.rt())).wrapping_add(self.read_reg(instruction.rs())),
         );
     }
 
@@ -901,16 +912,14 @@ impl R3000 {
     fn op_subu(&mut self, instruction: u32) {
         self.write_reg(
             instruction.rd(),
-            (self.read_reg(instruction.rs()))
-                .wrapping_sub(self.read_reg(instruction.rt())),
+            (self.read_reg(instruction.rs())).wrapping_sub(self.read_reg(instruction.rt())),
         );
     }
 
     fn op_sltu(&mut self, instruction: u32) {
         self.write_reg(
             instruction.rd(),
-            (self.read_reg(instruction.rs()) < self.read_reg(instruction.rt()))
-                as u32,
+            (self.read_reg(instruction.rs()) < self.read_reg(instruction.rt())) as u32,
         );
     }
 
@@ -924,7 +933,7 @@ impl R3000 {
                 None => {
                     self.fire_exception(Exception::Ovf);
                     return;
-                },
+                }
             },
         );
     }
@@ -939,7 +948,7 @@ impl R3000 {
                 None => {
                     self.fire_exception(Exception::Ovf);
                     return;
-                },
+                }
             },
         )
     }
@@ -1018,24 +1027,22 @@ impl R3000 {
     fn op_srav(&mut self, instruction: u32) {
         self.write_reg(
             instruction.rd(),
-            ((self.read_reg(instruction.rt()) as i32)
-                >> (self.read_reg(instruction.rs()) & 0x1F)) as u32
+            ((self.read_reg(instruction.rt()) as i32) >> (self.read_reg(instruction.rs()) & 0x1F))
+                as u32,
         );
     }
 
     fn op_srlv(&mut self, instruction: u32) {
         self.write_reg(
             instruction.rd(),
-            ((self.read_reg(instruction.rt()))
-                >> (self.read_reg(instruction.rs()) & 0x1F)) as u32
+            ((self.read_reg(instruction.rt())) >> (self.read_reg(instruction.rs()) & 0x1F)) as u32,
         );
     }
 
     fn op_sllv(&mut self, instruction: u32) {
         self.write_reg(
             instruction.rd(),
-            ((self.read_reg(instruction.rt()))
-                << (self.read_reg(instruction.rs()) & 0x1F)) as u32
+            ((self.read_reg(instruction.rt())) << (self.read_reg(instruction.rs()) & 0x1F)) as u32,
         );
     }
 
@@ -1068,7 +1075,10 @@ impl R3000 {
         }
         self.cop0.set_cause_execode(exception);
         let old_status = self.cop0.read_reg(12);
-        self.cop0.write_reg(12, (old_status & !0x3F) | (((old_status & 0x3f) << 2) & 0x3f));
+        self.cop0.write_reg(
+            12,
+            (old_status & !0x3F) | (((old_status & 0x3f) << 2) & 0x3f),
+        );
         self.pc = if self.cop0.read_reg(12).get_bit(23) {
             0xBFC0_0180
         } else {
@@ -1094,7 +1104,7 @@ impl R3000 {
             0x1F801070 => {
                 //println!("Reading ISTATUS");
                 self.i_status
-            },
+            }
             0x1F801074 => self.i_mask,
             0x1F801100..=0x1F801128 => timers.read_word(addr & 0x1fffffff),
             _ => self.main_bus.read_word(addr),
@@ -1102,7 +1112,6 @@ impl R3000 {
     }
 
     fn write_bus_word(&mut self, addr: u32, val: u32, timers: &mut TimerState) {
-
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
             return;
@@ -1112,11 +1121,11 @@ impl R3000 {
             0x1F801070 => {
                 //println!("Writing I_STAT. val {:#X} pc {:#X} oldpc {:#X}", val, self.pc, self.old_pc);
                 self.i_status &= val;
-            },
+            }
             0x1F801074 => {
                 //println!("Writing I_MASK val {:#X}", val);
                 self.i_mask = val;
-            },
+            }
             0x1F801100..=0x1F801128 => timers.write_word(addr & 0x1fffffff, val),
             _ => self.main_bus.write_word(addr, val),
         };
@@ -1124,9 +1133,7 @@ impl R3000 {
 
     fn read_bus_half_word(&mut self, addr: u32, timers: &mut TimerState) -> u16 {
         match addr & 0x1fffffff {
-            0x1F801070 => {
-                self.i_status as u16
-            },
+            0x1F801070 => self.i_status as u16,
             0x1F801074 => self.i_mask as u16,
             0x1F801100..=0x1F801128 => timers.read_half_word(addr & 0x1fffffff),
             _ => self.main_bus.read_half_word(addr),
@@ -1144,7 +1151,6 @@ impl R3000 {
             0x1F801100..=0x1F801128 => timers.write_half_word(addr & 0x1fffffff, val),
             _ => self.main_bus.write_half_word(addr, val),
         };
-
     }
 
     fn write_bus_byte(&mut self, addr: u32, val: u8) {
@@ -1157,7 +1163,6 @@ impl R3000 {
             0x1F801074 => self.i_mask = val as u32,
             _ => self.main_bus.write_byte(addr, val),
         };
-        
     }
 
     /// Returns the value stored within the given register. Will panic if register_number > 31
@@ -1171,7 +1176,6 @@ impl R3000 {
 
     /// Sets register to given value. Prevents setting R0, which should always be zero. Will panic if register_number > 31
     fn write_reg(&mut self, register_number: u8, value: u32) {
-        
         match register_number {
             0 => (), //Prevent writing to the zero register
             _ => self.gen_registers[register_number as usize] = value,

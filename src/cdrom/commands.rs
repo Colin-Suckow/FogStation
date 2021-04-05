@@ -1,8 +1,8 @@
 use super::{CDDrive, DriveState, IntCause, MotorState, Packet, Response};
 use crate::cdrom::disc::DiscIndex;
 
-const AVG_FIRST_RESPONSE_TIME: u32 =  0xc4e1;
-const AVG_SECOND_RESPONSE_TIME: u32 =  0xc4e1;
+const AVG_FIRST_RESPONSE_TIME: u32 = 0xc4e1;
+const AVG_SECOND_RESPONSE_TIME: u32 = 0xc4e1;
 
 pub(super) fn get_bios_date() -> Response {
     Response::Packet(Packet {
@@ -36,7 +36,7 @@ pub(super) fn get_id(state: &CDDrive) -> Response {
         let mut first_response = stat(state, 0x1a);
         let second_response = Packet {
             cause: IntCause::INT2,
-            response: vec![state.get_stat(), 0x00, 0x20,0x00, 0x53,0x43,0x45,0x41], //SCEA disk inserted
+            response: vec![state.get_stat(), 0x00, 0x20, 0x00, 0x53, 0x43, 0x45, 0x41], //SCEA disk inserted
             execution_cycles: AVG_SECOND_RESPONSE_TIME,
             extra_response: None,
             command: 0x1a,
@@ -65,6 +65,7 @@ pub(super) fn init(state: &mut CDDrive) -> Response {
     Response::Packet(first_response)
 }
 
+<<<<<<< HEAD
 pub(super) fn set_loc(state: &mut CDDrive, minutes: u8, seconds: u8, frames: u8) -> Response {
     state.seek_target = DiscIndex::new(minutes as usize, seconds as usize, frames as usize);
     state.seek_complete = false;
@@ -94,3 +95,14 @@ pub(super) fn set_mode(state: &mut CDDrive, mode: u8) -> Response {
 pub(super) fn read_with_retry(state: &mut CDDrive) -> Response {
     Response::Packet(stat(state, 0x6))
 }
+=======
+pub(super) fn set_loc(
+    state: &mut CDDrive,
+    minutes: u8,
+    seconds: u8,
+    frames: u8,
+) -> PendingResponse {
+    state.seek_target = DiscIndex::new(minutes as usize, seconds as usize, frames as usize);
+    get_stat(state)
+}
+>>>>>>> 61876a175da07f25522300c3b170e12d0112253d

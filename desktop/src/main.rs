@@ -1,5 +1,6 @@
 use imgui_glium_renderer::Texture;
 use psx_emu::PSXEmu;
+use disc::*;
 
 use std::{fs, rc::Rc};
 use byteorder::{ByteOrder, LittleEndian};
@@ -9,6 +10,7 @@ use imgui::*;
 use std::env;
 
 mod support;
+mod disc;
 
 use glium::{
     backend::Facade,
@@ -17,6 +19,7 @@ use glium::{
 };
 
 use std::borrow::Cow;
+use std::path::{Path, PathBuf};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -28,9 +31,12 @@ fn main() {
         }
     };
 
+    let disc = load_disc_from_cuesheet(Path::new("/home/colin/Games/emulation/ps1/ridge_racer/ridge_racer.cue").to_path_buf());
+
     let mut emu = PSXEmu::new(bios_data);
     let mut halted = false;
     emu.reset();
+    emu.load_disc(disc);
 
     if args.len() == 2 {
         let exe = fs::read(&args[1]).unwrap();
@@ -80,7 +86,7 @@ fn main() {
             });
 
         Window::new(im_str!("Emulator Controls"))
-            .content_size([150.0, 100.0])
+            .content_size([250.0, 100.0])
             .build(ui, || {
                 if ui.button(im_str!("Reset"), [80.0, 20.0]) {
                     emu.reset();
@@ -94,6 +100,11 @@ fn main() {
                 } else {
                     ui.text("Halted");
                 }
+
+                match emu.loaded_disc() {
+                    Some(disc) => ui.text(format!("Drive loaded: {}", disc.title())),
+                    None => ui.text("No disc in drive")
+                };
 
             });
     });

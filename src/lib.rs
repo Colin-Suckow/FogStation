@@ -7,6 +7,7 @@ use crate::gpu::Gpu;
 use crate::memory::Memory;
 use crate::dma::execute_dma_cycle;
 use crate::cpu::InterruptSource;
+use crate::cdrom::disc::Disc;
 
 mod bios;
 mod bus;
@@ -16,7 +17,7 @@ mod memory;
 mod dma;
 mod timer;
 mod spu;
-mod cdrom;
+pub mod cdrom;
 
 pub struct PSXEmu {
     pub r3000: R3000,
@@ -79,6 +80,18 @@ impl PSXEmu {
         //self.r3000.pc = entrypoint;
         // self.r3000.gen_registers[29] = sp;
         // self.r3000.gen_registers[30] = sp;
+    }
+
+    pub fn load_disc(&mut self, disc: Disc) {
+        self.r3000.main_bus.cd_drive.load_disc(disc);
+    }
+
+    pub fn loaded_disc(&self) -> &Option<Disc> {
+        self.r3000.main_bus.cd_drive.disc()
+    }
+
+    pub fn remove_disc(&mut self) {
+        self.r3000.main_bus.cd_drive.remove_disc();
     }
 
     pub fn get_vram(&self) -> &Vec<u16> {

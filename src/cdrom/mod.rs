@@ -1,12 +1,14 @@
 use std::collections::VecDeque;
 use bit_field::BitField;
 use commands::*;
-use format::*;
+use disc::*;
 
 use crate::cpu::{InterruptSource, R3000};
+use std::borrow::Borrow;
 
 mod commands;
-mod format;
+pub mod disc;
+
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub(super) enum DriveState {
@@ -51,20 +53,32 @@ impl IntCause {
     }
 }
 
-pub(super) struct PendingResponse {
+pub(super) struct Packet {
     cause: IntCause,
     response: Vec<u8>,
     execution_cycles: u32,
-    extra_response: Option<Box<PendingResponse>>
+    extra_response: Option<Box<Response>>,
+    command: u8,
+}
+
+pub(super) struct Block {
+    data: Vec<u8>
+}
+
+pub(super) enum Response {
+    Packet(Packet),
+    Datablock(Block)
 }
 
 pub struct CDDrive {
     cycle_counter: u32,
-    pending_responses: VecDeque<PendingResponse>,
+    pending_responses: VecDeque<Response>,
 
     drive_state: DriveState,
     motor_state: MotorState,
-    disk_inserted: bool,
+    drive_mode: u8,
+
+    disc: Option<Disc>,
 
     parameter_queue: VecDeque<u8>,
     data_queue: VecDeque<u8>,
@@ -73,6 +87,8 @@ pub struct CDDrive {
     status_index: u8,
 
     seek_target: DiscIndex,
+    seek_complete: bool,
+    read_offset: u32,
 
     reg_interrupt_flag: u8,
     reg_interrupt_enable: u8,
@@ -90,13 +106,18 @@ impl CDDrive {
             parameter_queue: VecDeque::new(),
             data_queue: VecDeque::new(),
             response_queue: VecDeque::new(),
+
             status_index: 0,
+
+            disc: None,
 
             drive_state: DriveState::Idle,
             motor_state: MotorState::On,
-            disk_inserted: true,
+            drive_mode: 0,
 
             seek_target: DiscIndex::new(0, 0, 0),
+            seek_complete: false,
+            read_offset: 0,
 
             reg_interrupt_flag: 0,
             reg_interrupt_enable: 0,
@@ -166,6 +187,18 @@ impl CDDrive {
         }
     }
 
+    pub fn load_disc(&mut self, disc: Disc) {
+        self.disc = Some(disc);
+    }
+
+    pub fn remove_disc(&mut self) {
+        self.disc = None;
+    }
+
+    pub fn disc(&self) -> &Option<Disc> {
+        &self.disc
+    }
+
     fn execute_command(&mut self, command: u8) {
         //Execute
         {
@@ -174,6 +207,8 @@ impl CDDrive {
                 0x1 => get_stat(self),
                 0x2 => set_loc(self, parameters[0], parameters[1], parameters[2]),
                 0xA => init(self),
+                0xE => set_mode(self, parameters[0]),
+                0x15 => seek_data(self),
                 0x1A => get_id(self),
                 0x19 => {
                     //sub_function commands
@@ -189,7 +224,11 @@ impl CDDrive {
 
         //If this is the first response added to the queue, update the cycle counter
         if self.pending_responses.len() == 1 {
-            self.cycle_counter = self.pending_responses[0].execution_cycles;
+            self.cycle_counter = match &self.pending_responses[0] {
+                Response::Packet(packet) => packet.execution_cycles,
+                //If theres a datablock here, its going to be read very soon, so there shouldn't be a delay
+                Response::Datablock(block) => 0,
+            };
         }
 
         //Clear out old parameters
@@ -267,10 +306,40 @@ pub fn step_cycle(cpu: &mut R3000) {
             return;
         }
 
-        let response = cpu.main_bus.cd_drive.pending_responses.pop_front().expect("CD: Unable to pop pending response!");
-        cpu.main_bus.cd_drive.response_queue = VecDeque::with_capacity(response.response.len()); //Clear queue
-        cpu.main_bus.cd_drive.response_queue.extend(response.response.iter());
-        cpu.main_bus.cd_drive.reg_interrupt_flag = response.cause.bitflag();
+        let mut response = cpu.main_bus.cd_drive.pending_responses.pop_front().expect("CD: Unable to pop pending response!");
+        match &response {
+            Response::Packet(packet) => {
+                cpu.main_bus.cd_drive.response_queue = VecDeque::with_capacity(packet.response.len()); //Clear queue
+                cpu.main_bus.cd_drive.response_queue.extend(packet.response.iter());
+                cpu.main_bus.cd_drive.reg_interrupt_flag = packet.cause.bitflag();
+            }
+            Response::Datablock(block) => {
+                cpu.main_bus.cd_drive.response_queue = VecDeque::with_capacity(BYTES_PER_SECTOR); //Clear queue
+                cpu.main_bus.cd_drive.response_queue.extend(block.data.iter());
+            }
+        }
+
+        if let Response::Packet(packet) = response {
+            match packet.command {
+                0x15 => {
+                    //Make sure this is the second response
+                    if packet.extra_response.is_none() {
+                        //End seek and return drive to idle state
+                        cpu.main_bus.cd_drive.drive_state = DriveState::Idle;
+                    }
+                }
+
+                0x6 => {
+                    //ReadN
+
+
+                }
+                _ => () //No actions for this command
+            };
+        } else {
+            //Datablock
+        }
+
 
         //Check if interrupt enabled. If so, fire interrupt
         if cpu.main_bus.cd_drive.reg_interrupt_enable & response.cause.bitflag() == response.cause.bitflag() {

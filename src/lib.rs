@@ -7,26 +7,17 @@ use crate::cpu::InterruptSource;
 use crate::dma::execute_dma_cycle;
 use crate::gpu::Gpu;
 use crate::memory::Memory;
-<<<<<<< HEAD
-use crate::dma::execute_dma_cycle;
-use crate::cpu::InterruptSource;
 use crate::cdrom::disc::Disc;
-=======
->>>>>>> 61876a175da07f25522300c3b170e12d0112253d
 
 mod bios;
 mod bus;
-mod cdrom;
 pub mod cpu;
 mod dma;
 mod gpu;
 mod memory;
 mod spu;
-<<<<<<< HEAD
 pub mod cdrom;
-=======
 mod timer;
->>>>>>> 61876a175da07f25522300c3b170e12d0112253d
 
 pub struct PSXEmu {
     pub r3000: R3000,

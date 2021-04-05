@@ -1,11 +1,6 @@
 use bit_field::BitField;
 use commands::*;
-<<<<<<< HEAD
 use disc::*;
-=======
-use format::*;
-use std::collections::VecDeque;
->>>>>>> 61876a175da07f25522300c3b170e12d0112253d
 
 use crate::cpu::{InterruptSource, R3000};
 use std::borrow::Borrow;
@@ -61,7 +56,6 @@ pub(super) struct Packet {
     cause: IntCause,
     response: Vec<u8>,
     execution_cycles: u32,
-<<<<<<< HEAD
     extra_response: Option<Box<Response>>,
     command: u8,
 }
@@ -73,9 +67,6 @@ pub(super) struct Block {
 pub(super) enum Response {
     Packet(Packet),
     Datablock(Block)
-=======
-    extra_response: Option<Box<PendingResponse>>,
->>>>>>> 61876a175da07f25522300c3b170e12d0112253d
 }
 
 pub struct CDDrive {
@@ -346,20 +337,6 @@ pub fn step_cycle(cpu: &mut R3000) {
             //Datablock
         }
 
-=======
-        let response = cpu
-            .main_bus
-            .cd_drive
-            .pending_responses
-            .pop_front()
-            .expect("CD: Unable to pop pending response!");
-        cpu.main_bus.cd_drive.response_queue = VecDeque::with_capacity(response.response.len()); //Clear queue
-        cpu.main_bus
-            .cd_drive
-            .response_queue
-            .extend(response.response.iter());
-        cpu.main_bus.cd_drive.reg_interrupt_flag = response.cause.bitflag();
->>>>>>> 61876a175da07f25522300c3b170e12d0112253d
 
         //Check if interrupt enabled. If so, fire interrupt
         if cpu.main_bus.cd_drive.reg_interrupt_enable & response.cause.bitflag()

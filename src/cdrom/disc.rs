@@ -63,5 +63,22 @@ impl Disc {
     pub fn add_track(&mut self, track: DiscTrack) {
         self.tracks.push(track);
     }
+
+    pub fn read_sector(&self, location: DiscIndex) -> &[u8] {
+        let address = location.as_address() as usize;
+        let (track, offset) = self.track_of_offset(address as usize);
+        &track.data[address - offset..=((address-offset) + BYTES_PER_SECTOR)]
+    }
+
+    fn track_of_offset(&self, offset: usize) -> (&DiscTrack, usize) {
+        let mut total_size = 0;
+        for track in &self.tracks {
+            if offset >= total_size && offset < total_size + track.data.len() {
+                return (&track, total_size);
+            }
+            total_size += track.data.len();
+        }
+        panic!("Unable to locate track!");
+    }
 }
 

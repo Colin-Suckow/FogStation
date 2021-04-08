@@ -23,7 +23,7 @@ pub(super) enum MotorState {
     SpinUp,
     On,
 }
-
+#[derive(Debug, PartialEq)]
 pub(super) enum IntCause {
     INT1,
     INT2,
@@ -52,6 +52,7 @@ impl IntCause {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct Packet {
     cause: IntCause,
     response: Vec<u8>,
@@ -60,10 +61,12 @@ pub(super) struct Packet {
     command: u8,
 }
 
+#[derive(Debug)]
 pub(super) struct Block {
     data: Vec<u8>
 }
 
+#[derive(Debug)]
 pub(super) enum Response {
     Packet(Packet),
     Datablock(Block)
@@ -83,11 +86,13 @@ pub struct CDDrive {
     data_queue: VecDeque<u8>,
     response_queue: VecDeque<u8>,
 
+    want_data: bool,
+
     status_index: u8,
 
     seek_target: DiscIndex,
     seek_complete: bool,
-    read_offset: u32,
+    read_offset: usize,
 
     reg_interrupt_flag: u8,
     reg_interrupt_enable: u8,
@@ -110,6 +115,7 @@ impl CDDrive {
 
             disc: None,
 
+            want_data: false,
             drive_state: DriveState::Idle,
             motor_state: MotorState::On,
             drive_mode: 0,
@@ -144,7 +150,10 @@ impl CDDrive {
                 _ => unreachable!(),
             },
             0x1F801803 => match self.status_index {
-                0 => panic!("CD: 0x1F801803 write byte unknown index 0"),
+                0 => {
+                    self.want_data = val.get_bit(7); //Only handle want_data. This will probably bite me later
+                    self.data_queue.clear();
+                },
                 1 => self.write_interrupt_flag_register(val),
                 2 => panic!("CD: 0x1F801803 write byte unknown index 2"),
                 3 => panic!("CD: Cannot read Interrupt Flag Register in write command"),
@@ -169,7 +178,7 @@ impl CDDrive {
             },
             0x1F801803 => {
                 match self.status_index {
-                    0 => panic!("CD: 0x1F801803 read byte unknown index 0"),
+                    0 => self.pop_data(),
                     1 => self.reg_interrupt_flag,
                     2 => panic!("CD: 0x1F801803 read byte unknown index 2"),
                     3 => self.reg_interrupt_flag, //Register mirror
@@ -202,6 +211,8 @@ impl CDDrive {
             let response = match command {
                 0x1 => get_stat(self),
                 0x2 => set_loc(self, parameters[0], parameters[1], parameters[2]),
+                0x6 => read_with_retry(self),
+                0x9 => stop_read(self),
                 0xA => init(self),
                 0xE => set_mode(self, parameters[0]),
                 0x15 => seek_data(self),
@@ -223,7 +234,7 @@ impl CDDrive {
             self.cycle_counter = match &self.pending_responses[0] {
                 Response::Packet(packet) => packet.execution_cycles,
                 //If theres a datablock here, its going to be read very soon, so there shouldn't be a delay
-                Response::Datablock(block) => 0,
+                _ => panic!("There shouln't be a block!"),
             };
         }
 
@@ -245,6 +256,7 @@ impl CDDrive {
         status |= (!self.data_queue.is_empty() as u8) << 6;
         // 7 BUSYSTS
         //TODO when I find out what it means to be busy
+        status |= 1 << 7;
 
         status
     }
@@ -274,6 +286,26 @@ impl CDDrive {
             Some(val) => val,
             None => {
                 println!("CD: Tried to read response from empty response queue! Returning 0...");
+                0
+            }
+        }
+    }
+
+    pub fn pop_data(&mut self) -> u8 {
+        if self.want_data && self.data_queue.is_empty() {
+            //Out of data, get some more
+            println!("Fetching more data!");
+            let data = self.disc.as_ref().expect("Tried to read nonexistant disc!").read_sector(
+                        self.seek_target.plus_sector_offset(self.read_offset)
+                    );
+        
+            self.read_offset += 1;
+            self.data_queue.extend(data.iter());
+        }
+        match self.data_queue.pop_front() {
+            Some(val) => val,
+            None => {
+                println!("CD: Tried to read data from empty data queue! Returning 0...");
                 0
             }
         }
@@ -310,38 +342,21 @@ pub fn step_cycle(cpu: &mut R3000) {
                 cpu.main_bus.cd_drive.reg_interrupt_flag = packet.cause.bitflag();
             }
             Response::Datablock(block) => {
-                cpu.main_bus.cd_drive.response_queue = VecDeque::with_capacity(BYTES_PER_SECTOR); //Clear queue
-                cpu.main_bus.cd_drive.response_queue.extend(block.data.iter());
+                //cpu.main_bus.cd_drive.data_queue = VecDeque::with_capacity(BYTES_PER_SECTOR); //Clear queue
+                //cpu.main_bus.cd_drive.data_queue.extend(block.data.iter());
             }
-        }
-
-        if let Response::Packet(packet) = &response {
-            match packet.command {
-                0x15 => {
-                    //Make sure this is the second response
-                    if packet.extra_response.is_none() {
-                        //End seek and return drive to idle state
-                        cpu.main_bus.cd_drive.drive_state = DriveState::Idle;
-                    }
-                }
-
-                0x6 => {
-                    //ReadN
-
-
-                }
-                _ => () //No actions for this command
-            };
-        } else {
-            //Datablock
         }
 
         if let Response::Packet(packet) = &mut response {
             //Check if interrupt enabled. If so, fire interrupt
+            println!("Interrupts {:#X} cause {:#X} command {:#X}", cpu.main_bus.cd_drive.reg_interrupt_enable, packet.cause.bitflag(), packet.command);
             if cpu.main_bus.cd_drive.reg_interrupt_enable & packet.cause.bitflag()
             == packet.cause.bitflag()
             {
-            cpu.fire_external_interrupt(InterruptSource::CDROM);
+                //if !(packet.cause == IntCause::INT1 && !cpu.main_bus.cd_drive.want_data) {
+                    cpu.fire_external_interrupt(InterruptSource::CDROM);
+                    println!("CD: Fired interrupt");
+                //}
             }
 
             //If the response has an extra response, push that to the front of the line
@@ -352,6 +367,77 @@ pub fn step_cycle(cpu: &mut R3000) {
                 .push_front(*ext_response);
             }
         }
+
+        if let Response::Packet(packet) = &mut response {
+            match packet.command {
+                0x15 => {
+                    //Make sure this is the second response
+                    if packet.extra_response.is_some() {
+                        //End seek and return drive to idle state
+                        cpu.main_bus.cd_drive.read_offset = 0;
+                        cpu.main_bus.cd_drive.drive_state = DriveState::Idle;
+                    }
+                }
+
+                0x6 => {
+                    //ReadN
+                    println!("Post ReadN");
+                    let response_packet = Packet {
+                        cause: IntCause::INT1,
+                        response: vec![cpu.main_bus.cd_drive.get_stat()],
+                        execution_cycles: 1000,
+                        extra_response: None,
+                        command: 0x6,
+                    };
+                    //if cpu.main_bus.cd_drive.want_data {
+                        cpu.main_bus.cd_drive.pending_responses.push_back(Response::Packet(response_packet));
+                    //}
+
+                }
+
+                0x9 => {
+                    //Pause
+                    if packet.cause == IntCause::INT2 {
+                        println!("Post pause");
+                        cpu.main_bus.cd_drive.pending_responses.clear();
+                        cpu.log = true;
+                    }
+                    
+                }
+                _ => () //No actions for this command
+            };
+        } else {
+            //Datablock
+            
+                println!("Running post datablock");
+                // let mut response_packet = Packet {
+                //     cause: IntCause::INT1,
+                //     response: vec![cpu.main_bus.cd_drive.get_stat()],
+                //     execution_cycles: 1000,
+                //     extra_response: None,
+                //     command: 0x6,
+                // };
+    
+                // let data = cpu.main_bus.cd_drive.disc.as_ref().expect("Tried to read nonexistant disc!").read_sector(
+                //     cpu.main_bus.cd_drive.seek_target.plus_sector_offset(cpu.main_bus.cd_drive.read_offset)
+                // );
+    
+                // cpu.main_bus.cd_drive.read_offset += 1;
+    
+                // let block = Block {
+                //     data: Vec::from(data)
+                // };
+    
+                // response_packet.extra_response = Some(Box::new(Response::Datablock(block)));
+    
+                // cpu.main_bus
+                //     .cd_drive
+                //     .pending_responses
+                //     .push_back(Response::Packet(response_packet));
+            
+        }
+        //println!("{:?}", response);
+        
         
 
         //Set cycle counter for next pending response

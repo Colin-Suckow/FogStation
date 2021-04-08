@@ -32,7 +32,7 @@ fn main() {
         }
     };
 
-    let disc = load_disc_from_cuesheet(Path::new("/home/colin/Games/emulation/ps1/ridge_racer/ridge_racer.cue").to_path_buf());
+    let disc = load_disc_from_cuesheet(Path::new("/home/colin/Games/ps1/ridge_racer/ridge_racer.cue").to_path_buf());
 
     let mut emu = PSXEmu::new(bios_data);
     let mut halted = false;
@@ -114,15 +114,12 @@ fn main() {
                 } else {
                     ui.text("Halted");
                 }
-<<<<<<< HEAD
 
                 match emu.loaded_disc() {
                     Some(disc) => ui.text(format!("Drive loaded: {}", disc.title())),
                     None => ui.text("No disc in drive")
                 };
 
-=======
->>>>>>> 61876a175da07f25522300c3b170e12d0112253d
             });
     });
 }

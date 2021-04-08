@@ -1,8 +1,8 @@
-use super::{CDDrive, DriveState, IntCause, MotorState, Packet, Response};
+use super::{CDDrive, DriveState, IntCause, MotorState, Packet, Response, Block};
 use crate::cdrom::disc::DiscIndex;
 
-const AVG_FIRST_RESPONSE_TIME: u32 = 0xc4e1;
-const AVG_SECOND_RESPONSE_TIME: u32 = 0xc4e1;
+pub(super) const AVG_FIRST_RESPONSE_TIME: u32 = 10000;
+pub(super) const AVG_SECOND_RESPONSE_TIME: u32 = 10000;
 
 pub(super) fn get_bios_date() -> Response {
     Response::Packet(Packet {
@@ -60,8 +60,9 @@ pub(super) fn get_id(state: &CDDrive) -> Response {
 pub(super) fn init(state: &mut CDDrive) -> Response {
     state.motor_state = MotorState::On;
     let mut first_response = stat(state, 0x0a);
-    let second_response = Response::Packet(stat(state, 0x0a));
-    first_response.extra_response = Some(Box::new(second_response));
+    let mut second_response = stat(state, 0x0a);
+    second_response.cause = IntCause::INT2;
+    first_response.extra_response = Some(Box::new(Response::Packet(second_response)));
     Response::Packet(first_response)
 }
 
@@ -92,5 +93,38 @@ pub(super) fn set_mode(state: &mut CDDrive, mode: u8) -> Response {
 //This is only the initial return. All of the reading is handled in the post condition
 //It's messy, but it works for now
 pub(super) fn read_with_retry(state: &mut CDDrive) -> Response {
-    Response::Packet(stat(state, 0x6))
+    let mut initial_response = stat(state, 0x6);
+    state.drive_state = DriveState::Read;
+    let mut response_packet = Packet {
+        cause: IntCause::INT1,
+        response: vec![state.get_stat()],
+        execution_cycles: 1000,
+        extra_response: None,
+        command: 0x6,
+    };
+
+
+    initial_response.extra_response = Some(Box::new(Response::Packet(response_packet)));
+
+    return Response::Packet(initial_response);
+}
+
+//Pause
+pub(super) fn stop_read(state: &mut CDDrive) -> Response {
+    println!("stop read (pause)");
+    let mut initial_response = stat(state, 0x9);
+    state.drive_state = DriveState::Idle;
+    state.want_data = false;
+    //state.pending_responses.clear();
+    let response_packet = Packet {
+        cause: IntCause::INT2,
+        response: vec![state.get_stat()],
+        execution_cycles: 10,
+        extra_response: None,
+        command: 0x9,
+    };
+    initial_response.execution_cycles = 10;
+
+    initial_response.extra_response = Some(Box::new(Response::Packet(response_packet)));
+    Response::Packet(initial_response)
 }

@@ -34,6 +34,7 @@ impl MainBus {
             0x0..=0x001f_ffff => self.memory.read_word(addr),
             0x1f801810 => self.gpu.read_word_gp0(),
             0x1f801814 => self.gpu.read_status_register(),
+            0x1F80101C => 0x00070777, //Expansion 2 delay/size
             0x1F801080..=0x1F8010F4 => self.dma.read_word(addr),
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_word(addr - 0x1fc0_0000),
             0x1F800000..=0x1F8003FF => self.scratchpad.read_word(addr - 0x1F800000),
@@ -88,7 +89,7 @@ impl MainBus {
             },
             0x0..=0x001f_ffff => self.memory.read_half_word(addr),
             0x1F801C00..=0x1F801E80 => self.spu.read_half_word(addr),
-            0x1F801044 => 0xFFFF, //JOY_STAT
+            //0x1F801044 => 0xFFFF, //JOY_STAT
             0x1F800000..=0x1F8003FF => self.scratchpad.read_half_word(addr - 0x1F800000),
             0x1f80_1000..=0x1f80_2fff => {
                 println!("Something tried to half word read an undefined IO address. The address was {:#X}", addr);

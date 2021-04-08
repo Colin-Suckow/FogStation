@@ -57,6 +57,7 @@ pub struct R3000 {
     set_load_delay_this_cycle: bool,
     i_mask: u32,
     pub i_status: u32,
+    pub log: bool,
 }
 
 impl R3000 {
@@ -74,6 +75,7 @@ impl R3000 {
             set_load_delay_this_cycle: false,
             i_mask: 0,
             i_status: 0,
+            log: false,
         }
     }
     /// Resets cpu registers to zero and sets program counter to reset vector (0xBFC00000)
@@ -99,21 +101,19 @@ impl R3000 {
         self.print_string(addr + 1);
     }
 
-    /// Runs the next instruction based on the PC location. Only useful for testing because it is not at all accurate to
-    /// how the cpu actually works.
     pub fn step_instruction(&mut self, timers: &mut TimerState) {
         //Fast load exe
-        // if self.pc == 0xbfc0700c {
-        //     println!("Jumping to exe...");
-        //     self.pc = 0x80010000;
-        // }
+        if self.pc == 0xbfc0700c {
+            println!("Jumping to exe...");
+            self.pc = 0x80010000;
+        }
 
         if self.pc == 0x000000A0 {
             if self.read_reg(9) == 0x3F {
                 //printf
                 //self.print_string(self.read_reg(4));
             } else {
-                //println!("SYSCALL A({:#X})", self.read_reg(9));
+                //println!("SYSCALL A({:#X}) pc: {:#X}", self.read_reg(9), self.old_pc);
             }
         }
 
@@ -124,12 +124,12 @@ impl R3000 {
                     std::str::from_utf8(&[self.read_reg(4) as u8]).unwrap()
                 );
             } else {
-                //println!("SYSCALL B({:#X})", self.read_reg(9));
+                //println!("SYSCALL B({:#X}) pc: {:#X}", self.read_reg(9), self.old_pc);
             }
         }
 
         if self.pc == 0x000000C0 {
-            //println!("SYSCALL C({:#X})", self.read_reg(9));
+            //println!("SYSCALL C({:#X}) pc: {:#X}", self.read_reg(9), self.old_pc);
         }
         //Check for vblank
         if self.main_bus.gpu.consume_vblank() {
@@ -152,7 +152,9 @@ impl R3000 {
         self.old_pc = self.pc;
         self.pc += 4;
 
-        //println!("Executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} rt: {} rd: {} (FULL {:#X})", instruction.opcode(), instruction.funct(), self.old_pc, instruction.rs(), instruction.rt(), instruction.rd(), instruction);
+        if self.log {
+            println!("Executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} rt: {} rd: {} (FULL {:#X})", instruction.opcode(), instruction.funct(), self.old_pc, instruction.rs(), instruction.rt(), instruction.rd(), instruction);
+        }
         //self.trace_file.write(format!("{:08x}: {:08x}\n", self.old_pc, instruction).as_bytes());
         //println!("{:08x}: {:08x}", self.old_pc, instruction);
 
@@ -161,7 +163,9 @@ impl R3000 {
         //Execute branch delay operation
         if self.delay_slot != 0 {
             let delay_instruction = self.main_bus.read_word(self.delay_slot);
-            //println!("DS executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} ({:#}) rt: {} rd: {}",delay_instruction.opcode(), delay_instruction.funct(), self.old_pc + 4, instruction.rs(), self.gen_registers[instruction.rs() as usize], instruction.rt(), instruction.rd());
+            if self.log {
+                println!("DS executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} ({:#}) rt: {} rd: {}",delay_instruction.opcode(), delay_instruction.funct(), self.old_pc + 4, instruction.rs(), self.gen_registers[instruction.rs() as usize], instruction.rt(), instruction.rd());
+            }
             //self.trace_file.write(format!("{:08x}: {:08x}\n", self.delay_slot, delay_instruction).as_bytes());
             //println!("{:08x}: {:08x}", self.delay_slot, delay_instruction);
             self.execute_instruction(delay_instruction, timers);
@@ -331,8 +335,10 @@ impl R3000 {
                     }
 
                     _ => panic!(
-                        "CPU: Unknown SPECIAL instruction. FUNCT is {0} ({0:#08b}, {0:#X})",
-                        instruction.funct()
+                        "CPU: Unknown SPECIAL instruction. FUNCT is {0} ({0:#08b}, {0:#X}) PC {1:#X} FULL {2:#X}",
+                        instruction.funct(),
+                        self.pc,
+                        instruction
                     ),
                 }
             }
@@ -706,10 +712,10 @@ impl R3000 {
     }
 
     fn op_rfe(&mut self) {
-        let status = self.cop0.read_reg(12);
+        let status = self.cop0.read_reg(12) & 0x3f;
         self.cop0
-            .write_reg(12, (status & 0xfffffff0) | ((status & 0x3c) >> 2));
-        self.pc = self.cop0.read_reg(14);
+            .write_reg(12, (status & !0xf) | (status >> 2));
+        //self.pc = self.cop0.read_reg(14);
     }
 
     fn op_mfc0(&mut self, instruction: u32) {

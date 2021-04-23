@@ -5,6 +5,7 @@ use crate::gpu::Gpu;
 use crate::memory::Memory;
 use crate::spu::SPU;
 
+
 pub struct MainBus {
     pub bios: Bios,
     memory: Memory,
@@ -71,7 +72,7 @@ impl MainBus {
             0x1F801814 => self.gpu.send_gp1_command(word),
             0x1F800000..=0x1F8003FF => self.scratchpad.write_word(addr - 0x1F800000, word),
             0x1f80_1000..=0x1f80_2fff => println!("Something tried to write to the hardware control registers. These are not currently emulated. The address was {:#X}. Value {:#X}", addr, word),
-            0x1FFE0000..=0x1FFE0200 => (), //println!("Something tried to write to the cache control registers. These are not currently emulated. The address was {:#X}", addr),
+            0x1FFE0000..=0x1FFE0200 => println!("Something tried to write to the cache control registers. These are not currently emulated. The address was {:#X}", addr),
             _ => {
                 panic!(
                     "Invalid word write at address {:#X}! This address is not mapped to any device.",
@@ -136,6 +137,7 @@ impl MainBus {
                 println!("Something tried to read the hardware control registers. These are not currently emulated, so a 0 is being returned. The address was {:#X}", addr);
                 0
             }
+            0x1FFFFFF7 => 0,
             0x1F800000..=0x1F8003FF => self.scratchpad.read_byte(addr - 0x1F800000),
             _ => panic!(
                 "Invalid byte read at address {:#X}! This address is not mapped to any device.",

@@ -97,6 +97,8 @@ pub struct CDDrive {
     reg_interrupt_flag: u8,
     reg_interrupt_enable: u8,
 
+    read_enabled: bool,
+
     //Probably useless registers
     reg_sound_map_data_out: u8,
 }
@@ -123,6 +125,8 @@ impl CDDrive {
             seek_target: DiscIndex::new(0, 0, 0),
             seek_complete: false,
             read_offset: 0,
+
+            read_enabled: false,
 
             reg_interrupt_flag: 0,
             reg_interrupt_enable: 0,
@@ -152,7 +156,7 @@ impl CDDrive {
             0x1F801803 => match self.status_index {
                 0 => {
                     self.want_data = val.get_bit(7); //Only handle want_data. This will probably bite me later
-                    self.data_queue.clear();
+                    //self.data_queue.clear();
                 },
                 1 => self.write_interrupt_flag_register(val),
                 2 => panic!("CD: 0x1F801803 write byte unknown index 2"),
@@ -256,7 +260,7 @@ impl CDDrive {
         status |= (!self.data_queue.is_empty() as u8) << 6;
         // 7 BUSYSTS
         //TODO when I find out what it means to be busy
-        status |= 1 << 7;
+        //status |= 0 << 7;
 
         status
     }
@@ -353,10 +357,7 @@ pub fn step_cycle(cpu: &mut R3000) {
             if cpu.main_bus.cd_drive.reg_interrupt_enable & packet.cause.bitflag()
             == packet.cause.bitflag()
             {
-                //if !(packet.cause == IntCause::INT1 && !cpu.main_bus.cd_drive.want_data) {
-                    cpu.fire_external_interrupt(InterruptSource::CDROM);
-                    println!("CD: Fired interrupt");
-                //}
+                cpu.fire_external_interrupt(InterruptSource::CDROM);
             }
 
             //If the response has an extra response, push that to the front of the line
@@ -382,17 +383,17 @@ pub fn step_cycle(cpu: &mut R3000) {
                 0x6 => {
                     //ReadN
                     println!("Post ReadN");
-                    let response_packet = Packet {
-                        cause: IntCause::INT1,
-                        response: vec![cpu.main_bus.cd_drive.get_stat()],
-                        execution_cycles: 1000,
-                        extra_response: None,
-                        command: 0x6,
-                    };
-                    //if cpu.main_bus.cd_drive.want_data {
-                        cpu.main_bus.cd_drive.pending_responses.push_back(Response::Packet(response_packet));
-                    //}
+                    if cpu.main_bus.cd_drive.read_enabled {
+                        let response_packet = Packet {
+                            cause: IntCause::INT1,
+                            response: vec![cpu.main_bus.cd_drive.get_stat()],
+                            execution_cycles: 0x6e1cd,
+                            extra_response: None,
+                            command: 0x6,
+                        };
 
+                        cpu.main_bus.cd_drive.pending_responses.push_front(Response::Packet(response_packet));
+                    }
                 }
 
                 0x9 => {
@@ -400,43 +401,13 @@ pub fn step_cycle(cpu: &mut R3000) {
                     if packet.cause == IntCause::INT2 {
                         println!("Post pause");
                         cpu.main_bus.cd_drive.pending_responses.clear();
-                        cpu.log = true;
+                        //cpu.log = true;
                     }
                     
                 }
                 _ => () //No actions for this command
             };
-        } else {
-            //Datablock
-            
-                println!("Running post datablock");
-                // let mut response_packet = Packet {
-                //     cause: IntCause::INT1,
-                //     response: vec![cpu.main_bus.cd_drive.get_stat()],
-                //     execution_cycles: 1000,
-                //     extra_response: None,
-                //     command: 0x6,
-                // };
-    
-                // let data = cpu.main_bus.cd_drive.disc.as_ref().expect("Tried to read nonexistant disc!").read_sector(
-                //     cpu.main_bus.cd_drive.seek_target.plus_sector_offset(cpu.main_bus.cd_drive.read_offset)
-                // );
-    
-                // cpu.main_bus.cd_drive.read_offset += 1;
-    
-                // let block = Block {
-                //     data: Vec::from(data)
-                // };
-    
-                // response_packet.extra_response = Some(Box::new(Response::Datablock(block)));
-    
-                // cpu.main_bus
-                //     .cd_drive
-                //     .pending_responses
-                //     .push_back(Response::Packet(response_packet));
-            
-        }
-        //println!("{:?}", response);
+        };
         
         
 
@@ -450,5 +421,7 @@ pub fn step_cycle(cpu: &mut R3000) {
                 Response::Datablock(_) => 0,
             }
         }
+
+        println!("Pending responses {:?}", cpu.main_bus.cd_drive.pending_responses);
     }
 }

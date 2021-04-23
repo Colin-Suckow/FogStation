@@ -1,8 +1,8 @@
 use super::{CDDrive, DriveState, IntCause, MotorState, Packet, Response, Block};
 use crate::cdrom::disc::DiscIndex;
 
-pub(super) const AVG_FIRST_RESPONSE_TIME: u32 = 10000;
-pub(super) const AVG_SECOND_RESPONSE_TIME: u32 = 10000;
+pub(super) const AVG_FIRST_RESPONSE_TIME: u32 = 100;
+pub(super) const AVG_SECOND_RESPONSE_TIME: u32 = 0x4a00;
 
 pub(super) fn get_bios_date() -> Response {
     Response::Packet(Packet {
@@ -95,15 +95,16 @@ pub(super) fn set_mode(state: &mut CDDrive, mode: u8) -> Response {
 pub(super) fn read_with_retry(state: &mut CDDrive) -> Response {
     let mut initial_response = stat(state, 0x6);
     state.drive_state = DriveState::Read;
+    state.read_enabled = true;
     let mut response_packet = Packet {
         cause: IntCause::INT1,
         response: vec![state.get_stat()],
-        execution_cycles: 1000,
+        execution_cycles: 0x6e1cd,
         extra_response: None,
         command: 0x6,
     };
 
-
+    initial_response.execution_cycles = AVG_FIRST_RESPONSE_TIME;
     initial_response.extra_response = Some(Box::new(Response::Packet(response_packet)));
 
     return Response::Packet(initial_response);
@@ -114,16 +115,24 @@ pub(super) fn stop_read(state: &mut CDDrive) -> Response {
     println!("stop read (pause)");
     let mut initial_response = stat(state, 0x9);
     state.drive_state = DriveState::Idle;
-    state.want_data = false;
-    //state.pending_responses.clear();
+    state.read_enabled = false;
+    // match &state.pending_responses[0] {
+    //     Response::Packet(packet) => {
+    //         if packet.command == 0x6 {
+    //             //state.pending_responses.clear();
+    //         }
+    //     }
+    //     Response::Datablock(_) => (),//state.pending_responses.clear(),
+    // };
+    
     let response_packet = Packet {
         cause: IntCause::INT2,
         response: vec![state.get_stat()],
-        execution_cycles: 10,
+        execution_cycles: 0x21181c,
         extra_response: None,
         command: 0x9,
     };
-    initial_response.execution_cycles = 10;
+    initial_response.execution_cycles = AVG_FIRST_RESPONSE_TIME;
 
     initial_response.extra_response = Some(Box::new(Response::Packet(response_packet)));
     Response::Packet(initial_response)

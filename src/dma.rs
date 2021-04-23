@@ -214,6 +214,8 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
             3 => {
                 let words = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                 let base_addr = cpu.main_bus.dma.channels[num].base_addr;
+                println!("CD DMA: base {:#X}", base_addr);
+                println!("CD DMA: Details: {:#X}", cpu.main_bus.dma.channels[num].control);
 
                 for i in 0..(words * 4) {
                     let byte = cpu.main_bus.cd_drive.pop_data();
@@ -223,8 +225,9 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 cpu.main_bus.dma.raise_irq(num);
                 cpu.fire_external_interrupt(InterruptSource::DMA);
                 //cpu.log = true;
-                println!("Finished CD DMA transfer!");
+                println!("Finished CD DMA transfer! Last addr was {:#X}", base_addr + (words * 4));
             }
+
             6 => {
                 //OTC
                 //OTC is only used to reset the ordering table. So we can ignore a lot of the parameters

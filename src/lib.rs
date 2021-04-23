@@ -2,6 +2,7 @@ use bios::Bios;
 use bus::MainBus;
 use cpu::R3000;
 use timer::TimerState;
+use std::panic;
 
 use crate::cpu::InterruptSource;
 use crate::dma::execute_dma_cycle;
@@ -34,6 +35,7 @@ impl PSXEmu {
         let gpu = Gpu::new();
         let bus = MainBus::new(bios, memory, gpu);
         let r3000 = R3000::new(bus);
+
         PSXEmu {
             r3000: r3000,
             timers: TimerState::new(),
@@ -82,6 +84,7 @@ impl PSXEmu {
                 .main_bus
                 .write_byte((index + start_addr as usize) as u32, val.clone());
         }
+        self.r3000.load_exe = true;
         //self.r3000.pc = entrypoint;
         // self.r3000.gen_registers[29] = sp;
         // self.r3000.gen_registers[30] = sp;

@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let bios_data = match fs::read("SCPH1001.BIN") {
+    let bios_data = match fs::read("openbios.bin") {
         //SCPH1001.BIN openbios.bin
         Ok(data) => data,
         _ => {
@@ -36,6 +36,7 @@ fn main() {
 
     let mut emu = PSXEmu::new(bios_data);
     let mut halted = false;
+    let mut logging = false;
     emu.reset();
     emu.load_disc(disc);
 
@@ -113,6 +114,21 @@ fn main() {
                     ui.text(format!("{:.1} FPS", (1000.0 / frame_time as f64)));
                 } else {
                     ui.text("Halted");
+                    if ui.button(im_str!("Step Instruction"), [120.0, 20.0]) {
+                        emu.step_instruction();
+                    }
+                }
+
+                if ui.button(
+                    if logging {
+                        im_str!("Stop Logging")
+                    } else {
+                        im_str!("Start Logging")
+                    },
+                    [120.0, 20.0],
+                ) {
+                    logging = !logging;
+                    emu.r3000.log = logging;
                 }
 
                 match emu.loaded_disc() {

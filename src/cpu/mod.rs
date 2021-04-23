@@ -23,6 +23,7 @@ pub enum InterruptSource {
     Lightpen,
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Exception {
     IBE = 6,  //Bus error
     DBE = 7,  //Bus error Data
@@ -39,10 +40,12 @@ pub enum Exception {
     Int = 0,  //Interrupt
 }
 
+
 struct LoadDelay {
     register: u8,
     value: u32,
 }
+
 
 pub struct R3000 {
     pub gen_registers: [u32; 32],
@@ -58,6 +61,9 @@ pub struct R3000 {
     i_mask: u32,
     pub i_status: u32,
     pub log: bool,
+    pub load_exe: bool,
+    exec_delay: bool,
+    last_was_branch: bool,
 }
 
 impl R3000 {
@@ -76,6 +82,9 @@ impl R3000 {
             i_mask: 0,
             i_status: 0,
             log: false,
+            load_exe: false,
+            exec_delay: false,
+            last_was_branch: false,
         }
     }
     /// Resets cpu registers to zero and sets program counter to reset vector (0xBFC00000)
@@ -103,11 +112,16 @@ impl R3000 {
 
     pub fn step_instruction(&mut self, timers: &mut TimerState) {
         //Fast load exe
-        if self.pc == 0xbfc0700c {
-            println!("Jumping to exe...");
-            self.pc = 0x80010000;
+        if self.load_exe {
+            if self.pc == 0xbfc0700c {
+                println!("Jumping to exe...");
+                self.pc = 0x80010000;
+            }
         }
 
+        // if self.pc == 0x1000 {
+        //     self.log = true;
+        // }
         if self.pc == 0x000000A0 {
             if self.read_reg(9) == 0x3F {
                 //printf
@@ -131,6 +145,7 @@ impl R3000 {
         if self.pc == 0x000000C0 {
             //println!("SYSCALL C({:#X}) pc: {:#X}", self.read_reg(9), self.old_pc);
         }
+
         //Check for vblank
         if self.main_bus.gpu.consume_vblank() {
             self.i_status.set_bit(0, true);
@@ -138,6 +153,13 @@ impl R3000 {
 
         //Update the cdrom drive
         cdrom::step_cycle(self);
+        
+
+        let instruction = self.main_bus.read_word(self.pc);
+        self.old_pc = self.pc;
+        self.pc += 4;
+
+     
 
         //Handle interrupts
         if self.cop0.interrupt_enabled() {
@@ -148,16 +170,14 @@ impl R3000 {
             }
         }
 
-        let instruction = self.main_bus.read_word(self.pc);
-        self.old_pc = self.pc;
-        self.pc += 4;
-
         if self.log {
             println!("Executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} rt: {} rd: {} (FULL {:#X})", instruction.opcode(), instruction.funct(), self.old_pc, instruction.rs(), instruction.rt(), instruction.rd(), instruction);
         }
         //self.trace_file.write(format!("{:08x}: {:08x}\n", self.old_pc, instruction).as_bytes());
         //println!("{:08x}: {:08x}", self.old_pc, instruction);
 
+        self.exec_delay = false;
+        self.last_was_branch = false;
         self.execute_instruction(instruction, timers);
 
         //Execute branch delay operation
@@ -168,7 +188,9 @@ impl R3000 {
             }
             //self.trace_file.write(format!("{:08x}: {:08x}\n", self.delay_slot, delay_instruction).as_bytes());
             //println!("{:08x}: {:08x}", self.delay_slot, delay_instruction);
+            self.exec_delay = true;
             self.execute_instruction(delay_instruction, timers);
+            self.exec_delay = false;
             self.delay_slot = 0;
         }
 
@@ -241,6 +263,11 @@ impl R3000 {
                         //SYSCALL
                         //println!("SYSCALL {:#X}", self.read_reg(9));
                         self.op_syscall();
+                    }
+
+                    0xD => {
+                        //BREAK
+                        self.op_break();
                     }
 
                     0x10 => {
@@ -348,26 +375,29 @@ impl R3000 {
                 match instruction.rt() {
                     0x0 => {
                         //BLTZ
+                        self.last_was_branch = true;
                         self.op_bltz(instruction)
                     }
                     0x1 => {
                         //BGEZ
+                        self.last_was_branch = true;
+
                         self.op_bgez(instruction)
                     }
 
                     0x10 => {
                         //BLTZAL
+                        self.last_was_branch = true;
+
                         self.op_bltzal(instruction)
                     }
 
                     0x11 => {
                         //BGEZAL
+                        self.last_was_branch = true;
                         self.op_bgezal(instruction)
                     }
-                    _ => panic!(
-                        "CPU: Unknown test and branch instruction {} ({0:#X})",
-                        instruction.rt()
-                    ),
+                    _ => (), //psxtest_cpu spams a bunch of invalid instructions, so I'm not printing anything
                 }
             }
 
@@ -383,21 +413,25 @@ impl R3000 {
 
             0x4 => {
                 //BEQ
+                self.last_was_branch = true;
                 self.op_beq(instruction);
             }
 
             0x5 => {
                 //BNE
+                self.last_was_branch = true;
                 self.op_bne(instruction);
             }
 
             0x6 => {
                 //BLEZ
+                self.last_was_branch = true;
                 self.op_blez(instruction);
             }
 
             0x7 => {
                 //BGTZ
+                self.last_was_branch = true;
                 self.op_bgtz(instruction);
             }
 
@@ -551,15 +585,15 @@ impl R3000 {
 
     fn op_sw(&mut self, instruction: u32, timers: &mut TimerState) {
         let addr = instruction
-            .immediate()
-            .sign_extended()
+            .immediate_sign_extended()
             .wrapping_add(self.read_reg(instruction.rs()));
 
         if addr % 4 != 0 {
             //unaligned address
             self.fire_exception(Exception::AdES);
         } else {
-            self.write_bus_word(addr, self.read_reg(instruction.rt()), timers);
+            let val = self.read_reg(instruction.rt());
+            self.write_bus_word(addr, val, timers);
         };
     }
 
@@ -715,7 +749,6 @@ impl R3000 {
         let status = self.cop0.read_reg(12) & 0x3f;
         self.cop0
             .write_reg(12, (status & !0xf) | (status >> 2));
-        //self.pc = self.cop0.read_reg(14);
     }
 
     fn op_mfc0(&mut self, instruction: u32) {
@@ -829,16 +862,16 @@ impl R3000 {
     }
 
     fn op_bgezal(&mut self, instruction: u32) {
+        self.write_reg(31, self.pc + 4);
         if self.read_reg(instruction.rs()) as i32 >= 0 {
-            self.write_reg(31, self.pc + 4);
             self.delay_slot = self.pc;
             self.pc = (instruction.immediate_sign_extended() << 2).wrapping_add(self.delay_slot);
         }
     }
 
     fn op_bltzal(&mut self, instruction: u32) {
+        self.write_reg(31, self.pc + 4);
         if self.read_reg(instruction.rs()).get_bit(31) {
-            self.write_reg(31, self.pc + 4);
             self.delay_slot = self.pc;
             self.pc = (instruction.immediate_sign_extended() << 2).wrapping_add(self.delay_slot);
         }
@@ -945,17 +978,18 @@ impl R3000 {
     }
 
     fn op_add(&mut self, instruction: u32) {
+        let val = match (self.read_reg(instruction.rs()) as i32)
+        .checked_add(self.read_reg(instruction.rt()) as i32)
+        {
+            Some(val) => val as u32,
+            None => {
+                self.fire_exception(Exception::Ovf);
+                return;
+            }
+        };
         self.write_reg(
             instruction.rd(),
-            match (self.read_reg(instruction.rs()) as i32)
-                .checked_add(self.read_reg(instruction.rt()) as i32)
-            {
-                Some(val) => val as u32,
-                None => {
-                    self.fire_exception(Exception::Ovf);
-                    return;
-                }
-            },
+            val
         )
     }
 
@@ -1011,12 +1045,12 @@ impl R3000 {
 
     fn op_jalr(&mut self, instruction: u32) {
         let target = self.read_reg(instruction.rs());
+        self.write_reg(instruction.rd(), self.pc + 4);
         if target % 4 != 0 {
             self.fire_exception(Exception::AdEL);
         } else {
             self.delay_slot = self.pc;
             self.pc = target;
-            self.write_reg(instruction.rd(), self.delay_slot + 4);
         }
     }
 
@@ -1073,13 +1107,23 @@ impl R3000 {
         );
     }
 
+    fn op_break(&mut self) {
+        self.fire_exception(Exception::Bp);
+    }
+
     pub fn fire_exception(&mut self, exception: Exception) {
-        if self.delay_slot != 0 {
-            self.cop0.write_reg(14, self.pc - 4);
+        self.cop0.set_cause_execode(&exception);
+
+        if self.exec_delay && exception != Exception::Int && self.last_was_branch {
+            self.cop0.write_reg(13, self.cop0.read_reg(13) | (1 << 31));
+            self.cop0.write_reg(14, self.old_pc - 4);
+
         } else {
-            self.cop0.write_reg(14, self.pc);
+            self.cop0.write_reg(13, self.cop0.read_reg(13) & !(1 << 31));
+            self.cop0.write_reg(14, self.old_pc);
+
         }
-        self.cop0.set_cause_execode(exception);
+        
         let old_status = self.cop0.read_reg(12);
         self.cop0.write_reg(
             12,

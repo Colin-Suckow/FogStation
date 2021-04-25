@@ -1252,6 +1252,12 @@ impl R3000 {
 
     fn delay_write_reg(&mut self, register_number: u8, value: u32) {
         if register_number != 0 {
+            //Get rid of old writes to the same register 
+            for i in (0..self.load_delays.len()).rev() {
+                if self.load_delays[i].register == register_number {
+                    self.load_delays.remove(i);
+                }
+            }
             self.load_delays.push(LoadDelay {
                 register: register_number,
                 value: value,

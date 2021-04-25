@@ -176,10 +176,6 @@ impl R3000 {
         //self.trace_file.write(format!("{:08x}: {:08x}\n", self.old_pc, instruction).as_bytes());
         //println!("{:08x}: {:08x}", self.old_pc, instruction);
 
-        //Execute delayed load
-        //Two separate if's because rust doesn't let you have 'if let' with other conditionals
-       
-       
 
         if self.log && !self.load_delays.is_empty() {
             println!("{:?}", self.load_delays);
@@ -935,10 +931,10 @@ impl R3000 {
     }
 
     fn op_mult(&mut self, instruction: u32) {
-        let result = (self.read_reg(instruction.rs()) as u64) as i32
-            * (self.read_reg(instruction.rt()) as u64) as i32;
-        self.lo = (result as u64 & 0xFFFF_FFFF) as u32;
-        self.hi = ((result as u64 >> 32) & 0xFFFF_FFFF) as u32;
+        let result = ((self.read_reg(instruction.rs()) as i32) as i64
+            * (self.read_reg(instruction.rt()) as i32) as i64) as u64;
+        self.lo = result as u32;
+        self.hi = (result >> 32) as u32;
     }
 
     fn op_addu(&mut self, instruction: u32) {
@@ -1138,8 +1134,7 @@ impl R3000 {
 
     pub fn fire_exception(&mut self, exception: Exception) {
         self.cop0.set_cause_execode(&exception);
-
-        if self.exec_delay && exception != Exception::Int && self.last_was_branch {
+       if self.delay_slot != 0 && exception != Exception::Int {
             self.cop0.write_reg(13, self.cop0.read_reg(13) | (1 << 31));
             self.cop0.write_reg(14, self.old_pc - 4);
         } else {

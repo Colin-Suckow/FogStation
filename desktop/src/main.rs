@@ -1,6 +1,8 @@
 use imgui_glium_renderer::Texture;
 use psx_emu::PSXEmu;
 use disc::*;
+use getopts::Options;
+
 
 use byteorder::{ByteOrder, LittleEndian};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -21,27 +23,62 @@ use glium::{
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
+
+
 fn main() {
+    let mut bios_path = "SCPH1001.BIN".to_string();
+    let mut cue_path: Option<&str> = None;
+    let mut exe_path: Option<&str> = None;
+    let mut logging = false;
+
     let args: Vec<String> = env::args().collect();
-    let bios_data = match fs::read("openbios.bin") {
+    
+    let mut opts = Options::new();
+    opts.optopt("b", "bios", "BIOS file path", "FILE");
+    opts.optopt("c", "cue", "CUE file path", "FILE");
+    opts.optopt("e", "exe", "EXE file path", "FILE");
+    opts.optflag("l", "log", "Enable logging");
+
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => { m }
+        Err(f) => { panic!(f.to_string()) }
+    };
+
+    if let Some(new_path) = matches.opt_str("b") {
+        println!("Using alternate bios file: {}", new_path);
+        bios_path = new_path;
+    } else {
+        println!("Using defualt bios file: {}", bios_path);
+    }
+
+    let bios_data = match fs::read(&bios_path) {
         //SCPH1001.BIN openbios.bin
         Ok(data) => data,
         _ => {
-            println!("Unable to read bios file. Make sure there is a file named SCPH1001.BIN in the same directory.");
+            println!("Unable to read bios file!");
             return;
         }
     };
 
-    let disc = load_disc_from_cuesheet(Path::new("/home/colin/Games/ps1/ridge_racer/ridge_racer.cue").to_path_buf());
-
     let mut emu = PSXEmu::new(bios_data);
     let mut halted = false;
-    let mut logging = false;
     emu.reset();
-    emu.load_disc(disc);
 
-    if args.len() == 2 {
-        let exe = fs::read(&args[1]).unwrap();
+    if matches.opt_present("l") {
+        logging = true;
+        emu.r3000.log = true;
+    }
+
+    if let Some(disc_path) = matches.opt_str("c") {
+        println!("Loading CUE: {}", disc_path);
+        let disc = load_disc_from_cuesheet(Path::new(&disc_path).to_path_buf());
+        emu.load_disc(disc);
+    }
+    
+
+    if let Some(exe_path) = matches.opt_str("e") {
+        println!("Loading executable: {}", exe_path);
+        let exe = fs::read(exe_path).unwrap();
         let exe_data = exe[0x800..].to_vec();
         let destination = LittleEndian::read_u32(&exe[0x18..0x1C]);
         let entrypoint = LittleEndian::read_u32(&exe[0x10..0x14]);

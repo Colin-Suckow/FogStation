@@ -9,3 +9,5 @@ Cargo.lock
 /desktop/target
 /.idea
 /.vscode
+*.log
+*.elf

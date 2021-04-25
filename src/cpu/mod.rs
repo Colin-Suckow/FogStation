@@ -40,15 +40,16 @@ pub enum Exception {
     Int = 0,  //Interrupt
 }
 
-
+#[derive(Debug)]
 struct LoadDelay {
     register: u8,
     value: u32,
+    cycle_loaded: u32,
 }
-
 
 pub struct R3000 {
     pub gen_registers: [u32; 32],
+    cycle_count: u32,
     pub pc: u32,
     old_pc: u32,
     hi: u32,
@@ -56,8 +57,7 @@ pub struct R3000 {
     pub main_bus: MainBus,
     delay_slot: u32,
     cop0: Cop0,
-    load_delay: Option<LoadDelay>,
-    set_load_delay_this_cycle: bool,
+    load_delays: Vec<LoadDelay>,
     i_mask: u32,
     pub i_status: u32,
     pub log: bool,
@@ -70,6 +70,7 @@ impl R3000 {
     pub fn new(bus: MainBus) -> R3000 {
         R3000 {
             gen_registers: [0; 32],
+            cycle_count: 0,
             pc: 0,
             old_pc: 0,
             hi: 0,
@@ -77,8 +78,7 @@ impl R3000 {
             main_bus: bus,
             delay_slot: 0,
             cop0: Cop0::new(),
-            load_delay: None,
-            set_load_delay_this_cycle: false,
+            load_delays: Vec::new(),
             i_mask: 0,
             i_status: 0,
             log: false,
@@ -98,6 +98,7 @@ impl R3000 {
         self.pc = 0xBFC00000; // Points to the bios entry point
         self.cop0
             .write_reg(12, self.cop0.read_reg(12).set_bit(23, true).clone());
+        self.load_delays = Vec::new();
     }
 
     fn print_string(&mut self, addr: u32) {
@@ -153,53 +154,81 @@ impl R3000 {
 
         //Update the cdrom drive
         cdrom::step_cycle(self);
-        
 
         let instruction = self.main_bus.read_word(self.pc);
         self.old_pc = self.pc;
         self.pc += 4;
 
-     
+        
+
+        if self.log {
+            println!(
+                "Executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} rt: {} rd: {} (FULL {:#X})",
+                instruction.opcode(),
+                instruction.funct(),
+                self.old_pc,
+                instruction.rs(),
+                instruction.rt(),
+                instruction.rd(),
+                instruction
+            );
+        }
+        //self.trace_file.write(format!("{:08x}: {:08x}\n", self.old_pc, instruction).as_bytes());
+        //println!("{:08x}: {:08x}", self.old_pc, instruction);
+
+        //Execute delayed load
+        //Two separate if's because rust doesn't let you have 'if let' with other conditionals
+       
+       
+
+        if self.log && !self.load_delays.is_empty() {
+            println!("{:?}", self.load_delays);
+        }
+
+        self.exec_delay = false;
+        self.last_was_branch = false;
+        self.cycle_count = self.cycle_count.wrapping_add(1);
+        self.execute_instruction(instruction, timers);
 
         //Handle interrupts
         if self.cop0.interrupt_enabled() {
             for i in 0..=10 {
                 if self.i_status.get_bit(i) && self.i_mask.get_bit(i) {
+                    self.cycle_count = self.cycle_count.wrapping_add(1);
                     self.fire_exception(Exception::Int);
                 }
             }
         }
 
-        if self.log {
-            println!("Executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} rt: {} rd: {} (FULL {:#X})", instruction.opcode(), instruction.funct(), self.old_pc, instruction.rs(), instruction.rt(), instruction.rd(), instruction);
+        for i in (0..self.load_delays.len()).rev() {
+            if self.load_delays[i].cycle_loaded != self.cycle_count {
+                self.write_reg(self.load_delays[i].register, self.load_delays[i].value);
+                self.load_delays.remove(i);
+            }
         }
-        //self.trace_file.write(format!("{:08x}: {:08x}\n", self.old_pc, instruction).as_bytes());
-        //println!("{:08x}: {:08x}", self.old_pc, instruction);
-
-        self.exec_delay = false;
-        self.last_was_branch = false;
-        self.execute_instruction(instruction, timers);
 
         //Execute branch delay operation
         if self.delay_slot != 0 {
             let delay_instruction = self.main_bus.read_word(self.delay_slot);
             if self.log {
-                println!("DS executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} ({:#}) rt: {} rd: {}",delay_instruction.opcode(), delay_instruction.funct(), self.old_pc + 4, instruction.rs(), self.gen_registers[instruction.rs() as usize], instruction.rt(), instruction.rd());
+                println!(
+                    "DS executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} ({:#}) rt: {} rd: {}",
+                    delay_instruction.opcode(),
+                    delay_instruction.funct(),
+                    self.old_pc + 4,
+                    instruction.rs(),
+                    self.gen_registers[instruction.rs() as usize],
+                    instruction.rt(),
+                    instruction.rd()
+                );
             }
             //self.trace_file.write(format!("{:08x}: {:08x}\n", self.delay_slot, delay_instruction).as_bytes());
             //println!("{:08x}: {:08x}", self.delay_slot, delay_instruction);
             self.exec_delay = true;
+            self.cycle_count = self.cycle_count.wrapping_add(1);
             self.execute_instruction(delay_instruction, timers);
             self.exec_delay = false;
             self.delay_slot = 0;
-        }
-
-        //Execute delayed load
-        //Two separate if's because rust doesn't let you have 'if let' with other conditionals
-        if !self.set_load_delay_this_cycle {
-            if let Some(load) = self.load_delay.take() {
-                self.write_reg(load.register, load.value);
-            }
         }
     }
 
@@ -645,7 +674,7 @@ impl R3000 {
 
         let word = self.read_bus_word(addr & !3, timers);
         let reg_val = self.read_reg(instruction.rt());
-        self.write_reg(
+        self.delay_write_reg(
             instruction.rt(),
             match addr & 3 {
                 3 => (reg_val & 0xffffff00) | (word >> 24),
@@ -665,7 +694,7 @@ impl R3000 {
 
         let word = self.read_bus_word(addr & !3, timers);
         let reg_val = self.read_reg(instruction.rt());
-        self.write_reg(
+        self.delay_write_reg(
             instruction.rt(),
             match addr & 3 {
                 0 => (reg_val & 0x00ffffff) | (word << 24),
@@ -705,7 +734,7 @@ impl R3000 {
             self.fire_exception(Exception::AdEL);
         } else {
             let val = self.read_bus_half_word(addr, timers).zero_extended();
-            self.write_reg(instruction.rt(), val);
+            self.delay_write_reg(instruction.rt(), val);
         };
     }
 
@@ -713,7 +742,7 @@ impl R3000 {
         let addr =
             (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         let val = self.main_bus.read_byte(addr).zero_extended();
-        self.write_reg(instruction.rt(), val);
+        self.delay_write_reg(instruction.rt(), val);
     }
 
     fn op_lw(&mut self, instruction: u32, timers: &mut TimerState) {
@@ -723,7 +752,7 @@ impl R3000 {
             self.fire_exception(Exception::AdEL);
         } else {
             let val = self.read_bus_word(addr, timers);
-            self.write_reg(instruction.rt(), val);
+            self.delay_write_reg(instruction.rt(), val);
         };
     }
 
@@ -734,7 +763,7 @@ impl R3000 {
             self.fire_exception(Exception::AdEL);
         } else {
             let val = self.read_bus_half_word(addr, timers).sign_extended();
-            self.write_reg(instruction.rt(), val);
+            self.delay_write_reg(instruction.rt(), val);
         };
     }
 
@@ -742,17 +771,16 @@ impl R3000 {
         let addr =
             (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         let val = self.main_bus.read_byte(addr).sign_extended();
-        self.write_reg(instruction.rt(), val);
+        self.delay_write_reg(instruction.rt(), val);
     }
 
     fn op_rfe(&mut self) {
         let status = self.cop0.read_reg(12) & 0x3f;
-        self.cop0
-            .write_reg(12, (status & !0xf) | (status >> 2));
+        self.cop0.write_reg(12, (status & !0xf) | (status >> 2));
     }
 
     fn op_mfc0(&mut self, instruction: u32) {
-        self.write_reg(instruction.rt(), self.cop0.read_reg(instruction.rd()));
+        self.delay_write_reg(instruction.rt(), self.cop0.read_reg(instruction.rd()));
     }
 
     fn op_mtc0(&mut self, instruction: u32) {
@@ -979,7 +1007,7 @@ impl R3000 {
 
     fn op_add(&mut self, instruction: u32) {
         let val = match (self.read_reg(instruction.rs()) as i32)
-        .checked_add(self.read_reg(instruction.rt()) as i32)
+            .checked_add(self.read_reg(instruction.rt()) as i32)
         {
             Some(val) => val as u32,
             None => {
@@ -987,10 +1015,7 @@ impl R3000 {
                 return;
             }
         };
-        self.write_reg(
-            instruction.rd(),
-            val
-        )
+        self.write_reg(instruction.rd(), val)
     }
 
     fn op_divu(&mut self, instruction: u32) {
@@ -1117,13 +1142,11 @@ impl R3000 {
         if self.exec_delay && exception != Exception::Int && self.last_was_branch {
             self.cop0.write_reg(13, self.cop0.read_reg(13) | (1 << 31));
             self.cop0.write_reg(14, self.old_pc - 4);
-
         } else {
             self.cop0.write_reg(13, self.cop0.read_reg(13) & !(1 << 31));
             self.cop0.write_reg(14, self.old_pc);
-
         }
-        
+
         let old_status = self.cop0.read_reg(12);
         self.cop0.write_reg(
             12,
@@ -1229,6 +1252,16 @@ impl R3000 {
         match register_number {
             0 => (), //Prevent writing to the zero register
             _ => self.gen_registers[register_number as usize] = value,
+        }
+    }
+
+    fn delay_write_reg(&mut self, register_number: u8, value: u32) {
+        if register_number != 0 {
+            self.load_delays.push(LoadDelay {
+                register: register_number,
+                value: value,
+                cycle_loaded: self.cycle_count,
+            });
         }
     }
 }

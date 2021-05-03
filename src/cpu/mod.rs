@@ -51,7 +51,7 @@ pub struct R3000 {
     pub gen_registers: [u32; 32],
     cycle_count: u32,
     pub pc: u32,
-    old_pc: u32,
+    current_pc: u32,
     hi: u32,
     lo: u32,
     pub main_bus: MainBus,
@@ -72,7 +72,7 @@ impl R3000 {
             gen_registers: [0; 32],
             cycle_count: 0,
             pc: 0,
-            old_pc: 0,
+            current_pc: 0,
             hi: 0,
             lo: 0,
             main_bus: bus,
@@ -120,6 +120,10 @@ impl R3000 {
             }
         }
 
+        // if self.pc == 0x8005a30 {
+        //     self.log = true;
+        // }
+
         // if self.pc == 0x1000 {
         //     self.log = true;
         // }
@@ -155,18 +159,20 @@ impl R3000 {
         //Update the cdrom drive
         cdrom::step_cycle(self);
 
-        let instruction = self.main_bus.read_word(self.pc);
-        self.old_pc = self.pc;
-        self.pc += 4;
+        // if self.pc == 0x8005A27C {
+        //     self.log = true;
+        // }
 
-        
+        let instruction = self.main_bus.read_word(self.pc);
+        self.current_pc = self.pc;
+        self.pc += 4;
 
         if self.log {
             println!(
                 "Executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} rt: {} rd: {} (FULL {:#X})",
                 instruction.opcode(),
                 instruction.funct(),
-                self.old_pc,
+                self.current_pc,
                 instruction.rs(),
                 instruction.rt(),
                 instruction.rd(),
@@ -175,16 +181,6 @@ impl R3000 {
         }
         //self.trace_file.write(format!("{:08x}: {:08x}\n", self.old_pc, instruction).as_bytes());
         //println!("{:08x}: {:08x}", self.old_pc, instruction);
-
-
-        if self.log && !self.load_delays.is_empty() {
-            println!("{:?}", self.load_delays);
-        }
-
-        self.exec_delay = false;
-        self.last_was_branch = false;
-        self.cycle_count = self.cycle_count.wrapping_add(1);
-        self.execute_instruction(instruction, timers);
 
         //Handle interrupts
         if self.cop0.interrupt_enabled() {
@@ -195,6 +191,11 @@ impl R3000 {
                 }
             }
         }
+
+        self.exec_delay = false;
+        self.last_was_branch = false;
+        self.execute_instruction(instruction, timers);
+        self.cycle_count = self.cycle_count.wrapping_add(1); //This being here basically disables the load delay
 
         for i in (0..self.load_delays.len()).rev() {
             if self.load_delays[i].cycle_loaded != self.cycle_count {
@@ -211,7 +212,7 @@ impl R3000 {
                     "DS executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} ({:#}) rt: {} rd: {}",
                     delay_instruction.opcode(),
                     delay_instruction.funct(),
-                    self.old_pc + 4,
+                    self.current_pc + 4,
                     instruction.rs(),
                     self.gen_registers[instruction.rs() as usize],
                     instruction.rt(),
@@ -221,10 +222,17 @@ impl R3000 {
             //self.trace_file.write(format!("{:08x}: {:08x}\n", self.delay_slot, delay_instruction).as_bytes());
             //println!("{:08x}: {:08x}", self.delay_slot, delay_instruction);
             self.exec_delay = true;
-            self.cycle_count = self.cycle_count.wrapping_add(1);
             self.execute_instruction(delay_instruction, timers);
+            self.cycle_count = self.cycle_count.wrapping_add(1);
             self.exec_delay = false;
             self.delay_slot = 0;
+        }
+
+        for i in (0..self.load_delays.len()).rev() {
+            if self.load_delays[i].cycle_loaded != self.cycle_count {
+                self.write_reg(self.load_delays[i].register, self.load_delays[i].value);
+                self.load_delays.remove(i);
+            }
         }
     }
 
@@ -876,8 +884,8 @@ impl R3000 {
 
     fn op_jal(&mut self, instruction: u32) {
         self.delay_slot = self.pc;
-        self.pc = (instruction.address() << 2) | (self.delay_slot & 0xF0000000);
         self.write_reg(31, self.delay_slot + 4);
+        self.pc = (instruction.address() << 2) | (self.delay_slot & 0xF0000000);
     }
 
     fn op_j(&mut self, instruction: u32) {
@@ -1035,9 +1043,16 @@ impl R3000 {
         self.lo = (match rs.checked_div(rt) {
             Some(val) => val,
             None => {
-                //println!("CPU: Tried to divide by zero at pc: {:#X}!", self.old_pc);
-                self.hi = rs as u32;
-                self.lo = 0xFFFFFFFF;
+                if rt == -1 {
+                    self.hi = 0;
+                    self.lo = 0x80000000 as u32;
+                } else if rs < 0 {
+                    self.hi = rs as u32;
+                    self.lo = 1;
+                } else {
+                    self.hi = rs as u32;
+                    self.lo = 0xffffffff as u32;
+                }
                 return;
             }
         }) as u32;
@@ -1133,13 +1148,20 @@ impl R3000 {
     }
 
     pub fn fire_exception(&mut self, exception: Exception) {
+        println!("CPU EXCEPTION: Type: {:?} PC: {:#X}", exception, self.current_pc);
         self.cop0.set_cause_execode(&exception);
-       if self.delay_slot != 0 && exception != Exception::Int {
+
+
+        if self.delay_slot != 0 {
             self.cop0.write_reg(13, self.cop0.read_reg(13) | (1 << 31));
-            self.cop0.write_reg(14, self.old_pc - 4);
+            self.cop0.write_reg(14, self.pc - 8);
         } else {
             self.cop0.write_reg(13, self.cop0.read_reg(13) & !(1 << 31));
-            self.cop0.write_reg(14, self.old_pc);
+            if exception == Exception::Int {
+                self.cop0.write_reg(14, self.pc);
+            } else {
+                self.cop0.write_reg(14, self.pc - 4);
+            }
         }
 
         let old_status = self.cop0.read_reg(12);
@@ -1252,7 +1274,7 @@ impl R3000 {
 
     fn delay_write_reg(&mut self, register_number: u8, value: u32) {
         if register_number != 0 {
-            //Get rid of old writes to the same register 
+            //Get rid of old writes to the same register
             for i in (0..self.load_delays.len()).rev() {
                 if self.load_delays[i].register == register_number {
                     self.load_delays.remove(i);

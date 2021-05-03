@@ -132,6 +132,7 @@ impl Gpu {
     }
 
     pub fn read_word_gp0(&mut self) -> u32 {
+        //println!("Reading gp0");
         0x0 as u32
     }
 

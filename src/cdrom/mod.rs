@@ -3,7 +3,7 @@ use commands::*;
 use disc::*;
 
 use crate::cpu::{InterruptSource, R3000};
-use std::{borrow::Borrow, collections::VecDeque};
+use std::{borrow::{Borrow, BorrowMut}, collections::VecDeque};
 
 mod commands;
 pub mod disc;
@@ -57,7 +57,7 @@ pub(super) struct Packet {
     cause: IntCause,
     response: Vec<u8>,
     execution_cycles: u32,
-    extra_response: Option<Box<Response>>,
+    extra_response: Option<Box<Packet>>,
     command: u8,
 }
 
@@ -66,15 +66,11 @@ pub(super) struct Block {
     data: Vec<u8>
 }
 
-#[derive(Debug)]
-pub(super) enum Response {
-    Packet(Packet),
-    Datablock(Block)
-}
 
 pub struct CDDrive {
     cycle_counter: u32,
-    pending_responses: VecDeque<Response>,
+    command_start_cycle: u32,
+    pending_response: Option<Packet>,
 
     drive_state: DriveState,
     motor_state: MotorState,
@@ -107,7 +103,9 @@ impl CDDrive {
     pub fn new() -> Self {
         Self {
             cycle_counter: 0,
-            pending_responses: VecDeque::new(),
+            command_start_cycle: 0,
+
+            pending_response: None,
 
             parameter_queue: VecDeque::new(),
             data_queue: VecDeque::new(),
@@ -209,37 +207,40 @@ impl CDDrive {
     }
 
     fn execute_command(&mut self, command: u8) {
-        //Execute
-        {
-            let parameters: Vec<u8> = self.parameter_queue.iter().map(|v| v.clone()).collect();
-            let response = match command {
-                0x1 => get_stat(self),
-                0x2 => set_loc(self, parameters[0], parameters[1], parameters[2]),
-                0x6 => read_with_retry(self),
-                0x9 => stop_read(self),
-                0xA => init(self),
-                0xE => set_mode(self, parameters[0]),
-                0x15 => seek_data(self),
-                0x1A => get_id(self),
-                0x19 => {
-                    //sub_function commands
-                    match parameters[0] {
-                        0x20 => commands::get_bios_date(),
-                        _ => panic!("CD: Unknown sub_function command {:#X}", parameters[0]),
-                    }
-                }
-                _ => panic!("CD: Unknown command {:#X}!", command),
-            };
-            self.pending_responses.push_back(response);
-        }
+        // Make sure theres no pending command
+        let is_readn = if let Some(res) = &self.pending_response {
+            res.cause == IntCause::INT1
+        } else {
+            false
+        };
 
-        //If this is the first response added to the queue, update the cycle counter
-        if self.pending_responses.len() == 1 {
-            self.cycle_counter = match &self.pending_responses[0] {
-                Response::Packet(packet) => packet.execution_cycles,
-                //If theres a datablock here, its going to be read very soon, so there shouldn't be a delay
-                _ => panic!("There shouln't be a block!"),
-            };
+        println!("Attemping to execute command!");
+
+        if self.pending_response.is_none() || is_readn {
+            println!("Executing");
+            //Execute
+            {
+                let parameters: Vec<u8> = self.parameter_queue.iter().map(|v| v.clone()).collect();
+                let response = match command {
+                    0x1 => get_stat(self),
+                    0x2 => set_loc(self, parameters[0], parameters[1], parameters[2]),
+                    0x6 => read_with_retry(self),
+                    0x9 => stop_read(self),
+                    0xA => init(self),
+                    0xE => set_mode(self, parameters[0]),
+                    0x15 => seek_data(self),
+                    0x1A => get_id(self),
+                    0x19 => {
+                        //sub_function commands
+                        match parameters[0] {
+                            0x20 => commands::get_bios_date(),
+                            _ => panic!("CD: Unknown sub_function command {:#X}", parameters[0]),
+                        }
+                    }
+                    _ => panic!("CD: Unknown command {:#X}!", command),
+                };
+                self.pending_response = Some(response);
+            }
         }
 
         //Clear out old parameters
@@ -329,29 +330,19 @@ impl CDDrive {
 }
 
 pub fn step_cycle(cpu: &mut R3000) {
-    if cpu.main_bus.cd_drive.cycle_counter > 0 {
-        cpu.main_bus.cd_drive.cycle_counter -= 1;
-        return;
-    } else {
-        if cpu.main_bus.cd_drive.pending_responses.len() == 0 {
-            //We could respond, but theres no pending responses
-            return;
-        }
-
-        let mut response = cpu.main_bus.cd_drive.pending_responses.pop_front().expect("CD: Unable to pop pending response!");
-        match &response {
-            Response::Packet(packet) => {
-                cpu.main_bus.cd_drive.response_queue = VecDeque::with_capacity(packet.response.len()); //Clear queue
-                cpu.main_bus.cd_drive.response_queue.extend(packet.response.iter());
-                cpu.main_bus.cd_drive.reg_interrupt_flag = packet.cause.bitflag();
-            }
-            Response::Datablock(block) => {
-                //cpu.main_bus.cd_drive.data_queue = VecDeque::with_capacity(BYTES_PER_SECTOR); //Clear queue
-                //cpu.main_bus.cd_drive.data_queue.extend(block.data.iter());
-            }
-        }
-
-        if let Response::Packet(packet) = &mut response {
+    if let Some(pending_response) = &mut cpu.main_bus.cd_drive.pending_response {
+        pending_response.execution_cycles -= 1;
+        //println!("{}", pending_response.execution_cycles);
+        if pending_response.execution_cycles == 0 {
+    
+            let mut packet = cpu.main_bus.cd_drive.pending_response.take().unwrap();
+           
+            cpu.main_bus.cd_drive.response_queue = VecDeque::with_capacity(packet.response.len()); //Clear queue
+            cpu.main_bus.cd_drive.response_queue.extend(packet.response.iter());
+            cpu.main_bus.cd_drive.reg_interrupt_flag = packet.cause.bitflag();
+        
+    
+            
             //Check if interrupt enabled. If so, fire interrupt
             println!("Interrupts {:#X} cause {:#X} command {:#X}", cpu.main_bus.cd_drive.reg_interrupt_enable, packet.cause.bitflag(), packet.command);
             if cpu.main_bus.cd_drive.reg_interrupt_enable & packet.cause.bitflag()
@@ -359,17 +350,17 @@ pub fn step_cycle(cpu: &mut R3000) {
             {
                 cpu.fire_external_interrupt(InterruptSource::CDROM);
             }
-
+    
             //If the response has an extra response, push that to the front of the line
             if let Some(ext_response) = packet.extra_response.take() {
-            cpu.main_bus
+                println!("Extra response, filling. {:?}", ext_response);
+                cpu.main_bus
                 .cd_drive
-                .pending_responses
-                .push_front(*ext_response);
-            }
-        }
-
-        if let Response::Packet(packet) = &mut response {
+                .pending_response = Some(*ext_response);
+            };
+          
+    
+            
             match packet.command {
                 0x15 => {
                     //Make sure this is the second response
@@ -379,49 +370,35 @@ pub fn step_cycle(cpu: &mut R3000) {
                         cpu.main_bus.cd_drive.drive_state = DriveState::Idle;
                     }
                 }
-
+    
                 0x6 => {
                     //ReadN
                     println!("Post ReadN");
+                  
                     if cpu.main_bus.cd_drive.read_enabled {
                         let response_packet = Packet {
                             cause: IntCause::INT1,
                             response: vec![cpu.main_bus.cd_drive.get_stat()],
-                            execution_cycles: 0x6e1cd,
+                            execution_cycles: 3_000_000,
                             extra_response: None,
                             command: 0x6,
                         };
-
-                        cpu.main_bus.cd_drive.pending_responses.push_front(Response::Packet(response_packet));
+    
+                        cpu.main_bus.cd_drive.pending_response = Some(response_packet);
                     }
                 }
-
+    
                 0x9 => {
                     //Pause
                     if packet.cause == IntCause::INT2 {
                         println!("Post pause");
-                        cpu.main_bus.cd_drive.pending_responses.clear();
+                        //cpu.main_bus.cd_drive.pending_responses.clear();
                         //cpu.log = true;
                     }
                     
                 }
                 _ => () //No actions for this command
             };
-        };
-        
-        
-
-        //Set cycle counter for next pending response
-        //This seems inaccurate. It doesn't start counting the delay till
-        //it is at the front of the queue. Realistically, the delay should
-        //start counting from the moment the command is fired.
-        if cpu.main_bus.cd_drive.pending_responses.len() > 0 {
-            cpu.main_bus.cd_drive.cycle_counter = match &cpu.main_bus.cd_drive.pending_responses[0] {
-                Response::Packet(packet) => packet.execution_cycles,
-                Response::Datablock(_) => 0,
-            }
         }
-
-        println!("Pending responses {:?}", cpu.main_bus.cd_drive.pending_responses);
     }
 }

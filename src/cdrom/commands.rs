@@ -131,7 +131,7 @@ pub(super) fn stop_read(state: &mut CDDrive) -> Packet {
     let response_packet = Packet {
         cause: IntCause::INT2,
         response: vec![state.get_stat()],
-        execution_cycles: 100_000_000,
+        execution_cycles: 1_000_000,
         extra_response: None,
         command: 0x9,
     };

@@ -183,14 +183,14 @@ impl R3000 {
         //println!("{:08x}: {:08x}", self.old_pc, instruction);
 
         //Handle interrupts
-        if self.cop0.interrupt_enabled() {
-            for i in 0..=10 {
-                if self.i_status.get_bit(i) && self.i_mask.get_bit(i) {
-                    self.cycle_count = self.cycle_count.wrapping_add(1);
-                    self.fire_exception(Exception::Int);
-                }
-            }
-        }
+        // if self.cop0.interrupt_enabled() {
+        //     for i in 0..=10 {
+        //         if self.i_status.get_bit(i) && self.i_mask.get_bit(i) {
+        //             self.cycle_count = self.cycle_count.wrapping_add(1);
+        //             self.fire_exception(Exception::Int);
+        //         }
+        //     }
+        // }
 
         self.exec_delay = false;
         self.last_was_branch = false;
@@ -1175,7 +1175,7 @@ impl R3000 {
             0x8000_0080
         };
 
-        self.cop0.write_reg(12, self.cop0.read_reg(12) << 4)
+        //self.cop0.write_reg(12, self.cop0.read_reg(12) << 4)
     }
 
     pub fn fire_external_interrupt(&mut self, source: InterruptSource) {
@@ -1184,7 +1184,8 @@ impl R3000 {
 
         self.i_status.set_bit(mask_bit, true);
 
-        if self.i_mask.get_bit(mask_bit) {
+        if self.cop0.interrupt_enabled() && self.i_mask.get_bit(mask_bit) {
+            self.cycle_count = self.cycle_count.wrapping_add(1);
             self.fire_exception(Exception::Int);
         }
     }

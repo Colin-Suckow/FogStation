@@ -39,6 +39,7 @@ impl MainBus {
             0x1F801080..=0x1F8010F4 => self.dma.read_word(addr),
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_word(addr - 0x1fc0_0000),
             0x1F800000..=0x1F8003FF => self.scratchpad.read_word(addr - 0x1F800000),
+            0x1F801060 => 0x00000B88, //RAM_SIZE
             _ => panic!(
                 "Invalid word read at address {:#X}! This address is not mapped to any device.",
                 addr

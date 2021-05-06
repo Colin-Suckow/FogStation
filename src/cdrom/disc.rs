@@ -23,6 +23,14 @@ impl DiscIndex {
         }
     }
 
+    pub fn new_dec(minutes: usize, seconds: usize, sectors: usize) -> Self {
+        Self {
+            minutes: minutes,
+            seconds: seconds,
+            sectors: sectors
+        }
+    }
+
     pub fn as_address(&self) -> u32 {
         let total_seconds = (self.minutes * 60) +self.seconds;
         let total_frames = ((total_seconds * SECTORS_PER_SECOND) + self.sectors) - 150;
@@ -31,11 +39,11 @@ impl DiscIndex {
     }
 
     pub fn plus_sector_offset(&self, offset_sectors: usize) -> DiscIndex {
-        let sectors = self.sectors.wrapping_add(offset_sectors);
+        let sectors = (self.sectors + offset_sectors) % 75;
         let raw_seconds = self.seconds + ((self.sectors + offset_sectors) / SECTORS_PER_SECOND);
         let seconds = raw_seconds % 60;
         let minutes = self.minutes + (raw_seconds / 60);
-        DiscIndex::new(minutes, seconds, sectors)
+        DiscIndex::new_dec(minutes, seconds, sectors)
     }
 }
 
@@ -75,9 +83,11 @@ impl Disc {
     pub fn read_sector(&self, location: DiscIndex, sector_size: &SectorSize) -> &[u8] {
         let address = location.as_address() as usize;
         let (track, track_offset) = self.track_of_offset(address as usize);
-        let data = &track.data[(address - track_offset) + 24..((address-track_offset) + *sector_size as usize + 24)];
+        let sector_address = (address - track_offset) + 24;
+        let data = &track.data[sector_address..sector_address + *sector_size as usize];
+        println!("data Byte 0 {:#X}", data[0]);
         println!("Reading sector from address {}. Sector mode: {} Sector size {:?}", address, track.data[address + 15], sector_size);
-        println!("According to the sector header, this is M: {:X} S: {:X} F: {:X}", track.data[(address - track_offset) + 12], track.data[(address - track_offset) + 13] ,track.data[(address - track_offset) + 14]);
+        println!("According to the sector header, this is M: {:X} ({}) S: {:X} ({}) F: {:X} ({})", track.data[(address - track_offset) + 12], bcd_to_dec(track.data[(address - track_offset) + 12] as usize), track.data[(address - track_offset) + 13], bcd_to_dec(track.data[(address - track_offset) + 13] as usize), track.data[(address - track_offset) + 14], bcd_to_dec(track.data[(address - track_offset) + 14] as usize));
         data
     }
 

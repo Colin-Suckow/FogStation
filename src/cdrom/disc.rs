@@ -1,24 +1,32 @@
-pub(super) const SECTORS_PER_SECOND: usize = 75;
-pub(super) const BYTES_PER_SECTOR: usize = 2048;
+use super::SectorSize;
 
+pub(super) const SECTORS_PER_SECOND: usize = 75;
+pub(super) const BYTES_PER_SECTOR: usize = 2352;
+
+#[derive(Debug)]
 pub struct DiscIndex {
     minutes: usize,
     seconds: usize,
     sectors: usize,
 }
 
+ fn bcd_to_dec(hex: usize) -> usize {
+        ((hex & 0xF0) >> 4) * 10 + (hex & 0x0F)
+    }
+
 impl DiscIndex {
     pub fn new(minutes: usize, seconds: usize, sectors: usize) -> Self {
         Self {
-            minutes,
-            seconds,
-            sectors
+            minutes: bcd_to_dec(minutes),
+            seconds: bcd_to_dec(seconds),
+            sectors: bcd_to_dec(sectors)
         }
     }
 
     pub fn as_address(&self) -> u32 {
-        let total_seconds = self.minutes * 60 + self.seconds;
-        let total_frames = total_seconds * SECTORS_PER_SECOND + self.sectors;
+        let total_seconds = (self.minutes * 60) +self.seconds;
+        let total_frames = ((total_seconds * SECTORS_PER_SECOND) + self.sectors) - 150;
+        println!(">>>>>>> Self {:?} SECTOR {}", self, total_frames);
         (total_frames * BYTES_PER_SECTOR) as u32
     }
 
@@ -64,10 +72,13 @@ impl Disc {
         self.tracks.push(track);
     }
 
-    pub fn read_sector(&self, location: DiscIndex) -> &[u8] {
+    pub fn read_sector(&self, location: DiscIndex, sector_size: &SectorSize) -> &[u8] {
         let address = location.as_address() as usize;
-        let (track, offset) = self.track_of_offset(address as usize);
-        &track.data[address - offset..=((address-offset) + BYTES_PER_SECTOR)]
+        let (track, track_offset) = self.track_of_offset(address as usize);
+        let data = &track.data[(address - track_offset) + 24..((address-track_offset) + *sector_size as usize + 24)];
+        println!("Reading sector from address {}. Sector mode: {} Sector size {:?}", address, track.data[address + 15], sector_size);
+        println!("According to the sector header, this is M: {:X} S: {:X} F: {:X}", track.data[(address - track_offset) + 12], track.data[(address - track_offset) + 13] ,track.data[(address - track_offset) + 14]);
+        data
     }
 
     fn track_of_offset(&self, offset: usize) -> (&DiscTrack, usize) {

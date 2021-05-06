@@ -30,6 +30,7 @@ fn main() {
     let mut cue_path: Option<&str> = None;
     let mut exe_path: Option<&str> = None;
     let mut logging = false;
+    let mut headless = false;
 
     let args: Vec<String> = env::args().collect();
     
@@ -38,6 +39,7 @@ fn main() {
     opts.optopt("c", "cue", "CUE file path", "FILE");
     opts.optopt("e", "exe", "EXE file path", "FILE");
     opts.optflag("l", "log", "Enable logging");
+    opts.optflag("h", "headless", "Run without GUI");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m }
@@ -69,6 +71,10 @@ fn main() {
         emu.r3000.log = true;
     }
 
+    if matches.opt_present("h") {
+        headless = true;
+    }
+
     if let Some(disc_path) = matches.opt_str("c") {
         println!("Loading CUE: {}", disc_path);
         let disc = load_disc_from_cuesheet(Path::new(&disc_path).to_path_buf());
@@ -90,91 +96,101 @@ fn main() {
         emu.load_executable(destination, entrypoint, init_sp, &exe_data);
     }
 
-    let system = support::init("VaporStation");
-    let mut start = SystemTime::now();
-    let mut frame_time = 0;
+    
+    if !headless {
 
-    system.main_loop(move |_, ui, gl_ctx, textures| {
-        start = SystemTime::now();
-        if !halted {
-            emu.run_frame();
-        }
-        frame_time = SystemTime::now()
-            .duration_since(start)
-            .expect("Error getting frame duration")
-            .as_millis();
+        let system = support::init("VaporStation");
+        let mut start = SystemTime::now();
+        let mut frame_time = 0;
 
-        Window::new(im_str!("Registers"))
-            .size([300.0, 600.0], Condition::FirstUseEver)
-            .build(ui, || {
-                ui.text(format!("PC: {:#X}", &emu.r3000.pc));
-                for (i, v) in emu.r3000.gen_registers.iter().enumerate() {
-                    ui.text(format!("R{}: {:#X}", i, v));
-                }
-            });
-        Window::new(im_str!("VRAM"))
-            .content_size([1024.0, 512.0])
-            .build(ui, || {
-                let texture = create_texture_from_buffer(gl_ctx, emu.get_vram(), 1024, 512);
-                let id = TextureId::new(0); //This is an awful hack that needs to be replaced
-                textures.replace(id, texture);
-                Image::new(id, [1024.0, 512.0]).build(ui);
-            });
-
-        Window::new(im_str!("Viewport"))
-            .content_size([800.0, 600.0])
-            .build(ui, || {
-                let texture = create_texture_from_buffer(gl_ctx, emu.get_vram(), 640, 480);
-                let id = TextureId::new(1); //This is an awful hack that needs to be replaced
-                textures.replace(id, texture);
-                Image::new(id, [800.0, 600.0]).build(ui);
-            });
-
-        Window::new(im_str!("Emulator Controls"))
-            .content_size([250.0, 100.0])
-            .build(ui, || {
-                if ui.button(im_str!("Reset"), [80.0, 20.0]) {
-                    emu.reset();
-                }
-
-                if ui.button(
-                    if halted {
-                        im_str!("Resume")
-                    } else {
-                        im_str!("Halt")
-                    },
-                    [80.0, 20.0],
-                ) {
-                    halted = !halted;
-                }
-                if !halted {
-                    ui.text(format!("{:.1} FPS", (1000.0 / frame_time as f64)));
-                } else {
-                    ui.text("Halted");
-                    if ui.button(im_str!("Step Instruction"), [120.0, 20.0]) {
-                        emu.step_instruction();
+        system.main_loop(move |_, ui, gl_ctx, textures| {
+            start = SystemTime::now();
+            if !halted {
+                emu.run_frame();
+            }
+            frame_time = SystemTime::now()
+                .duration_since(start)
+                .expect("Error getting frame duration")
+                .as_millis();
+    
+            Window::new(im_str!("Registers"))
+                .size([300.0, 600.0], Condition::FirstUseEver)
+                .build(ui, || {
+                    ui.text(format!("PC: {:#X}", &emu.r3000.pc));
+                    for (i, v) in emu.r3000.gen_registers.iter().enumerate() {
+                        ui.text(format!("R{}: {:#X}", i, v));
                     }
-                }
-
-                if ui.button(
-                    if logging {
-                        im_str!("Stop Logging")
+                });
+            Window::new(im_str!("VRAM"))
+                .content_size([1024.0, 512.0])
+                .build(ui, || {
+                    let texture = create_texture_from_buffer(gl_ctx, emu.get_vram(), 1024, 512);
+                    let id = TextureId::new(0); //This is an awful hack that needs to be replaced
+                    textures.replace(id, texture);
+                    Image::new(id, [1024.0, 512.0]).build(ui);
+                });
+    
+            Window::new(im_str!("Viewport"))
+                .content_size([800.0, 600.0])
+                .build(ui, || {
+                    let texture = create_texture_from_buffer(gl_ctx, emu.get_vram(), 640, 480);
+                    let id = TextureId::new(1); //This is an awful hack that needs to be replaced
+                    textures.replace(id, texture);
+                    Image::new(id, [800.0, 600.0]).build(ui);
+                });
+    
+            Window::new(im_str!("Emulator Controls"))
+                .content_size([250.0, 100.0])
+                .build(ui, || {
+                    if ui.button(im_str!("Reset"), [80.0, 20.0]) {
+                        emu.reset();
+                    }
+    
+                    if ui.button(
+                        if halted {
+                            im_str!("Resume")
+                        } else {
+                            im_str!("Halt")
+                        },
+                        [80.0, 20.0],
+                    ) {
+                        halted = !halted;
+                    }
+                    if !halted {
+                        ui.text(format!("{:.1} FPS", (1000.0 / frame_time as f64)));
                     } else {
-                        im_str!("Start Logging")
-                    },
-                    [120.0, 20.0],
-                ) {
-                    logging = !logging;
-                    emu.r3000.log = logging;
-                }
-
-                match emu.loaded_disc() {
-                    Some(disc) => ui.text(format!("Drive loaded: {}", disc.title())),
-                    None => ui.text("No disc in drive")
-                };
-
-            });
-    });
+                        ui.text("Halted");
+                        if ui.button(im_str!("Step Instruction"), [120.0, 20.0]) {
+                            emu.step_instruction();
+                        }
+                    }
+    
+                    if ui.button(
+                        if logging {
+                            im_str!("Stop Logging")
+                        } else {
+                            im_str!("Start Logging")
+                        },
+                        [120.0, 20.0],
+                    ) {
+                        logging = !logging;
+                        emu.r3000.log = logging;
+                    }
+    
+                    match emu.loaded_disc() {
+                        Some(disc) => ui.text(format!("Drive loaded: {}", disc.title())),
+                        None => ui.text("No disc in drive")
+                    };
+    
+                });
+        });
+    } else {
+        //Run headless loop
+        loop {
+            emu.step_instruction();
+        }
+    }
+    
 }
 
 /// Creates OpenGL texture from 16 bit, psx format, framebuffer

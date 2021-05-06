@@ -319,7 +319,7 @@ impl Gpu {
             0x2 => {
                 //Render line
                 if command.get_bit(27) {
-                    println!("{:?}", self.gp0_buffer);
+                    //println!("{:?}", self.gp0_buffer);
                     if (self.gp0_buffer[self.gp0_buffer.len() - 1] & 0xF000F000) != 0x50005000 {
                         //Wait until terminating vertex
                         return;

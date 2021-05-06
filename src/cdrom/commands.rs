@@ -1,5 +1,5 @@
 use super::{CDDrive, DriveState, IntCause, MotorState, Packet, Block};
-use crate::cdrom::disc::DiscIndex;
+use crate::cdrom::disc::{BYTES_PER_SECTOR, DiscIndex};
 
 pub(super) const AVG_FIRST_RESPONSE_TIME: u32 = 0xc4e1;
 pub(super) const AVG_SECOND_RESPONSE_TIME: u32 = 0x1000;
@@ -69,6 +69,9 @@ pub(super) fn init(state: &mut CDDrive) -> Packet {
 pub(super) fn set_loc(state: &mut CDDrive, minutes: u8, seconds: u8, frames: u8) -> Packet {
     state.seek_target = DiscIndex::new(minutes as usize, seconds as usize, frames as usize);
     state.seek_complete = false;
+    state.read_offset = 0;
+    state.data_queue.clear();
+    println!("set_loc to {:?}, total sectors: {}", state.seek_target, state.seek_target.as_address() / BYTES_PER_SECTOR as u32);
     stat(state, 0x2)
 }
 
@@ -88,6 +91,7 @@ pub(super) fn seek_data(state: &mut CDDrive) -> Packet {
 
 pub(super) fn set_mode(state: &mut CDDrive, mode: u8) -> Packet {
     state.drive_mode = mode;
+    println!("CD MODE: {:#X}", state.drive_mode);
     stat(state, 0xE)
 }
 
@@ -105,8 +109,6 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
         extra_response: None,
         command: 0x6,
     };
-
-
     initial_response.execution_cycles = AVG_FIRST_RESPONSE_TIME;
     initial_response.extra_response = Some(Box::new(response_packet));
 
@@ -119,15 +121,7 @@ pub(super) fn stop_read(state: &mut CDDrive) -> Packet {
     let mut initial_response = stat(state, 0x9);
     state.drive_state = DriveState::Idle;
     state.read_enabled = false;
-    // match &state.pending_responses[0] {
-    //     Response::Packet(packet) => {
-    //         if packet.command == 0x6 {
-    //             //state.pending_responses.clear();
-    //         }
-    //     }
-    //     Response::Datablock(_) => (),//state.pending_responses.clear(),
-    // };
-    
+
     let response_packet = Packet {
         cause: IntCause::INT2,
         response: vec![state.get_stat()],

@@ -23,6 +23,12 @@ pub(super) enum MotorState {
     SpinUp,
     On,
 }
+
+#[derive(Debug, Copy, Clone)]
+pub enum SectorSize {
+    DataOnly = 0x800,
+    WholeSector = 0x924
+}
 #[derive(Debug, PartialEq)]
 pub(super) enum IntCause {
     INT1,
@@ -282,6 +288,13 @@ impl CDDrive {
         status
     }
 
+    fn sector_size(&self) -> &SectorSize {
+        match self.drive_mode.get_bit(5) {
+            true => &SectorSize::WholeSector,
+            false => &SectorSize::DataOnly
+        }
+    }
+
     fn push_parameter(&mut self, val: u8) {
         self.parameter_queue.push_back(val);
     }
@@ -301,11 +314,13 @@ impl CDDrive {
             //Out of data, get some more
             println!("Fetching more data!");
             let data = self.disc.as_ref().expect("Tried to read nonexistant disc!").read_sector(
-                        self.seek_target.plus_sector_offset(self.read_offset)
+                        self.seek_target.plus_sector_offset(self.read_offset),
+                        self.sector_size()
                     );
         
             self.read_offset += 1;
             self.data_queue.extend(data.iter());
+            println!("Fetched {} bytes!", self.data_queue.len())
         }
         match self.data_queue.pop_front() {
             Some(val) => val,

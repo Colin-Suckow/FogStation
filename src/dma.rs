@@ -216,6 +216,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 let base_addr = cpu.main_bus.dma.channels[num].base_addr;
                 println!("CD DMA: base {:#X}", base_addr);
                 println!("CD DMA: Details: {:#X}", cpu.main_bus.dma.channels[num].control);
+                println!("CD DMA: Transfered bytes: {}", words * 4);
 
                 for i in 0..(words * 4) {
                     let byte = cpu.main_bus.cd_drive.pop_data();

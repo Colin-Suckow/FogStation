@@ -34,7 +34,7 @@ impl DiscIndex {
     pub fn as_address(&self) -> u32 {
         let total_seconds = (self.minutes * 60) +self.seconds;
         let total_frames = ((total_seconds * SECTORS_PER_SECOND) + self.sectors) - 150;
-        println!(">>>>>>> Self {:?} SECTOR {}", self, total_frames);
+        //println!(">>>>>>> Self {:?} SECTOR {}", self, total_frames);
         (total_frames * BYTES_PER_SECTOR) as u32
     }
 
@@ -85,9 +85,9 @@ impl Disc {
         let (track, track_offset) = self.track_of_offset(address as usize);
         let sector_address = (address - track_offset) + 24;
         let data = &track.data[sector_address..sector_address + *sector_size as usize];
-        println!("data Byte 0 {:#X}", data[0]);
-        println!("Reading sector from address {}. Sector mode: {} Sector size {:?}", address, track.data[address + 15], sector_size);
-        println!("According to the sector header, this is M: {:X} ({}) S: {:X} ({}) F: {:X} ({})", track.data[(address - track_offset) + 12], bcd_to_dec(track.data[(address - track_offset) + 12] as usize), track.data[(address - track_offset) + 13], bcd_to_dec(track.data[(address - track_offset) + 13] as usize), track.data[(address - track_offset) + 14], bcd_to_dec(track.data[(address - track_offset) + 14] as usize));
+        //println!("data Byte 0 {:#X}", data[0]);
+        //println!("Reading sector from address {}. Sector mode: {} Sector size {:?}", address, track.data[address + 15], sector_size);
+        //println!("According to the sector header, this is M: {:X} ({}) S: {:X} ({}) F: {:X} ({})", track.data[(address - track_offset) + 12], bcd_to_dec(track.data[(address - track_offset) + 12] as usize), track.data[(address - track_offset) + 13], bcd_to_dec(track.data[(address - track_offset) + 13] as usize), track.data[(address - track_offset) + 14], bcd_to_dec(track.data[(address - track_offset) + 14] as usize));
         data
     }
 

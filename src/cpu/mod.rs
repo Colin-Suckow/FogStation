@@ -237,11 +237,11 @@ impl R3000 {
     }
 
     pub fn execute_instruction(&mut self, instruction: u32, timers: &mut TimerState) {
-        if self.pc % 4 != 0 || self.delay_slot % 4 != 0 {
-            println!("Tried to execute out of alignment");
-            self.fire_exception(Exception::AdEL);
-            return;
-        }
+        // if self.pc % 4 != 0 || self.delay_slot % 4 != 0 {
+        //     println!("Tried to execute out of alignment");
+        //     self.fire_exception(Exception::AdEL);
+        //     return;
+        // }
 
         match instruction.opcode() {
             0x0 => {
@@ -1148,7 +1148,7 @@ impl R3000 {
     }
 
     pub fn fire_exception(&mut self, exception: Exception) {
-        println!("CPU EXCEPTION: Type: {:?} PC: {:#X}", exception, self.current_pc);
+        //println!("CPU EXCEPTION: Type: {:?} PC: {:#X}", exception, self.current_pc);
         self.cop0.set_cause_execode(&exception);
 
 

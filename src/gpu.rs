@@ -514,7 +514,7 @@ impl Gpu {
                         //Also no needed
                         println!("GP0 command E6 not implemented!");
                     }
-                    _ => panic!("Unknown GPU ENV command {:#X}", command.command()),
+                    _ => panic!("Unknown GPU ENV command {:#X}. Full command queue is {:#X}", command.command(), self.gp0_buffer[0]),
                 }
             }
 

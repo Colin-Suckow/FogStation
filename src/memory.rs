@@ -1,7 +1,7 @@
 use byteorder::{ByteOrder, LittleEndian};
 
 pub struct Memory {
-    data: Vec<u8>,
+    pub data: Vec<u8>,
 }
 
 impl Memory {

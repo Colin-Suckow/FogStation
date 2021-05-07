@@ -147,14 +147,14 @@ impl CDDrive {
                 0 => self.execute_command(val),
                 1 => self.reg_sound_map_data_out = val,
                 2 => panic!("CD: 0x1F801801 write byte unknown index 2"),
-                3 => panic!("CD: 0x1F801801 write byte unknown index 3"),
+                3 => println!("CD: Wrote Right-CD-Out Right SPU volume"),
                 _ => unreachable!(),
             },
             0x1F801802 => match self.status_index {
                 0 => self.push_parameter(val),
                 1 => self.write_interrupt_enable_register(val),
-                2 => panic!("CD: 0x1F801802 write byte unknown index 2"),
-                3 => panic!("CD: 0x1F801802 write byte unknown index 3"),
+                2 => println!("CD: Wrote Left-CD-Out Right SPU volume"),
+                3 => println!("CD: Wrote Right-CD-Out Left SPU volume"),
                 _ => unreachable!(),
             },
             0x1F801803 => match self.status_index {
@@ -163,8 +163,8 @@ impl CDDrive {
                     //self.data_queue.clear();
                 },
                 1 => self.write_interrupt_flag_register(val),
-                2 => panic!("CD: 0x1F801803 write byte unknown index 2"),
-                3 => panic!("CD: Cannot read Interrupt Flag Register in write command"),
+                2 => println!("CD: Wrote Left-CD-Out Left SPU volume"),
+                3 => (),
                 _ => unreachable!(),
             },
             _ => panic!(
@@ -331,6 +331,19 @@ impl CDDrive {
         }
     }
 
+    pub fn sector_data_take(&mut self) -> &[u8] {
+        
+        //println!("Fetching more data!");
+        let data = self.disc.as_ref().expect("Tried to read nonexistant disc!").read_sector(
+                    self.seek_target.plus_sector_offset(self.read_offset),
+                    self.sector_size()
+                );
+    
+        self.read_offset += 1;
+        data
+        
+    }
+
     fn write_interrupt_flag_register(&mut self, val: u8) {
         self.reg_interrupt_flag &= !val;
         self.response_queue = VecDeque::new(); //Reset queue
@@ -359,7 +372,7 @@ pub fn step_cycle(cpu: &mut R3000) {
     
             
             //Check if interrupt enabled. If so, fire interrupt
-            println!("Interrupts {:#X} cause {:#X} command {:#X}", cpu.main_bus.cd_drive.reg_interrupt_enable, packet.cause.bitflag(), packet.command);
+            //println!("Interrupts {:#X} cause {:#X} command {:#X}", cpu.main_bus.cd_drive.reg_interrupt_enable, packet.cause.bitflag(), packet.command);
             if cpu.main_bus.cd_drive.reg_interrupt_enable & packet.cause.bitflag()
             == packet.cause.bitflag()
             {
@@ -368,7 +381,7 @@ pub fn step_cycle(cpu: &mut R3000) {
     
             //If the response has an extra response, push that to the front of the line
             if let Some(ext_response) = packet.extra_response.take() {
-                println!("Extra response, filling. {:?}", ext_response);
+                //println!("Extra response, filling. {:?}", ext_response);
                 cpu.main_bus
                 .cd_drive
                 .pending_response = Some(*ext_response);
@@ -388,29 +401,19 @@ pub fn step_cycle(cpu: &mut R3000) {
     
                 0x6 => {
                     //ReadN
-                    println!("Post ReadN");
+                    //println!("Post ReadN");
                   
                     if cpu.main_bus.cd_drive.read_enabled {
                         let response_packet = Packet {
                             cause: IntCause::INT1,
                             response: vec![cpu.main_bus.cd_drive.get_stat()],
-                            execution_cycles: 3_000_000,
+                            execution_cycles: 0x36cd2,
                             extra_response: None,
                             command: 0x6,
                         };
     
                         cpu.main_bus.cd_drive.pending_response = Some(response_packet);
                     }
-                }
-    
-                0x9 => {
-                    //Pause
-                    if packet.cause == IntCause::INT2 {
-                        println!("Post pause");
-                        //cpu.main_bus.cd_drive.pending_responses.clear();
-                        //cpu.log = true;
-                    }
-                    
                 }
                 _ => () //No actions for this command
             };

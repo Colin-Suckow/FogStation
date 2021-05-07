@@ -213,17 +213,12 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
 
             3 => {
                 let words = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
-                let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
-               
-                for i in 0..(words * 4) {
-                    let byte = cpu.main_bus.cd_drive.pop_data();
-                    cpu.main_bus.write_byte(base_addr + i, byte);
-                }
+                let base_addr = (cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF) as usize;
+                let data = cpu.main_bus.cd_drive.sector_data_take();
+                cpu.main_bus.memory.data[base_addr..(base_addr + (words * 4) as usize)].copy_from_slice(data);
                 cpu.main_bus.dma.channels[num].complete();
                 cpu.main_bus.dma.raise_irq(num);
-                cpu.fire_external_interrupt(InterruptSource::DMA);
-                //cpu.log = true;
-               
+                cpu.fire_external_interrupt(InterruptSource::DMA);               
             }
 
             6 => {

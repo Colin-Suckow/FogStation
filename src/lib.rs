@@ -19,6 +19,7 @@ mod memory;
 mod spu;
 pub mod cdrom;
 mod timer;
+mod controller;
 
 pub struct PSXEmu {
     pub r3000: R3000,

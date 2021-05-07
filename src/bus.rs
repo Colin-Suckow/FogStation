@@ -4,16 +4,18 @@ use crate::dma::DMAState;
 use crate::gpu::Gpu;
 use crate::memory::Memory;
 use crate::spu::SPU;
+use crate::controller::Controllers;
 
 
 pub struct MainBus {
     pub bios: Bios,
-    memory: Memory,
+    pub memory: Memory,
     pub gpu: Gpu,
     pub dma: DMAState,
     spu: SPU,
     pub cd_drive: CDDrive,
     scratchpad: Memory,
+    controllers: Controllers,
 }
 
 impl MainBus {
@@ -26,6 +28,7 @@ impl MainBus {
             spu: SPU::new(),
             cd_drive: CDDrive::new(),
             scratchpad: Memory::new_scratchpad(),
+            controllers: Controllers::new(),
         }
     }
 
@@ -111,6 +114,7 @@ impl MainBus {
             0x0..=0x001f_ffff => self.memory.write_half_word(addr, value), //KUSEG
             0x1F801C00..=0x1F801E80 => self.spu.write_half_word(addr, value),
             0x1F800000..=0x1F8003FF => self.scratchpad.write_half_word(addr - 0x1F800000, value),
+            0x1F80_1040..=0x1F80_104E => self.controllers.write_half_word(addr, value),
             0x1F80_1000..=0x1F80_2000 => println!("Something tried to half word write to the I/O ports. This is not currently emulated. The address was {:#X}. value was {:#X}", addr, value),
             _ => panic!("Invalid half word write at address {:#X}! This address is not mapped to any device.", addr)
         }

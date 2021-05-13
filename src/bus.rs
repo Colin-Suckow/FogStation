@@ -1,11 +1,10 @@
 use crate::bios::Bios;
 use crate::cdrom::CDDrive;
+use crate::controller::Controllers;
 use crate::dma::DMAState;
 use crate::gpu::Gpu;
 use crate::memory::Memory;
 use crate::spu::SPU;
-use crate::controller::Controllers;
-
 
 pub struct MainBus {
     pub bios: Bios,
@@ -15,7 +14,7 @@ pub struct MainBus {
     spu: SPU,
     pub cd_drive: CDDrive,
     scratchpad: Memory,
-    controllers: Controllers,
+    pub(super) controllers: Controllers,
 }
 
 impl MainBus {
@@ -88,18 +87,18 @@ impl MainBus {
 
     pub fn read_half_word(&mut self, og_addr: u32) -> u16 {
         let addr = og_addr & 0x1fffffff;
+
         match addr & 0x1fffffff {
             0x1F801070 => {
                 panic!("Tried to read i_status half");
             },
             0x0..=0x001f_ffff => self.memory.read_half_word(addr),
             0x1F801C00..=0x1F801E80 => self.spu.read_half_word(addr),
-            //0x1F801044 => 0xFFFF, //JOY_STAT
             0x1F800000..=0x1F8003FF => self.scratchpad.read_half_word(addr - 0x1F800000),
-            0x1f80_1000..=0x1f80_2fff => {
-                println!("Something tried to half word read an undefined IO address. The address was {:#X}", addr);
-                0
-            },
+            // 0x1f80_1000..=0x1f80_2fff => {
+            //     println!("Something tried to half word read an undefined IO address. The address was {:#X}", addr);
+            //     0
+            // },
             _ => panic!("Invalid half word read at address {:#X}! This address is not mapped to any device.", addr)
         }
     }
@@ -142,12 +141,14 @@ impl MainBus {
                 println!("Something tried to read the hardware control registers. These are not currently emulated, so a 0 is being returned. The address was {:#X}", addr);
                 0
             }
-            0x1FFFFFF7 => 0,
             0x1F800000..=0x1F8003FF => self.scratchpad.read_byte(addr - 0x1F800000),
-            _ => panic!(
-                "Invalid byte read at address {:#X}! This address is not mapped to any device.",
-                addr
-            ),
+            _ => {
+                println!(
+                    "Invalid byte read at address {:#X}! This address is not mapped to any device.",
+                    addr
+                );
+                0
+            }
         }
     }
 
@@ -163,7 +164,7 @@ impl MainBus {
             0x1F802000..=0x1F803000 => (), //Expansion port 2
             0x1F801040 => (),              //JOY_DATA
             0x1F800000..=0x1F8003FF => self.scratchpad.write_byte(addr - 0x1F800000, value),
-            _ => panic!(
+            _ => println!(
                 "Invalid byte write at address {:#X}! This address is not mapped to any device.",
                 addr
             ),

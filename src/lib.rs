@@ -25,7 +25,11 @@ pub struct PSXEmu {
     pub r3000: R3000,
     timers: TimerState,
     cycle_count: u32,
+    halt_requested: bool,
+    sw_breakpoints: Vec<u32>
 }
+
+
 
 impl PSXEmu {
     /// Creates a new instance of the emulator.
@@ -41,6 +45,8 @@ impl PSXEmu {
             r3000: r3000,
             timers: TimerState::new(),
             cycle_count: 0,
+            halt_requested: false,
+            sw_breakpoints: Vec::new(),
         }
     }
 
@@ -55,6 +61,10 @@ impl PSXEmu {
     pub fn step_instruction(&mut self) {
         //Twoish cpu per gpu clock
         for _ in 0..2 {
+            if self.sw_breakpoints.contains(&self.r3000.pc) {
+                self.halt_requested = true;
+                return;
+            }
             self.r3000.step_instruction(&mut self.timers);
             execute_dma_cycle(&mut self.r3000);
             self.cycle_count += 1;
@@ -77,6 +87,7 @@ impl PSXEmu {
         }
         //Step the gpu once more to get it off this frame
         self.r3000.main_bus.gpu.execute_cycle();
+        
     }
 
     pub fn load_executable(&mut self, start_addr: u32, entrypoint: u32, _sp: u32, data: &Vec<u8>) {
@@ -113,5 +124,29 @@ impl PSXEmu {
 
     pub fn manually_fire_interrupt(&mut self, source: InterruptSource) {
         self.r3000.fire_external_interrupt(source);
+    }
+
+    pub fn read_gen_reg(&self, reg_num: usize) -> u32 {
+        self.r3000.gen_registers[reg_num]
+    }
+
+    pub fn set_gen_reg(&mut self, reg_num: usize, value: u32) {
+        self.r3000.gen_registers[reg_num] = value;
+    }
+
+    pub fn halt_requested(&self) -> bool {
+        self.halt_requested
+    }
+
+    pub fn clear_halt(&mut self) {
+        self.halt_requested = false;
+    }
+
+    pub fn add_sw_breakpoint(&mut self, addr: u32) {
+        self.sw_breakpoints.push(addr);
+    }
+
+    pub fn remove_sw_breakpoint(&mut self, addr: u32) {
+        self.sw_breakpoints.retain(|&x| x != addr);
     }
 }

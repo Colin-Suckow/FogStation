@@ -11,3 +11,5 @@ Cargo.lock
 /.vscode
 *.log
 *.elf
+.gdb_history
+/desktop/build.out

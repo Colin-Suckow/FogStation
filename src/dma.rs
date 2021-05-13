@@ -142,6 +142,8 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 //GPU
                 match cpu.main_bus.dma.channels[num].control {
                     0x01000401 => {
+                        println!("DMA: Starting LinkedList");
+
                         //Linked list mode. mem -> gpu
                         let mut addr = cpu.main_bus.dma.channels[num].base_addr;
                         //println!("Starting linked list transfer. addr {:#X}", addr);
@@ -168,9 +170,11 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
 
                     0x01000201 => {
                         //VramWrite
+                        println!("DMA: Starting VramWrite");
                         let entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
                         let block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                         let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
+                        println!("Block size {} Num blocks {} base {:#X}", block_size, entries, base_addr);
                         for i in 0..entries {
                             for j in 0..block_size {
                                 let packet = cpu
@@ -179,7 +183,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                                 cpu.main_bus.gpu.send_gp0_command(packet);
                             }
                         }
-                        //println!("DMA2 block transfer done.");
+                        println!("DMA2 block transfer done.");
                         cpu.main_bus.dma.channels[num].complete();
                         cpu.main_bus.dma.raise_irq(num);
                         cpu.fire_external_interrupt(InterruptSource::DMA);

@@ -52,11 +52,11 @@ pub struct R3000 {
     cycle_count: u32,
     pub pc: u32,
     current_pc: u32,
-    hi: u32,
-    lo: u32,
+    pub hi: u32,
+    pub lo: u32,
     pub main_bus: MainBus,
     delay_slot: u32,
-    cop0: Cop0,
+    pub cop0: Cop0,
     load_delays: Vec<LoadDelay>,
     i_mask: u32,
     pub i_status: u32,
@@ -1182,9 +1182,10 @@ impl R3000 {
         let mask_bit = source as usize;
         //println!("mask_bit num = {}", mask_bit);
 
-        self.i_status.set_bit(mask_bit, true);
-
+        
         if self.cop0.interrupt_enabled() && self.i_mask.get_bit(mask_bit) {
+            self.i_status.set_bit(mask_bit, true);
+            println!("CPU: INT");
             self.cycle_count = self.cycle_count.wrapping_add(1);
             self.fire_exception(Exception::Int);
         }
@@ -1206,6 +1207,10 @@ impl R3000 {
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
             return;
+        }
+
+        if addr == 0x1F8010A4 {
+            println!("Wrote dma2 block at pc {:#X} R31 {:#X}", self.current_pc, self.read_reg(31));
         }
 
         match addr & 0x1fffffff {

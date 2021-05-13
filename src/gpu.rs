@@ -26,7 +26,7 @@ impl Point {
         Self {
             x: (word & 0xFFFF) as i16,
             y: ((word >> 16) & 0xFFFF) as i16,
-            color: color,
+            color,
             tex_x: 0,
             tex_y: 0,
         }
@@ -36,7 +36,7 @@ impl Point {
         Self {
             x: ((word & 0xFFFF) as i32 + offset.x as i32) as i16,
             y: (((word >> 16) & 0xFFFF) as i32 + offset.y as i32) as i16,
-            color: color,
+            color,
             tex_x: 0,
             tex_y: 0,
         }
@@ -46,7 +46,7 @@ impl Point {
         Self {
             x,
             y,
-            color: color,
+            color,
             tex_x: 0,
             tex_y: 0,
         }
@@ -57,8 +57,8 @@ impl Point {
             x: (word & 0xFFFF) as i16,
             y: ((word >> 16) & 0xFFFF) as i16,
             color: 0,
-            tex_x: tex_x,
-            tex_y: tex_y,
+            tex_x,
+            tex_y,
         }
     }
 }
@@ -126,13 +126,13 @@ impl Gpu {
     }
 
     pub fn read_status_register(&mut self) -> u32 {
-        //println!("Reading GPUSTAT");
+        println!("Reading GPUSTAT");
         //self.status_reg
         0x1C000000
     }
 
     pub fn read_word_gp0(&mut self) -> u32 {
-        //println!("Reading gp0");
+        println!("Reading gp0");
         0x0 as u32
     }
 
@@ -259,7 +259,7 @@ impl Gpu {
                     };
                 } else {
                     if is_gouraud && is_textured {
-                        println!("Tried to try draw texture blended tri!");
+                        println!("Tried to try draw texture blended tri! Queue {:?}", self.gp0_buffer);
                     } else if is_textured {
                         let points: Vec<Point> = vec![
                             Point::new_textured_point(
@@ -462,6 +462,8 @@ impl Gpu {
                     self.vram[addr as usize] = p1;
                     self.vram[(addr + 1) as usize] = p2;
                 }
+
+                println!("cpu to vram done!");
             }
 
             0x6 => {
@@ -469,6 +471,7 @@ impl Gpu {
                 if self.gp0_buffer.len() < 3 {
                     return;
                 }
+                println!("VRAM to CPU")
                 //Lets ignore this one for now
             }
             0x7 => {
@@ -518,13 +521,14 @@ impl Gpu {
                 }
             }
 
-            _ => panic!("unknown gp0 {:#X}!", command.gp0_header()),
+            _ => println!("unknown gp0 {:#X}!", command.gp0_header()),
         }
         //Made it to the end, so the command must have been executed
         self.gp0_clear();
     }
 
     pub fn send_gp1_command(&mut self, command: u32) {
+        println!("GP1 Command {:#X} parameter {:#X}", command.command(), command.parameter());
         match command.command() {
             0x0 => {
                 //Reset GPU

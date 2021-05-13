@@ -236,6 +236,7 @@ impl CDDrive {
                     0xE => set_mode(self, parameters[0]),
                     0x15 => seek_data(self),
                     0x1A => get_id(self),
+                    0xC => demute(self),
                     0x19 => {
                         //sub_function commands
                         match parameters[0] {

@@ -134,3 +134,7 @@ pub(super) fn stop_read(state: &mut CDDrive) -> Packet {
     initial_response.extra_response = Some(Box::new(response_packet));
     initial_response
 }
+
+pub(super) fn demute(state: &mut CDDrive) -> Packet {
+    stat(state, 0xC)
+}

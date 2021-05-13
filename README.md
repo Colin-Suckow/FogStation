@@ -1,10 +1,16 @@
 # VaporStation
-A toy playstation emulator written in rust. Better than my nes emulator, but still not anywhere near idiomatic rust.
+A toy playstation emulator written in rust. Better than my nes emulator, but still not anywhere near idiomatic rust. Now with GDB target support!
 
-![PSX boot logo. Rendered in VaporStation](https://i.imgur.com/LhGQ5QF.png)
+
+
+<img src="https://i.imgur.com/LhGQ5QF.png" height=500px alt="boot screen">
+<img src="https://i.imgur.com/3rMhbhJ.png" height=500px alt="gdb debugging">
+
+       
+
 
 ## Status
-Boots to, and draws, splash screen (!)
+Can boot bios, display boot screen, and load and run software from cdrom, stuck on controller/memory card access
 
 ## Implemented (for the most part)
 - MIPS R3000 CPU
@@ -13,9 +19,10 @@ Boots to, and draws, splash screen (!)
 - BIOS ROM
 - Timers
 - Graphics processor (GPU)
+- CDROM drive
+- GDB support
 
 ## TODO
-- CDROM drive
 - Matrix multiplication engine (GTE)
 - Massive code cleanup
 - Speedup (Already runs at near full speed, but it can be a lot better)

@@ -114,7 +114,7 @@ impl SingleThreadOps for EmuState {
         data: &mut [u8],
     ) -> gdbstub::target::TargetResult<(), Self> {
         for i in 0..data.len() {
-            data[i] = self.emu.r3000.main_bus.read_byte(start_addr + i as u32);
+            data[i] = self.emu.r3000.read_bus_byte(start_addr + i as u32);
         }
         Ok(())
     }

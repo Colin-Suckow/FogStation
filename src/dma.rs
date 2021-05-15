@@ -225,6 +225,14 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 cpu.fire_external_interrupt(InterruptSource::DMA);               
             }
 
+            4 => {
+                //SPU
+                //Lets just ignore this one for now
+                cpu.main_bus.dma.channels[num].complete();
+                cpu.main_bus.dma.raise_irq(num);
+                cpu.fire_external_interrupt(InterruptSource::DMA);
+            }
+
             6 => {
                 //OTC
                 //OTC is only used to reset the ordering table. So we can ignore a lot of the parameters

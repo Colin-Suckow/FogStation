@@ -153,7 +153,7 @@ impl R3000 {
 
         //Check for vblank
         if self.main_bus.gpu.consume_vblank() {
-            self.i_status.set_bit(0, true);
+            self.fire_external_interrupt(InterruptSource::VBLANK);
         };
 
         //Update the cdrom drive
@@ -1235,6 +1235,17 @@ impl R3000 {
             _ => self.main_bus.read_half_word(addr),
         }
     }
+    
+    pub fn read_bus_byte(&mut self, addr: u32) -> u8 {
+        match addr & 0x1fffffff {
+            0x1F801070 => self.i_status as u8,
+            0x1F801072 => (self.i_status >> 8) as u8,
+            0x1F801074 => self.i_mask as u8,
+            0x1F801076 => (self.i_mask >> 8) as u8,
+            _ => self.main_bus.read_byte(addr),
+        }
+    }
+   
 
     fn write_bus_half_word(&mut self, addr: u32, val: u16, timers: &mut TimerState) {
         if self.cop0.cache_isolated() {
@@ -1249,7 +1260,7 @@ impl R3000 {
         };
     }
 
-    fn write_bus_byte(&mut self, addr: u32, val: u8) {
+    pub fn write_bus_byte(&mut self, addr: u32, val: u8) {
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
             return;

@@ -65,6 +65,10 @@ impl PSXEmu {
                 self.halt_requested = true;
                 return;
             }
+            if self.r3000.main_bus.controllers.pending_irq {
+                self.r3000.main_bus.controllers.pending_irq = false;
+                self.r3000.fire_external_interrupt(InterruptSource::Controller);
+            }
             self.r3000.step_instruction(&mut self.timers);
             execute_dma_cycle(&mut self.r3000);
             self.cycle_count += 1;

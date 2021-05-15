@@ -126,7 +126,7 @@ impl Gpu {
     }
 
     pub fn read_status_register(&mut self) -> u32 {
-        println!("Reading GPUSTAT");
+        //println!("Reading GPUSTAT");
         //self.status_reg
         0x1C000000
     }

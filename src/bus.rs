@@ -41,6 +41,7 @@ impl MainBus {
             0x1F801080..=0x1F8010F4 => self.dma.read_word(addr),
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_word(addr - 0x1fc0_0000),
             0x1F800000..=0x1F8003FF => self.scratchpad.read_word(addr - 0x1F800000),
+            0x1F801014 => 0x200931E1, //SPU_DELAY
             0x1F801060 => 0x00000B88, //RAM_SIZE
             _ => panic!(
                 "Invalid word read at address {:#X}! This address is not mapped to any device.",
@@ -95,10 +96,7 @@ impl MainBus {
             0x0..=0x001f_ffff => self.memory.read_half_word(addr),
             0x1F801C00..=0x1F801E80 => self.spu.read_half_word(addr),
             0x1F800000..=0x1F8003FF => self.scratchpad.read_half_word(addr - 0x1F800000),
-            // 0x1f80_1000..=0x1f80_2fff => {
-            //     println!("Something tried to half word read an undefined IO address. The address was {:#X}", addr);
-            //     0
-            // },
+            0x1F80_1040..=0x1F80_104E => self.controllers.read_half_word(addr),
             _ => panic!("Invalid half word read at address {:#X}! This address is not mapped to any device.", addr)
         }
     }
@@ -137,10 +135,7 @@ impl MainBus {
             }
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_byte(addr - 0x1fc0_0000),
             0x1F801800..=0x1F801803 => self.cd_drive.read_byte(addr), //CDROM
-            0x1f80_1000..=0x1f80_2fff => {
-                println!("Something tried to read the hardware control registers. These are not currently emulated, so a 0 is being returned. The address was {:#X}", addr);
-                0
-            }
+            0x1F80_1040..=0x1F80_104E => self.controllers.read_byte(addr),
             0x1F800000..=0x1F8003FF => self.scratchpad.read_byte(addr - 0x1F800000),
             _ => {
                 println!(
@@ -162,7 +157,7 @@ impl MainBus {
             0x1F80202B => println!("DUART B: {}", value),
             0x1F801050 => println!("SIO: {}", value),
             0x1F802000..=0x1F803000 => (), //Expansion port 2
-            0x1F801040 => (),              //JOY_DATA
+            0x1F801040 => self.controllers.write_byte(addr, value),
             0x1F800000..=0x1F8003FF => self.scratchpad.write_byte(addr - 0x1F800000, value),
             _ => println!(
                 "Invalid byte write at address {:#X}! This address is not mapped to any device.",

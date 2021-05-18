@@ -1,4 +1,4 @@
-use super::{CDDrive, DriveState, IntCause, MotorState, Packet, Block};
+use super::{Block, CDDrive, DriveState, IntCause, MotorState, Packet, disc::dec_to_bcd};
 use crate::cdrom::disc::{BYTES_PER_SECTOR, DiscIndex};
 
 pub(super) const AVG_FIRST_RESPONSE_TIME: u32 = 0xc4e1;
@@ -137,4 +137,30 @@ pub(super) fn stop_read(state: &mut CDDrive) -> Packet {
 
 pub(super) fn demute(state: &mut CDDrive) -> Packet {
     stat(state, 0xC)
+}
+
+// Get number of tracks in session
+// Assumes theres only one session
+pub(super) fn get_tn(state: &mut CDDrive) -> Packet {
+    let first_track = 0x1;
+    let last_track = dec_to_bcd(state.disc.as_ref().expect("Tried to read non-existant disc!").track_count() + 1);
+
+    let mut initial_response = stat(state, 0x13);
+
+    initial_response.response.push(first_track);
+    initial_response.response.push(last_track as u8);
+
+    initial_response
+}
+
+// Get starting index of given track
+// Because I'm lazy I'm just going to return the start of the first track, 00:02
+// In practice this will probably send code instead of music to the SPU, and play some crazy audio
+// Future colin, you have been warned
+pub(super) fn get_td(state: &mut CDDrive, track: u8) -> Packet {
+    let mut initial_response = stat(state, 0x14);
+    initial_response.response.push(0x0);
+    initial_response.response.push(0x2);
+
+    initial_response
 }

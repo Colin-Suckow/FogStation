@@ -10,9 +10,13 @@ pub struct DiscIndex {
     sectors: usize,
 }
 
- fn bcd_to_dec(hex: usize) -> usize {
-        ((hex & 0xF0) >> 4) * 10 + (hex & 0x0F)
-    }
+pub fn bcd_to_dec(hex: usize) -> usize {
+    ((hex & 0xF0) >> 4) * 10 + (hex & 0x0F)
+}
+
+pub fn dec_to_bcd(dec: usize) -> usize {
+    (dec/10*16) + (dec%10)
+}
 
 impl DiscIndex {
     pub fn new(minutes: usize, seconds: usize, sectors: usize) -> Self {
@@ -100,6 +104,10 @@ impl Disc {
             total_size += track.data.len();
         }
         panic!("Unable to locate track!");
+    }
+
+    pub fn track_count(&self) -> usize {
+        self.tracks.len()
     }
 }
 

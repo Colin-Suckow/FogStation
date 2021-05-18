@@ -234,7 +234,10 @@ impl CDDrive {
                     0x9 => stop_read(self),
                     0xA => init(self),
                     0xE => set_mode(self, parameters[0]),
+                    0x13 => get_tn(self),
+                    0x14 => get_td(self, parameters[0]),
                     0x15 => seek_data(self),
+                    0x16 => seek_data(self), //This should actually be seek_p, but I'm never using audio discs so we can reuse the data seek function
                     0x1A => get_id(self),
                     0xC => demute(self),
                     0x19 => {

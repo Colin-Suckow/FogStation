@@ -633,9 +633,9 @@ impl Gpu {
         width: u32,
     ) {
         for x_offset in 0..=width {
-            let val = self.vram[(point_to_address(x_source + x_offset, y_source) as usize)];
+            let val = self.vram[(point_to_address(x_source + x_offset, y_source) as usize) % 524288];
             let addr = point_to_address(x_dest + x_offset, y_dest) as usize;
-            self.vram[addr] = val;
+            self.vram[addr % 524288] = val;
         }
     }
 

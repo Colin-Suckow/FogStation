@@ -540,6 +540,21 @@ impl R3000 {
                         //CTC2
                         //Stubbed. Hopefully this doesn't break anything?
                     }
+
+                    0x11 => {
+                        //COP2 imm25
+                        // Execute immediate GTE command
+                        // Stubbing this guy too
+                    }
+
+                    0x2 => {
+                        //MTC2
+                        // stubberino
+                    }
+
+                    0x0 => {
+                        //MFC2
+                    }
                     _ => panic!(
                         "CPU: Unknown COP2 MFC instruction {:#X} ({0:#b}, {0}) {:#b}",
                         instruction.rs(),
@@ -610,9 +625,20 @@ impl R3000 {
 
                 self.op_sw(instruction, timers);
             }
+
+            0x32 => {
+                //LWC2
+                // Ignoring the GTE
+            }
+
+            0x3A => {
+                //SWC2
+                // Also ignoring. Sorry GTE
+            }
             _ => panic!(
-                "CPU: Unknown opcode {0} ({0:#08b}, {0:#X})",
-                instruction.opcode()
+                "CPU: Unknown opcode {0} ({0:#08b}, {0:#X}) PC {1:#X}",
+                instruction.opcode(),
+                self.current_pc
             ),
         };
     }

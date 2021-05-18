@@ -2,6 +2,8 @@ use std::collections::VecDeque;
 
 use bit_field::BitField;
 
+use crate::cpu::{InterruptSource, R3000};
+
 pub(super) const JOY_DATA: u32 = 0x1F801040;
 pub(super) const JOY_STAT: u32 = 0x1F801044;
 pub(super) const JOY_MODE: u32 = 0x1F801048;
@@ -13,13 +15,13 @@ const DEFAULT_JOY_BAUD: u16 = 0x88;
 const MEMORY_CARD_SELECT_BYTE: u8 = 0x81;
 const CONTROLER_SELECT_BYTE: u8 = 0x1;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 enum Slot {
     MemoryCard,
     Controller,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 enum TXstate {
     Disabled,
     Ready,
@@ -30,11 +32,13 @@ pub(super) struct Controllers {
     joy_ctrl: u16,
     joy_baud: u16,
     joy_mode: u16,
+    irq_status: bool,
 
     tx_state: TXstate,
     rx_buf: VecDeque<u8>,
 
     pub(super) pending_irq: bool,
+    irq_cycle_timer: usize,
 }
 
 impl Controllers {
@@ -43,11 +47,13 @@ impl Controllers {
             joy_ctrl: 0,
             joy_mode: 0,
             joy_baud: DEFAULT_JOY_BAUD,
+            irq_status: false,
 
             tx_state: TXstate::Disabled,
             rx_buf: VecDeque::new(),
 
             pending_irq: false,
+            irq_cycle_timer: 0,
         }
     }
 
@@ -101,13 +107,20 @@ impl Controllers {
     }
 
     fn write_joy_ctrl(&mut self, val: u16) {
+
+        println!("JOY_CTRL {:#X}", val);
+
         
         if val.get_bit(0) && self.tx_state == TXstate::Disabled {
             println!("TX Enabled!");
             self.tx_state = TXstate::Ready;
-        } else {
+        }
+        
+        if !val.get_bit(0) {
             println!("TX Disabled!");
             self.tx_state = TXstate::Disabled;
+            // self.pending_irq = false;
+            // self.irq_cycle_timer = 0;
         }
 
         if val.get_bit(4) {
@@ -118,15 +131,15 @@ impl Controllers {
             self.reset();
         }
 
-        self.joy_ctrl = val & !0x50; // Ignore the reset and ack bits
-        println!("JOY_CTRL {:#X}", self.joy_ctrl);
+        self.joy_ctrl = val;
     }
 
     fn write_joy_data(&mut self, val: u8) {
-        println!("Joy data written {:#X}", val);
-        match &mut self.tx_state {
+        println!("Joy data written {:#X} state = {:?}", val, self.tx_state);
+        let new_state = match self.tx_state.clone() {
             TXstate::Disabled => {
                 println!("CONTROLLER: Tried to write JOY_DATA while TX is disabled!");
+                TXstate::Disabled
             }
             TXstate::Ready => {
                 let slot = if val == CONTROLER_SELECT_BYTE {
@@ -134,17 +147,41 @@ impl Controllers {
                 } else {
                     Slot::MemoryCard
                 };
+
+                if slot == Slot::MemoryCard {
+                    return;
+                }
+
                 self.push_rx_buf(0);
-                self.tx_state = TXstate::Transfering {
+                self.queue_interrupt();
+                TXstate::Transfering {
                     slot: slot,
                     step: 0,
-                };
-                self.pending_irq = true;
+                }
             }
             TXstate::Transfering { slot, step } => {
-                println!("Transfering");
+                if slot == Slot::Controller {
+                    let response = match step {
+                        0 => 0x41, // Digital pad idlo
+                        1 => 0x5A, // Digital pad idhi
+                        2 => 0xFF, // No low buttons pressed
+                        3 => 0xFF, // No high buttons pressed
+                        _ => 0,
+                    };
+                    self.push_rx_buf(response);
+                    if step < 3 {
+                        self.queue_interrupt();
+                    }
+                    TXstate::Transfering {
+                        slot: slot.clone(),
+                        step: step + 1
+                    }
+                } else {
+                    panic!("Tried to read memory card! Not yet implemented :(");
+                }
             }
-        }
+        };
+        self.tx_state = new_state;
     }
 
     fn read_joy_stat(&mut self) -> u16 {
@@ -155,11 +192,11 @@ impl Controllers {
             val |= 0x1;
         };
 
-        if self.tx_state == TXstate::Ready {
+        if self.tx_state != TXstate::Ready {
             val |= 0x4;
         }
 
-        if self.pending_irq {
+        if self.irq_status {
             val |= 0x200;
         }
 
@@ -167,6 +204,11 @@ impl Controllers {
             val |= 2;
         }
 
+        if self.joy_ctrl.get_bit(12) {
+            val |= 0x1000;
+        }
+
+        //val |= 0x80;
         println!("Reading JOY_STAT {:#X}", val);
 
         val
@@ -178,16 +220,21 @@ impl Controllers {
     }
 
     fn read_joy_data(&mut self) -> u8 {
-       self.pop_rx_buf()
+        println!("joy data read");
+        self.pop_rx_buf()
     }
 
     fn reset(&mut self) {
+        println!("Resetting");
         self.write_joy_ctrl(0);
         self.rx_buf.clear();
+        self.pending_irq = false;
+        self.irq_status = false;
+        self.irq_cycle_timer = 0;
     }
 
     fn acknowledge(&mut self) {
-       self.pending_irq = false;
+       self.irq_status = false;
     }
 
     fn push_rx_buf(&mut self, val: u8) {
@@ -199,5 +246,24 @@ impl Controllers {
             Some(val) => val,
             _ => 0
         }
+    }
+
+    fn queue_interrupt(&mut self) {
+        self.pending_irq = true;
+        self.irq_status = true;
+        self.irq_cycle_timer = 200;
+    }
+}
+
+pub(super) fn controller_execute_cycle(cpu: &mut R3000) {
+    if cpu.main_bus.controllers.irq_cycle_timer > 0 {
+        // We are waiting for the dumb ack delay to expire
+        //println!("{} irq {:?}", cpu.main_bus.controllers.irq_cycle_timer, cpu.main_bus.controllers.pending_irq);
+        cpu.main_bus.controllers.irq_cycle_timer -= 1;
+    } else if cpu.main_bus.controllers.pending_irq {
+        // The dumb ack delay has expired, so now we can fire an INT7
+        println!("Trying to fire ack interrupt");
+        cpu.fire_external_interrupt(InterruptSource::Controller);
+        cpu.main_bus.controllers.pending_irq = false;
     }
 }

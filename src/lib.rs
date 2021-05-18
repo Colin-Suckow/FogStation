@@ -1,5 +1,6 @@
 use bios::Bios;
 use bus::MainBus;
+use controller::controller_execute_cycle;
 use cpu::R3000;
 use timer::TimerState;
 use std::panic;
@@ -65,10 +66,7 @@ impl PSXEmu {
                 self.halt_requested = true;
                 return;
             }
-            if self.r3000.main_bus.controllers.pending_irq {
-                self.r3000.main_bus.controllers.pending_irq = false;
-                self.r3000.fire_external_interrupt(InterruptSource::Controller);
-            }
+            controller_execute_cycle(&mut self.r3000);
             self.r3000.step_instruction(&mut self.timers);
             execute_dma_cycle(&mut self.r3000);
             self.cycle_count += 1;

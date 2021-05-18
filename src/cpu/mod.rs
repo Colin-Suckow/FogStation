@@ -9,6 +9,7 @@ use crate::{bus::MainBus, cdrom};
 mod cop0;
 mod instruction;
 
+#[derive(Debug, Clone, Copy)]
 pub enum InterruptSource {
     VBLANK,
     GPU,
@@ -1179,13 +1180,11 @@ impl R3000 {
     }
 
     pub fn fire_external_interrupt(&mut self, source: InterruptSource) {
-        let mask_bit = source as usize;
+        let mask_bit = source.clone() as usize;
         //println!("mask_bit num = {}", mask_bit);
-
-        
+        self.i_status.set_bit(mask_bit, true);
         if self.cop0.interrupt_enabled() && self.i_mask.get_bit(mask_bit) {
-            self.i_status.set_bit(mask_bit, true);
-            println!("CPU: INT");
+            println!("CPU: INT {:?}", source);
             self.cycle_count = self.cycle_count.wrapping_add(1);
             self.fire_exception(Exception::Int);
         }

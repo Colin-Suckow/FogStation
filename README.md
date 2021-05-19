@@ -10,7 +10,7 @@ A toy playstation emulator written in rust. Better than my nes emulator, but sti
 
 
 ## Status
-Can boot bios, display boot screen, and load and run software from cdrom, stuck on controller/memory card access
+Can boot bios, display boot screen, and load and run software from cdrom, gpu bugs are blocking ridge racer from being playable
 
 ## Implemented (for the most part)
 - MIPS R3000 CPU

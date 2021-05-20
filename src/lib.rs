@@ -57,28 +57,27 @@ impl PSXEmu {
         self.r3000.main_bus.gpu.reset();
     }
 
-    /// Runs the next cpu instruction.
-    /// This function is only here for testing and is not at all accurate to how the cpu actually works
+    /// Runs a "single" cpu clock and all the other clocks that happen within 1 cpu
     pub fn step_instruction(&mut self) {
-        //Twoish cpu per gpu clock
-        for _ in 0..2 {
-            if self.sw_breakpoints.contains(&self.r3000.pc) {
-                self.halt_requested = true;
-                return;
-            }
-            controller_execute_cycle(&mut self.r3000);
-            self.r3000.step_instruction(&mut self.timers);
-            execute_dma_cycle(&mut self.r3000);
-            self.cycle_count += 1;
-            self.timers.update_sys_clock(&mut self.r3000);
-            if self.cycle_count % 8 == 0 {
-                self.timers.update_sys_div_8(&mut self.r3000);
-            }
+     
+        if self.sw_breakpoints.contains(&self.r3000.pc) {
+            self.halt_requested = true;
+            return;
         }
-        self.r3000.main_bus.gpu.execute_cycle();
-        self.timers.update_dot_clock(&mut self.r3000);
-        if self.r3000.main_bus.gpu.consume_hblank() {
-            self.timers.update_h_blank(&mut self.r3000);
+        controller_execute_cycle(&mut self.r3000);
+        self.r3000.step_instruction(&mut self.timers);
+        execute_dma_cycle(&mut self.r3000);
+        self.cycle_count += 1;
+        self.timers.update_sys_clock(&mut self.r3000);
+        if self.cycle_count % 8 == 0 {
+            self.timers.update_sys_div_8(&mut self.r3000);
+        }
+        for _ in 0..2 {
+            self.r3000.main_bus.gpu.execute_cycle();
+            self.timers.update_dot_clock(&mut self.r3000);
+            if self.r3000.main_bus.gpu.consume_hblank() {
+                self.timers.update_h_blank(&mut self.r3000);
+            }
         }
     }
 

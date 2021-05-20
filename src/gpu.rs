@@ -63,6 +63,7 @@ impl Point {
     }
 }
 
+
 pub struct Gpu {
     vram: Vec<u16>,
     status_reg: u32,
@@ -78,10 +79,9 @@ pub struct Gpu {
     blend_enabled: bool,
     blend_color: u16,
 
-    draw_area_top_left_x: u16,
-    draw_area_top_left_y: u16,
-    draw_area_bottom_right_x: u16,
-    draw_area_bottom_right_y: u16,
+    draw_area_tl_point: Point,
+    draw_area_br_point: Point,
+    draw_offset: Point,
 
     irq_fired: bool,
     vblank_consumed: bool,
@@ -106,11 +106,10 @@ impl Gpu {
             blend_enabled: false,
             blend_color: 0xFFFF,
 
-            draw_area_top_left_x: 0,
-            draw_area_top_left_y: 0,
-            draw_area_bottom_right_x: 0,
-            draw_area_bottom_right_y: 0,
+            draw_area_tl_point: Point::from_components(0, 0, 0),
+            draw_area_br_point: Point::from_components(0, 0, 0),
 
+            draw_offset: Point::from_components(0, 0, 0),
             irq_fired: false,
             vblank_consumed: false,
             hblank_consumed: false,
@@ -126,13 +125,25 @@ impl Gpu {
     }
 
     pub fn read_status_register(&mut self) -> u32 {
-        //println!("Reading GPUSTAT");
-        //self.status_reg
-        0x1C000000
+        ////println!("Reading GPUSTAT");
+        let mut stat: u32 = 0;
+
+        stat |= (self.texpage_x_base) as u32;
+        stat |= (self.texpage_y_base << 4) as u32;
+
+        stat |= match self.texmode {
+            TextureColorMode::FourBit => 0,
+            TextureColorMode::EightBit => 1,
+            TextureColorMode::FifteenBit => 2,
+        } << 7;
+
+        stat |= 0x1C000000;
+
+        stat
     }
 
     pub fn read_word_gp0(&mut self) -> u32 {
-        println!("Reading gp0");
+        //println!("Reading gp0");
         0x0 as u32
     }
 
@@ -154,9 +165,9 @@ impl Gpu {
 
                         let x1 = self.gp0_buffer[1] & 0xFFFF;
                         let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
-                        let x2 = (self.gp0_buffer[2] & 0xFFFF) + x1;
-                        let y2 = ((self.gp0_buffer[2] >> 16) & 0xFFFF) + y1;
-                        println!("Drawing quick rect");
+                        let x2 = ((self.gp0_buffer[2] & 0xFFFF) + x1);
+                        let y2 = (((self.gp0_buffer[2] >> 16) & 0xFFFF) + y1);
+                        //println!("Drawing quick rect");
                         self.draw_solid_box(
                             x1,
                             y1,
@@ -199,8 +210,9 @@ impl Gpu {
                 if is_quad {
                     if is_textured && is_gouraud {
                         //Should be blending in colors. Do that later
-                        println!("Tried to try draw texture blended quad!");
+                        //println!("Tried to try draw texture blended quad!");
                     } else if is_textured {
+                        //println!("GPU: Tex quad");
                         let points: Vec<Point> = vec![
                             Point::new_textured_point(
                                 self.gp0_buffer[1],
@@ -232,6 +244,7 @@ impl Gpu {
 
                         self.draw_textured_quad(&points, command.get_bit(25));
                     } else if is_gouraud {
+                        //println!("GPU: gouraud quad");
                         let points: Vec<Point> = vec![
                             Point::from_word(self.gp0_buffer[1], fill),
                             Point::from_word(
@@ -259,8 +272,9 @@ impl Gpu {
                     };
                 } else {
                     if is_gouraud && is_textured {
-                        println!("Tried to try draw texture blended tri! Queue {:?}", self.gp0_buffer);
+                        //println!("Tried to try draw texture blended tri! Queue {:?}", self.gp0_buffer);
                     } else if is_textured {
+                        //println!("GPU: Tex tri");
                         let points: Vec<Point> = vec![
                             Point::new_textured_point(
                                 self.gp0_buffer[1],
@@ -278,10 +292,10 @@ impl Gpu {
                                 (self.gp0_buffer[6] & 0xFF) as i16,
                             ),
                         ];
-                        //println!("{:?}", points);
+                        ////println!("{:?}", points);
                         self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
                         self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
-                        println!("palx {}", self.palette_x);
+                        //println!("palx {}", self.palette_x);
                         self.texpage_x_base = ((self.gp0_buffer[4] >> 16) & 0xF) as u16;
                         self.texpage_y_base = ((self.gp0_buffer[4] >> 20) & 0x1) as u16;
                         // self.blend_color = if fill == 0 {
@@ -292,6 +306,7 @@ impl Gpu {
                         self.blend_color = fill;
                         self.draw_textured_triangle(&points, command.get_bit(25));
                     } else if is_gouraud {
+                        //println!("GPU: gouraud tri");
                         let points: Vec<Point> = vec![
                             Point::from_word(self.gp0_buffer[1], fill),
                             Point::from_word(
@@ -303,7 +318,7 @@ impl Gpu {
                                 b24color_to_b15color(self.gp0_buffer[4]),
                             ),
                         ];
-                        //println!("{:?}", points);
+                        ////println!("{:?}", points);
                         self.draw_shaded_triangle(&points, command.get_bit(25));
                     } else {
                         let points: Vec<Point> = vec![
@@ -319,7 +334,7 @@ impl Gpu {
             0x2 => {
                 //Render line
                 if command.get_bit(27) {
-                    //println!("{:?}", self.gp0_buffer);
+                    ////println!("{:?}", self.gp0_buffer);
                     if (self.gp0_buffer[self.gp0_buffer.len() - 1] & 0xF000F000) != 0x50005000 {
                         //Wait until terminating vertex
                         return;
@@ -350,6 +365,7 @@ impl Gpu {
 
                 match size {
                     0b01 => {
+                        //println!("GPU: Single point");
                         //Draw single pixel
                         let point = Point::from_word(self.gp0_buffer[1], 0);
 
@@ -368,25 +384,40 @@ impl Gpu {
 
                     0b0 => {
                         //Draw variable size
-                        let tl_point = Point::from_word(self.gp0_buffer[1], 0);
-                        let br_point = if command.get_bit(26) {
-                            Point::from_word_with_offset(self.gp0_buffer[3], 0, tl_point)
-                        } else {
-                            Point::from_word_with_offset(self.gp0_buffer[2], 0, tl_point)
-                        };
+                        if command.get_bit(26) {
+                            //println!("GPU: Tex box");
+                            let tl_point = Point::new_textured_point(self.gp0_buffer[1],
+                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i16,
+                                (self.gp0_buffer[2] & 0xFF) as i16);
 
-                        self.draw_solid_box(
-                            tl_point.x as u32,
-                            tl_point.y as u32,
-                            br_point.x as u32,
-                            br_point.y as u32,
-                            b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
-                            command.get_bit(25),
-                        );
+                            let size = Point::from_word(self.gp0_buffer[3], 0);
+
+                            self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
+                            self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
+
+                            self.draw_textured_box(&tl_point, size.x, size.y, command.get_bit(25));
+
+                        } else {
+                            //println!("GPU: solid box");
+                            let tl_point = Point::from_word(self.gp0_buffer[1], 0);
+                            let br_point = Point::from_word_with_offset(self.gp0_buffer[2], 0, tl_point);
+
+                            //println!("tl: {:?} br: {:?}", tl_point, br_point);
+
+                            self.draw_solid_box(
+                                (tl_point.x + self.draw_offset.x) as u32,
+                                (tl_point.y + self.draw_offset.y) as u32,
+                                (br_point.x + self.draw_offset.x) as u32,
+                                (br_point.y + self.draw_offset.y) as u32,
+                                b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
+                                command.get_bit(25),
+                            );
+                        }
                     }
 
                     0b10 => {
                         //8x8 sprite
+                        //println!("GPU: 8x8 sprite");
                         let x1 = self.gp0_buffer[1] & 0xFFFF;
                         let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
                         self.draw_solid_box(
@@ -401,6 +432,7 @@ impl Gpu {
 
                     0b11 => {
                         //16x16 sprite
+                        //println!("GPU: 16x16 sprite");
                         let x1 = self.gp0_buffer[1] & 0xFFFF;
                         let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
                         self.draw_solid_box(
@@ -415,18 +447,19 @@ impl Gpu {
 
                     _ => {
                         //Lets do nothing with the others
-                        println!("Invalid size rect");
+                        //println!("Invalid size rect");
                     }
                 }
             }
 
             0x4 => {
                 //VRAM to VRAM blit
+                //println!("GPU: VRAM -> VRAM blit");
                 if self.gp0_buffer.len() < 4 {
                     //Not enough commands
                     return;
                 }
-                println!("Running VRAM to VRAM transfer");
+                //println!("Running VRAM to VRAM transfer");
                 let x_source = self.gp0_buffer[1] & 0xFFFF;
                 let y_source = (self.gp0_buffer[1] >> 16) & 0xFFFF;
                 let x_dest = self.gp0_buffer[2] & 0xFFFF;
@@ -463,7 +496,7 @@ impl Gpu {
                     self.vram[(addr + 1) as usize] = p2;
                 }
 
-                println!("cpu to vram done!");
+                //println!("cpu to vram done!");
             }
 
             0x6 => {
@@ -471,7 +504,7 @@ impl Gpu {
                 if self.gp0_buffer.len() < 3 {
                     return;
                 }
-                println!("VRAM to CPU")
+                //println!("VRAM to CPU")
                 //Lets ignore this one for now
             }
             0x7 => {
@@ -491,31 +524,32 @@ impl Gpu {
 
                     0xE3 => {
                         //Set Drawing Area Top Left
-                        self.draw_area_top_left_x = (command & 0x3FF) as u16;
-                        self.draw_area_top_left_y = ((command >> 10) & 0x1FF) as u16;
+                        self.draw_area_tl_point = Point::from_components(((command & 0x3FF) as u16) as i16, (((command >> 10) & 0x1FF) as u16) as i16, 0);
                     }
 
                     0xE4 => {
                         //Set Drawing Area Bottom Right
-                        self.draw_area_bottom_right_x = (command & 0x3FF) as u16;
-                        self.draw_area_bottom_right_y = ((command >> 10) & 0x1FF) as u16;
+                        self.draw_area_br_point = Point::from_components(((command & 0x3FF) as u16) as i16, (((command >> 10) & 0x1FF) as u16) as i16, 0);
+
                     }
 
                     0xE2 => {
                         //Texture window area
                         //Not needed rn
-                        println!("GP0 command E2 not implemented!");
+                        //println!("GP0 command E2 not implemented!");
                     }
 
                     0xE5 => {
                         //Set Drawing Offset
-                        //TODO Implement. I'm too lazy right now
+                        let x = (command & 0x7FF) as i16;
+                        let y = ((command >> 11) & 0x7FF) as i16;
+                        self.draw_offset = Point::from_components(x, y, 0);
                     }
 
                     0xE6 => {
                         //Mask bit
                         //Also no needed
-                        println!("GP0 command E6 not implemented!");
+                        //println!("GP0 command E6 not implemented!");
                     }
                     _ => panic!("Unknown GPU ENV command {:#X}. Full command queue is {:#X}", command.command(), self.gp0_buffer[0]),
                 }
@@ -528,7 +562,7 @@ impl Gpu {
     }
 
     pub fn send_gp1_command(&mut self, command: u32) {
-        println!("GP1 Command {:#X} parameter {:#X}", command.command(), command.parameter());
+        //println!("GP1 Command {:#X} parameter {:#X}", command.command(), command.parameter());
         match command.command() {
             0x0 => {
                 //Reset GPU
@@ -662,6 +696,9 @@ impl Gpu {
     fn draw_horizontal_line(&mut self, x1: u32, x2: u32, y: u32, fill: u16, transparent: bool) {
         let (start, end) = if x1 > x2 { (x2, x1) } else { (x1, x2) };
         for x in start..end.clamp(0, 2048) {
+            if self.out_of_draw_area(&Point::from_components(x as i16, y as i16, 0)) {
+                continue;
+            }
             let address = point_to_address(x, y) as usize;
             let color = if transparent {
                 alpha_composite(self.vram[address % 524288], fill)
@@ -689,9 +726,12 @@ impl Gpu {
             (x1, x2, x1_color, x2_color)
         };
         for x in start..end {
+            if self.out_of_draw_area(&Point::from_components(x, y, 0)) {
+                continue;
+            }
             let address = point_to_address(x as u32, y as u32) as usize;
             let fill = lerp_color(start_color, end_color, start, end, x);
-            //println!("x {} end {} fill {:#X}", x, end, fill);
+            ////println!("x {} end {} fill {:#X}", x, end, fill);
             let color = if transparent {
                 alpha_composite(self.vram[address % 524288], fill)
             } else {
@@ -701,6 +741,9 @@ impl Gpu {
                 self.vram[address % 524288] = color;
             }
         }
+    }
+    fn out_of_draw_area(&self, test_point: &Point) -> bool {
+        !(test_point.x > self.draw_area_tl_point.x && test_point.x < self.draw_area_br_point.x && test_point.y > self.draw_area_tl_point.y && test_point.y < self.draw_area_br_point.y)
     }
 
     fn draw_horizontal_line_textured(
@@ -715,8 +758,13 @@ impl Gpu {
         transparent: bool,
     ) {
         let (start, end) = if x1 > x2 { (x2, x1) } else { (x1, x2) };
-        //println!("x1: {} y1: {} x2: {} y2: {}", x1_tex, y1_tex, x2_tex, y2_tex);
+        ////println!("x1: {} y1: {} x2: {} y2: {}", x1_tex, y1_tex, x2_tex, y2_tex);
         for x in start..end {
+
+            if self.out_of_draw_area(&Point::from_components(x, y, 0)) {
+                continue;
+            }
+            
             let address = point_to_address(x as u32, y as u32) as usize;
 
             let fill = self.get_texel(
@@ -724,7 +772,7 @@ impl Gpu {
                 lerp_coords(y1_tex, y2_tex, start, end, x),
             );
             //let fill = 0xFFFF;
-            //println!("x {} end {} fill {:#X}", x, end, fill);
+            ////println!("x {} end {} fill {:#X}", x, end, fill);
 
             let color = if transparent {
                 alpha_composite(self.vram[address % 524288], fill)
@@ -740,6 +788,12 @@ impl Gpu {
     fn draw_solid_box(&mut self, x1: u32, y1: u32, x2: u32, y2: u32, fill: u16, transparent: bool) {
         for y in y1..y2 {
             self.draw_horizontal_line(x1, x2, y, fill, transparent);
+        }
+    }
+
+    fn draw_textured_box(&mut self, tl_point: &Point, width: i16, height: i16, transparent: bool) {
+        for offset in 0..height {
+            self.draw_horizontal_line_textured(tl_point.x, tl_point.x + width, tl_point.y + offset, tl_point.tex_y + offset, tl_point.tex_y + offset, tl_point.tex_x, tl_point.tex_x + width, transparent)
         }
     }
 

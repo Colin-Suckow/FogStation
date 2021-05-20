@@ -2,6 +2,7 @@ use bios::Bios;
 use bus::MainBus;
 use controller::controller_execute_cycle;
 use cpu::R3000;
+use gpu::Resolution;
 use timer::TimerState;
 use std::panic;
 
@@ -149,5 +150,9 @@ impl PSXEmu {
 
     pub fn remove_sw_breakpoint(&mut self, addr: u32) {
         self.sw_breakpoints.retain(|&x| x != addr);
+    }
+
+    pub fn display_resolution(&self) -> Resolution {
+        self.r3000.main_bus.gpu.resolution()
     }
 }

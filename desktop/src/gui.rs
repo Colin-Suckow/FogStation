@@ -40,7 +40,8 @@ pub(crate) fn run_gui(mut state: EmuState) {
         Window::new(im_str!("Viewport"))
             .content_size([800.0, 600.0])
             .build(ui, || {
-                let texture = create_texture_from_buffer(gl_ctx, state.emu.get_vram(), 640, 480);
+                let res = state.emu.display_resolution();
+                let texture = create_texture_from_buffer(gl_ctx, state.emu.get_vram(), res.width as usize, res.height as usize);
                 let id = TextureId::new(1); //This is an awful hack that needs to be replaced
                 textures.replace(id, texture);
                 Image::new(id, [800.0, 600.0]).build(ui);

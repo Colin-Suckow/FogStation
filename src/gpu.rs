@@ -12,6 +12,11 @@ enum TextureColorMode {
     FifteenBit,
 }
 
+pub struct Resolution {
+    pub height: u32,
+    pub width: u32,
+}
+
 #[derive(Copy, Clone, Debug)]
 struct Point {
     x: i16,
@@ -87,6 +92,9 @@ pub struct Gpu {
     vblank_consumed: bool,
     hblank_consumed: bool,
     show_frame: bool,
+
+    display_h_res: u32,
+    display_v_res: u32,
 }
 
 impl Gpu {
@@ -114,6 +122,9 @@ impl Gpu {
             vblank_consumed: false,
             hblank_consumed: false,
             show_frame: false,
+
+            display_h_res: 640,
+            display_v_res: 480,
         }
     }
 
@@ -581,6 +592,25 @@ impl Gpu {
                 //Ignore this one for now
             }
 
+            0x8 => {
+                //Display mode
+                self.display_h_res = {
+                    if command.get_bit(6) {
+                        368
+                    } else {
+                        match command & 0x3 {
+                            0 => 256,
+                            1 => 320,
+                            2 => 512,
+                            3 => 640,
+                            _ => unreachable!()
+                        }
+                    }
+                };
+
+                self.display_v_res = if command.get_bit(2) && command.get_bit(5) {480} else {240};
+            }
+
             0x10 => {
                 //Get gpu information
                 //Ignoring this too
@@ -612,6 +642,13 @@ impl Gpu {
 
     pub fn is_hblank(&self) -> bool {
         self.pixel_count % H_RES > H_BLANK_START
+    }
+
+    pub fn resolution(&self) -> Resolution {
+        Resolution {
+            width: self.display_h_res,
+            height: self.display_v_res,
+        }
     }
 
     pub fn consume_vblank(&mut self) -> bool {

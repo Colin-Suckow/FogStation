@@ -10,7 +10,15 @@ A toy playstation emulator written in rust. Better than my nes emulator, but sti
 
 
 ## Status
-Can boot bios, display boot screen, and load and run software from cdrom, stuck on controller/memory card access
+My current goal is to make Puzzle Bobble 2 playable. Puzzle Bobble 2 is known for being an easy game to emulate. Most games require the **Graphics Transformation Engine (GTE)** to run. The GTE handles all the math required for 3D rendering. Puzzle Bobble 2, being a 2D only game, does not require the GTE. In fact, the game doesn't require many other hardware features at all. This simplicity makes it a good candidate for early emulation.
+
+Previously acheived goals
+- Can boot bios
+- render boot screen
+- load and execute software from cdrom
+- display a very broken version of ridge racer
+
+Right now I am working on fixing my GPU implementation while I wait for my copy of puzzle bobble 2 to arrive.
 
 ## Implemented (for the most part)
 - MIPS R3000 CPU

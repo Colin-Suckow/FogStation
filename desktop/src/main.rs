@@ -141,7 +141,7 @@ fn main() {
 
 fn run_headless(mut state: EmuState) {
     loop {   
-        state.emu.step_instruction();
+        state.emu.step_cycle();
     }
 }
 

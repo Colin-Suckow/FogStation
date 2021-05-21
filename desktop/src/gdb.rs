@@ -57,7 +57,7 @@ impl SingleThreadOps for EmuState {
                     if self.emu.halt_requested() {
                         return Ok(StopReason::SwBreak);
                     }
-                    self.emu.step_instruction();
+                    self.emu.step_cycle();
                     cycles += 1;
                     if cycles % 1024 == 0 && check_gdb_interrupt() {
                         return Ok(StopReason::GdbInterrupt);

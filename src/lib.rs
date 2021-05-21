@@ -3,35 +3,33 @@ use bus::MainBus;
 use controller::controller_execute_cycle;
 use cpu::R3000;
 use gpu::Resolution;
-use timer::TimerState;
 use std::panic;
+use timer::TimerState;
 
+use crate::cdrom::disc::Disc;
 use crate::cpu::InterruptSource;
 use crate::dma::execute_dma_cycle;
 use crate::gpu::Gpu;
 use crate::memory::Memory;
-use crate::cdrom::disc::Disc;
 
 mod bios;
 mod bus;
+pub mod cdrom;
+mod controller;
 pub mod cpu;
 mod dma;
 mod gpu;
 mod memory;
 mod spu;
-pub mod cdrom;
 mod timer;
-mod controller;
 
 pub struct PSXEmu {
     pub r3000: R3000,
     timers: TimerState,
     cycle_count: u32,
     halt_requested: bool,
-    sw_breakpoints: Vec<u32>
+    sw_breakpoints: Vec<u32>,
 }
-
-
 
 impl PSXEmu {
     /// Creates a new instance of the emulator.
@@ -59,12 +57,23 @@ impl PSXEmu {
     }
 
     /// Runs a "single" cpu clock and all the other clocks that happen within 1 cpu
-    pub fn step_instruction(&mut self) {
-     
+    pub fn step_cycle(&mut self) {
+        for _ in 0..2 {
+            self.run_cpu_cycle();
+
+            self.run_gpu_cycle();
+        }
+
+        //One extra gpu cycle gets close enough to correct timing
+        self.run_gpu_cycle();
+    }
+
+    fn run_cpu_cycle(&mut self) {
         if self.sw_breakpoints.contains(&self.r3000.pc) {
             self.halt_requested = true;
             return;
         }
+
         controller_execute_cycle(&mut self.r3000);
         self.r3000.step_instruction(&mut self.timers);
         execute_dma_cycle(&mut self.r3000);
@@ -73,23 +82,23 @@ impl PSXEmu {
         if self.cycle_count % 8 == 0 {
             self.timers.update_sys_div_8(&mut self.r3000);
         }
-        for _ in 0..2 {
-            self.r3000.main_bus.gpu.execute_cycle();
-            self.timers.update_dot_clock(&mut self.r3000);
-            if self.r3000.main_bus.gpu.consume_hblank() {
-                self.timers.update_h_blank(&mut self.r3000);
-            }
+    }
+
+    fn run_gpu_cycle(&mut self) {
+        self.r3000.main_bus.gpu.execute_cycle();
+        self.timers.update_dot_clock(&mut self.r3000);
+        if self.r3000.main_bus.gpu.consume_hblank() {
+            self.timers.update_h_blank(&mut self.r3000);
         }
     }
 
     ///Runs the emulator till one frame has been generated
     pub fn run_frame(&mut self) {
         while !self.r3000.main_bus.gpu.end_of_frame() {
-            self.step_instruction();
+            self.step_cycle();
         }
         //Step the gpu once more to get it off this frame
         self.r3000.main_bus.gpu.execute_cycle();
-        
     }
 
     pub fn load_executable(&mut self, start_addr: u32, entrypoint: u32, _sp: u32, data: &Vec<u8>) {

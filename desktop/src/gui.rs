@@ -69,7 +69,7 @@ pub(crate) fn run_gui(mut state: EmuState) {
                 } else {
                     ui.text("Halted");
                     if ui.button(im_str!("Step Instruction"), [120.0, 20.0]) {
-                        state.emu.step_instruction();
+                        state.emu.step_cycle();
                     }
                 }
 

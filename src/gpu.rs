@@ -68,7 +68,6 @@ impl Point {
     }
 }
 
-
 pub struct Gpu {
     vram: Vec<u16>,
     status_reg: u32,
@@ -178,13 +177,21 @@ impl Gpu {
                         let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
                         let x2 = ((self.gp0_buffer[2] & 0xFFFF) + x1);
                         let y2 = (((self.gp0_buffer[2] >> 16) & 0xFFFF) + y1);
-                        //println!("Drawing quick rect");
+                        println!("Drawing quick rect");
+                        println!(
+                            "x1 {} y1 {} x2 {} y2 {}  color {}",
+                            x1,
+                            y1,
+                            x2,
+                            y2,
+                            self.gp0_buffer[0] & 0x1FFFFFF
+                        );
                         self.draw_solid_box(
                             x1,
                             y1,
                             x2,
                             y2,
-                            b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
+                            b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF) + 1,
                             false,
                         );
                     }
@@ -397,9 +404,11 @@ impl Gpu {
                         //Draw variable size
                         if command.get_bit(26) {
                             //println!("GPU: Tex box");
-                            let tl_point = Point::new_textured_point(self.gp0_buffer[1],
+                            let tl_point = Point::new_textured_point(
+                                self.gp0_buffer[1],
                                 ((self.gp0_buffer[2] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[2] & 0xFF) as i16);
+                                (self.gp0_buffer[2] & 0xFF) as i16,
+                            );
 
                             let size = Point::from_word(self.gp0_buffer[3], 0);
 
@@ -407,11 +416,11 @@ impl Gpu {
                             self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
 
                             self.draw_textured_box(&tl_point, size.x, size.y, command.get_bit(25));
-
                         } else {
                             //println!("GPU: solid box");
                             let tl_point = Point::from_word(self.gp0_buffer[1], 0);
-                            let br_point = Point::from_word_with_offset(self.gp0_buffer[2], 0, tl_point);
+                            let br_point =
+                                Point::from_word_with_offset(self.gp0_buffer[2], 0, tl_point);
 
                             //println!("tl: {:?} br: {:?}", tl_point, br_point);
 
@@ -429,31 +438,61 @@ impl Gpu {
                     0b10 => {
                         //8x8 sprite
                         //println!("GPU: 8x8 sprite");
-                        let x1 = self.gp0_buffer[1] & 0xFFFF;
-                        let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
-                        self.draw_solid_box(
-                            x1,
-                            y1,
-                            x1 + 8,
-                            y1 + 8,
-                            b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
-                            command.get_bit(25),
-                        );
+                        if command.get_bit(26) {
+                            let tl_point = Point::new_textured_point(
+                                self.gp0_buffer[1],
+                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i16,
+                                (self.gp0_buffer[2] & 0xFF) as i16,
+                            );
+
+                            let size = Point::from_components(8, 8, 0);
+
+                            self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
+                            self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
+
+                            self.draw_textured_box(&tl_point, size.x, size.y, command.get_bit(25));
+                        } else {
+                            let x1 = self.gp0_buffer[1] & 0xFFFF;
+                            let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
+                            self.draw_solid_box(
+                                x1,
+                                y1,
+                                x1 + 8,
+                                y1 + 8,
+                                b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
+                                command.get_bit(25),
+                            );
+                        }
                     }
 
                     0b11 => {
                         //16x16 sprite
                         //println!("GPU: 16x16 sprite");
-                        let x1 = self.gp0_buffer[1] & 0xFFFF;
-                        let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
-                        self.draw_solid_box(
-                            x1,
-                            y1,
-                            x1 + 16,
-                            y1 + 16,
-                            b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
-                            command.get_bit(25),
-                        );
+                        if command.get_bit(26) {
+                            let tl_point = Point::new_textured_point(
+                                self.gp0_buffer[1],
+                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i16,
+                                (self.gp0_buffer[2] & 0xFF) as i16,
+                            );
+
+                            let size = Point::from_components(16, 16, 0);
+
+                            self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
+                            self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
+
+                            self.draw_textured_box(&tl_point, size.x, size.y, command.get_bit(25));
+                        } else {
+                            let x1 = self.gp0_buffer[1] & 0xFFFF;
+                            let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
+                            self.draw_solid_box(
+                                x1,
+                                y1,
+                                x1 + 16,
+                                y1 + 16,
+                                b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
+                                command.get_bit(25),
+                            );
+                        }
                     }
 
                     _ => {
@@ -535,13 +574,20 @@ impl Gpu {
 
                     0xE3 => {
                         //Set Drawing Area Top Left
-                        self.draw_area_tl_point = Point::from_components(((command & 0x3FF) as u16) as i16, (((command >> 10) & 0x1FF) as u16) as i16, 0);
+                        self.draw_area_tl_point = Point::from_components(
+                            ((command & 0x3FF) as u16) as i16,
+                            (((command >> 10) & 0x1FF) as u16) as i16,
+                            0,
+                        );
                     }
 
                     0xE4 => {
                         //Set Drawing Area Bottom Right
-                        self.draw_area_br_point = Point::from_components(((command & 0x3FF) as u16) as i16, (((command >> 10) & 0x1FF) as u16) as i16, 0);
-
+                        self.draw_area_br_point = Point::from_components(
+                            ((command & 0x3FF) as u16) as i16,
+                            (((command >> 10) & 0x1FF) as u16) as i16,
+                            0,
+                        );
                     }
 
                     0xE2 => {
@@ -562,7 +608,11 @@ impl Gpu {
                         //Also no needed
                         //println!("GP0 command E6 not implemented!");
                     }
-                    _ => panic!("Unknown GPU ENV command {:#X}. Full command queue is {:#X}", command.command(), self.gp0_buffer[0]),
+                    _ => panic!(
+                        "Unknown GPU ENV command {:#X}. Full command queue is {:#X}",
+                        command.command(),
+                        self.gp0_buffer[0]
+                    ),
                 }
             }
 
@@ -603,12 +653,16 @@ impl Gpu {
                             1 => 320,
                             2 => 512,
                             3 => 640,
-                            _ => unreachable!()
+                            _ => unreachable!(),
                         }
                     }
                 };
 
-                self.display_v_res = if command.get_bit(2) && command.get_bit(5) {480} else {240};
+                self.display_v_res = if command.get_bit(2) && command.get_bit(5) {
+                    480
+                } else {
+                    240
+                };
             }
 
             0x10 => {
@@ -704,7 +758,8 @@ impl Gpu {
         width: u32,
     ) {
         for x_offset in 0..=width {
-            let val = self.vram[(point_to_address(x_source + x_offset, y_source) as usize) % 524288];
+            let val =
+                self.vram[(point_to_address(x_source + x_offset, y_source) as usize) % 524288];
             let addr = point_to_address(x_dest + x_offset, y_dest) as usize;
             self.vram[addr % 524288] = val;
         }
@@ -780,7 +835,10 @@ impl Gpu {
         }
     }
     fn out_of_draw_area(&self, test_point: &Point) -> bool {
-        !(test_point.x > self.draw_area_tl_point.x && test_point.x < self.draw_area_br_point.x && test_point.y > self.draw_area_tl_point.y && test_point.y < self.draw_area_br_point.y)
+        !(test_point.x > self.draw_area_tl_point.x
+            && test_point.x < self.draw_area_br_point.x
+            && test_point.y > self.draw_area_tl_point.y
+            && test_point.y < self.draw_area_br_point.y)
     }
 
     fn draw_horizontal_line_textured(
@@ -797,11 +855,10 @@ impl Gpu {
         let (start, end) = if x1 > x2 { (x2, x1) } else { (x1, x2) };
         ////println!("x1: {} y1: {} x2: {} y2: {}", x1_tex, y1_tex, x2_tex, y2_tex);
         for x in start..end {
-
             if self.out_of_draw_area(&Point::from_components(x, y, 0)) {
                 continue;
             }
-            
+
             let address = point_to_address(x as u32, y as u32) as usize;
 
             let fill = self.get_texel(
@@ -830,7 +887,16 @@ impl Gpu {
 
     fn draw_textured_box(&mut self, tl_point: &Point, width: i16, height: i16, transparent: bool) {
         for offset in 0..height {
-            self.draw_horizontal_line_textured(tl_point.x, tl_point.x + width, tl_point.y + offset, tl_point.tex_y + offset, tl_point.tex_y + offset, tl_point.tex_x, tl_point.tex_x + width, transparent)
+            self.draw_horizontal_line_textured(
+                tl_point.x,
+                tl_point.x + width,
+                tl_point.y + offset,
+                tl_point.tex_y + offset,
+                tl_point.tex_y + offset,
+                tl_point.tex_x,
+                tl_point.tex_x + width,
+                transparent,
+            )
         }
     }
 

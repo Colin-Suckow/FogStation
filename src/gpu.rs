@@ -177,15 +177,6 @@ impl Gpu {
                         let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
                         let x2 = ((self.gp0_buffer[2] & 0xFFFF) + x1);
                         let y2 = (((self.gp0_buffer[2] >> 16) & 0xFFFF) + y1);
-                        println!("Drawing quick rect");
-                        println!(
-                            "x1 {} y1 {} x2 {} y2 {}  color {}",
-                            x1,
-                            y1,
-                            x2,
-                            y2,
-                            self.gp0_buffer[0] & 0x1FFFFFF
-                        );
                         self.draw_solid_box(
                             x1,
                             y1,
@@ -616,6 +607,10 @@ impl Gpu {
                 }
             }
 
+            0x1F => {
+                panic!("GPU IRQ requested!");
+            }
+
             _ => println!("unknown gp0 {:#X}!", command.gp0_header()),
         }
         //Made it to the end, so the command must have been executed
@@ -786,8 +781,8 @@ impl Gpu {
     }
 
     fn draw_horizontal_line(&mut self, x1: u32, x2: u32, y: u32, fill: u16, transparent: bool) {
-        let (start, end) = if x1 > x2 { (x2, x1) } else { (x1, x2) };
-        for x in start..end.clamp(0, 2048) {
+        
+        for x in x1..x2 {
             if self.out_of_draw_area(&Point::from_components(x as i16, y as i16, 0)) {
                 continue;
             }

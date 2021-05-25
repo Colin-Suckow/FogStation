@@ -15,6 +15,94 @@ const DEFAULT_JOY_BAUD: u16 = 0x88;
 const MEMORY_CARD_SELECT_BYTE: u8 = 0x81;
 const CONTROLER_SELECT_BYTE: u8 = 0x1;
 
+pub enum ControllerType {
+    DigitalPad,
+}
+
+pub struct ButtonState {
+    pub controller_type: ControllerType,
+
+    pub button_x: bool,
+    pub button_square: bool,
+    pub button_triangle: bool,
+    pub button_circle: bool,
+
+    pub button_up: bool,
+    pub button_down: bool,
+    pub button_left: bool,
+    pub button_right: bool,
+
+    pub button_l1: bool,
+    pub button_l2: bool,
+    pub button_l3: bool,
+
+    pub button_r1: bool,
+    pub button_r2: bool,
+    pub button_r3: bool,
+
+    pub button_select: bool,
+    pub button_start: bool,
+}
+
+impl ButtonState {
+    pub fn new_digital_pad() -> Self {
+        Self {
+            controller_type: ControllerType::DigitalPad,
+
+            button_x: false,
+            button_square: false,
+            button_triangle: false,
+            button_circle: false,
+        
+            button_up: false,
+            button_down: false,
+            button_left: false,
+            button_right: false,
+        
+            button_l1: false,
+            button_l2: false,
+            button_l3: false,
+
+            button_r1: false,
+            button_r2: false,
+            button_r3: false,
+
+            button_select: false,
+            button_start: false,
+        }
+    }
+
+    fn digital_low_byte(&self) -> u8 {
+        let mut result = 0;
+
+        result.set_bit(0, !self.button_select);
+        result.set_bit(1, !self.button_l3);
+        result.set_bit(2, !self.button_r3);
+        result.set_bit(3, !self.button_start);
+        result.set_bit(4, !self.button_up);
+        result.set_bit(5, !self.button_right);
+        result.set_bit(6, !self.button_down);
+        result.set_bit(7, !self.button_left);
+
+        result
+    }
+
+    fn digital_high_byte(&self) -> u8 {
+        let mut result = 0;
+
+        result.set_bit(0, !self.button_l2);
+        result.set_bit(1, !self.button_r2);
+        result.set_bit(2, !self.button_l1);
+        result.set_bit(3, !self.button_r1);
+        result.set_bit(4, !self.button_triangle);
+        result.set_bit(5, !self.button_circle);
+        result.set_bit(6, !self.button_x);
+        result.set_bit(7, !self.button_square);
+
+        result
+    }
+}
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 enum Slot {
     MemoryCard,
@@ -39,6 +127,8 @@ pub(super) struct Controllers {
 
     pub(super) pending_irq: bool,
     irq_cycle_timer: usize,
+
+    latest_button_state: ButtonState,
 }
 
 impl Controllers {
@@ -54,7 +144,13 @@ impl Controllers {
 
             pending_irq: false,
             irq_cycle_timer: 0,
+
+            latest_button_state: ButtonState::new_digital_pad(),
         }
+    }
+
+    pub(super) fn update_button_state(&mut self, new_state: ButtonState) {
+        self.latest_button_state = new_state;
     }
 
     pub(super) fn write_half_word(&mut self, addr: u32, val: u16) {
@@ -152,6 +248,11 @@ impl Controllers {
                     return;
                 }
 
+                if self.joy_ctrl.get_bit(13) {
+                    //Trying to return controller 2, do nothing because its not connected
+                    return;
+                }
+
                 self.push_rx_buf(0);
                 self.queue_interrupt();
                 TXstate::Transfering {
@@ -164,8 +265,8 @@ impl Controllers {
                     let response = match step {
                         0 => 0x41, // Digital pad idlo
                         1 => 0x5A, // Digital pad idhi
-                        2 => 0xFF, // No low buttons pressed
-                        3 => 0xFF, // No high buttons pressed
+                        2 => self.latest_button_state.digital_low_byte(),
+                        3 => self.latest_button_state.digital_high_byte(),
                         _ => 0,
                     };
                     self.push_rx_buf(response);

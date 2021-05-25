@@ -1,6 +1,6 @@
 use bios::Bios;
 use bus::MainBus;
-use controller::controller_execute_cycle;
+use controller::{ButtonState, controller_execute_cycle, ControllerType};
 use cpu::R3000;
 use gpu::Resolution;
 use std::panic;
@@ -15,7 +15,7 @@ use crate::memory::Memory;
 mod bios;
 mod bus;
 pub mod cdrom;
-mod controller;
+pub mod controller;
 pub mod cpu;
 mod dma;
 mod gpu;
@@ -163,5 +163,9 @@ impl PSXEmu {
 
     pub fn display_resolution(&self) -> Resolution {
         self.r3000.main_bus.gpu.resolution()
+    }
+
+    pub fn update_controller_state(&mut self, state: ButtonState) {
+        self.r3000.main_bus.controllers.update_button_state(state);
     }
 }

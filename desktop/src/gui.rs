@@ -2,8 +2,9 @@ use std::{borrow::Cow, rc::Rc, time::{SystemTime, UNIX_EPOCH}};
 use glium::{Texture2d, backend::Facade, texture::{ClientFormat, RawImage2d}, uniforms::{MagnifySamplerFilter, MinifySamplerFilter, SamplerBehavior}};
 use imgui::*;
 use imgui_glium_renderer::Texture;
+use winit::event::VirtualKeyCode;
 use crate::{EmuState, support};
-
+use psx_emu::controller::{ButtonState, ControllerType};
 
 pub(crate) fn run_gui(mut state: EmuState) {
     let system = support::init("VaporStation");
@@ -11,6 +12,7 @@ pub(crate) fn run_gui(mut state: EmuState) {
     let mut frame_time = 0;
 
     system.main_loop(move |_, ui, gl_ctx, textures| {
+        state.emu.update_controller_state(get_button_state(ui));
         start = SystemTime::now();
         if !state.halted {
             state.emu.run_frame();
@@ -91,6 +93,33 @@ pub(crate) fn run_gui(mut state: EmuState) {
                 };
             });
     });
+}
+
+fn get_button_state(ui: &mut Ui) -> ButtonState {
+    ButtonState {
+        controller_type: ControllerType::DigitalPad,
+        button_x: is_key_down(ui, VirtualKeyCode::K),
+        button_square: is_key_down(ui, VirtualKeyCode::J),
+        button_triangle: is_key_down(ui, VirtualKeyCode::I),
+        button_circle: is_key_down(ui, VirtualKeyCode::L),
+        button_up: is_key_down(ui, VirtualKeyCode::W),
+        button_down: is_key_down(ui, VirtualKeyCode::S),
+        button_left: is_key_down(ui, VirtualKeyCode::A),
+        button_right: is_key_down(ui, VirtualKeyCode::D),
+        button_l1: false,
+        button_l2: false,
+        button_l3: false,
+        button_r1: false,
+        button_r2: false,
+        button_r3: false,
+        button_select: false,
+        button_start: is_key_down(ui, VirtualKeyCode::Apostrophe),
+        
+    }
+}
+
+fn is_key_down(ui: &mut Ui, keycode: VirtualKeyCode) -> bool {
+    ui.io().keys_down[keycode as usize]
 }
 
 /// Creates OpenGL texture from 16 bit, psx format, framebuffer

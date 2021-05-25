@@ -146,9 +146,9 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
 
                         //Linked list mode. mem -> gpu
                         let mut addr = cpu.main_bus.dma.channels[num].base_addr;
-                        //println!("Starting linked list transfer. addr {:#X}", addr);
+                        println!("Starting linked list transfer. addr {:#X}", addr);
                         let mut header = cpu.main_bus.read_word(addr);
-                        //println!("base addr: {:#X}. base header: {:#X}", addr, header);
+                        println!("base addr: {:#X}. base header: {:#X}", addr, header);
                         loop {
                             let num_words = (header >> 24) & 0xFF;
                             for i in 0..num_words {
@@ -156,9 +156,12 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                                 cpu.main_bus.gpu.send_gp0_command(packet);
                             }
                             //println!("addr {:#X}, header {:#X}, nw {}", addr, header, num_words);
-                            if header & 0x800000 != 0 {
+                            if header & 0x800000 != 0 || header == 0x00FFFFFF {
                                 break;
                             }
+
+                            //println!("Addr {:X}", addr);
+
                             addr = header & 0xFFFFFF;
                             header = cpu.main_bus.read_word(addr);
                         }

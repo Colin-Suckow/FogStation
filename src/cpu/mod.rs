@@ -6,8 +6,11 @@ use instruction::{Instruction, NumberHelpers};
 use crate::timer::TimerState;
 use crate::{bus::MainBus, cdrom};
 
+use self::gte::GTE;
+
 mod cop0;
 mod instruction;
+mod gte;
 
 #[derive(Debug, Clone, Copy)]
 pub enum InterruptSource {
@@ -65,6 +68,7 @@ pub struct R3000 {
     pub load_exe: bool,
     exec_delay: bool,
     last_was_branch: bool,
+    gte: GTE,
 }
 
 impl R3000 {
@@ -86,6 +90,7 @@ impl R3000 {
             load_exe: false,
             exec_delay: false,
             last_was_branch: false,
+            gte: GTE::new(),
         }
     }
     /// Resets cpu registers to zero and sets program counter to reset vector (0xBFC00000)
@@ -538,23 +543,16 @@ impl R3000 {
                 match instruction.rs() {
                     0x6 => {
                         //CTC2
-                        //Stubbed. Hopefully this doesn't break anything?
+                        let val = self.read_reg(instruction.rt());
+                        self.gte.set_control_register(instruction.rd() as usize, val);
                     }
 
                     0x11 => {
                         //COP2 imm25
                         // Execute immediate GTE command
-                        // Stubbing this guy too
+                        self.gte.execute_command(instruction & 0x1FFFFFF);
                     }
 
-                    0x2 => {
-                        //MTC2
-                        // stubberino
-                    }
-
-                    0x0 => {
-                        //MFC2
-                    }
                     _ => panic!(
                         "CPU: Unknown COP2 MFC instruction {:#X} ({0:#b}, {0}) {:#b}",
                         instruction.rs(),
@@ -628,17 +626,20 @@ impl R3000 {
 
             0x32 => {
                 //LWC2
-                // Ignoring the GTE
+                let addr = instruction
+                    .immediate_sign_extended()
+                    .wrapping_add(self.read_reg(instruction.rs()));
+                let val = self.read_bus_word(addr, timers);
+                self.gte.set_data_register(instruction.rt() as usize, val);
+
             }
 
-            0x3A => {
-                //SWC2
-                // Also ignoring. Sorry GTE
-            }
+            
             _ => panic!(
-                "CPU: Unknown opcode {0} ({0:#08b}, {0:#X}) PC {1:#X}",
+                "CPU: Unknown opcode {0} ({0:#08b}, {0:#X}) PC {1:#X} FULL {2:#X}",
                 instruction.opcode(),
-                self.current_pc
+                self.current_pc,
+                instruction
             ),
         };
     }
@@ -1235,7 +1236,7 @@ impl R3000 {
         }
 
         if addr == 0x1F8010A4 {
-            println!("Wrote dma2 block at pc {:#X} R31 {:#X}", self.current_pc, self.read_reg(31));
+            println!("Wrote dma2 block at pc {:#X} R31 {:#X} with val {:#X}", self.current_pc, self.read_reg(31), val);
         }
 
         match addr & 0x1fffffff {

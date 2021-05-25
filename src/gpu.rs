@@ -527,6 +527,7 @@ impl Gpu {
                 let base_x = (self.gp0_buffer[1] & 0xFFFF) as u16;
                 let base_y = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as u16;
 
+
                 for index in 3..(length) {
                     let p2 = ((self.gp0_buffer[index as usize] >> 16) & 0xFFFF) as u16;
                     let p1 = (self.gp0_buffer[index as usize] & 0xFFFF) as u16;
@@ -536,8 +537,6 @@ impl Gpu {
                     self.vram[addr as usize] = p1;
                     self.vram[(addr + 1) as usize] = p2;
                 }
-
-                //println!("cpu to vram done!");
             }
 
             0x6 => {
@@ -545,7 +544,7 @@ impl Gpu {
                 if self.gp0_buffer.len() < 3 {
                     return;
                 }
-                //println!("VRAM to CPU")
+                println!("VRAM to CPU")
                 //Lets ignore this one for now
             }
             0x7 => {
@@ -599,7 +598,9 @@ impl Gpu {
                         //Also no needed
                         //println!("GP0 command E6 not implemented!");
                     }
-                    _ => panic!(
+
+                    
+                    _ => println!(
                         "Unknown GPU ENV command {:#X}. Full command queue is {:#X}",
                         command.command(),
                         self.gp0_buffer[0]
@@ -626,6 +627,11 @@ impl Gpu {
                 self.status_reg = 0;
                 self.pixel_count = 0;
                 self.vram = vec![0; 1_048_576 / 2];
+            }
+
+            0x1 => {
+                //Reset Command buffer
+                self.gp0_buffer.clear();
             }
 
             0x2 => {

@@ -5,43 +5,43 @@ pub(super) struct GTE {
     ZSF3: i16,
     ZSF4: i16,
     H: u16,
-    DQA: I8F8,
-    DQB: I8F24,
-    OFX: I16F16,
-    OFY: I16F16,
-    RBK: I20F12,
-    BBK: I20F12,
-    GBK: I20F12,
-    RFC: I28F4,
-    GFC: I28F4,
-    BFC: I28F4,
-    LR1: I4F12,
-    LR2: I4F12,
-    LR3: I4F12,
-    LG1: I4F12,
-    LG2: I4F12,
-    LG3: I4F12,
-    LB1: I4F12,
-    LB2: I4F12,
-    LB3: I4F12,
-    L11: I4F12,
-    L12: I4F12,
-    L13: I4F12,
-    L21: I4F12,
-    L22: I4F12,
-    L23: I4F12,
-    L31: I4F12,
-    L32: I4F12,
-    L33: I4F12,
-    RT11: I4F12,
-    RT12: I4F12,
-    RT13: I4F12,
-    RT21: I4F12,
-    RT22: I4F12,
-    RT23: I4F12,
-    RT31: I4F12,
-    RT32: I4F12,
-    RT33: I4F12,
+    DQA: i16,
+    DQB: i32,
+    OFX: i32,
+    OFY: i32,
+    RBK: i32,
+    BBK: i32,
+    GBK: i32,
+    RFC: i32,
+    GFC: i32,
+    BFC: i32,
+    LR1: i16,
+    LR2: i16,
+    LR3: i16,
+    LG1: i16,
+    LG2: i16,
+    LG3: i16,
+    LB1: i16,
+    LB2: i16,
+    LB3: i16,
+    L11: i16,
+    L12: i16,
+    L13: i16,
+    L21: i16,
+    L22: i16,
+    L23: i16,
+    L31: i16,
+    L32: i16,
+    L33: i16,
+    RT11: i16,
+    RT12: i16,
+    RT13: i16,
+    RT21: i16,
+    RT22: i16,
+    RT23: i16,
+    RT31: i16,
+    RT32: i16,
+    RT33: i16,
     TRX: i32,
     TRY: i32,
     TRZ: i32,
@@ -73,43 +73,43 @@ impl GTE {
             ZSF3: 0,
             ZSF4: 0,
             H: 0,
-            DQA: I8F8::from_num(0),
-            DQB: I8F24::from_num(0),
-            OFX: I16F16::from_num(0),
-            OFY: I16F16::from_num(0),
-            RBK: I20F12::from_num(0),
-            BBK: I20F12::from_num(0),
-            GBK: I20F12::from_num(0),
-            RFC: I28F4::from_num(0),
-            GFC: I28F4::from_num(0),
-            BFC: I28F4::from_num(0),
-            LR1: I4F12::from_num(0),
-            LR2: I4F12::from_num(0),
-            LR3: I4F12::from_num(0),
-            LG1: I4F12::from_num(0),
-            LG2: I4F12::from_num(0),
-            LG3: I4F12::from_num(0),
-            LB1: I4F12::from_num(0),
-            LB2: I4F12::from_num(0),
-            LB3: I4F12::from_num(0),
-            L11: I4F12::from_num(0),
-            L12: I4F12::from_num(0),
-            L13: I4F12::from_num(0),
-            L21: I4F12::from_num(0),
-            L22: I4F12::from_num(0),
-            L23: I4F12::from_num(0),
-            L31: I4F12::from_num(0),
-            L32: I4F12::from_num(0),
-            L33: I4F12::from_num(0),
-            RT11: I4F12::from_num(0),
-            RT12: I4F12::from_num(0),
-            RT13: I4F12::from_num(0),
-            RT21: I4F12::from_num(0),
-            RT22: I4F12::from_num(0),
-            RT23: I4F12::from_num(0),
-            RT31: I4F12::from_num(0),
-            RT32: I4F12::from_num(0),
-            RT33: I4F12::from_num(0),
+            DQA: 0,
+            DQB: 0,
+            OFX: 0,
+            OFY: 0,
+            RBK: 0,
+            BBK: 0,
+            GBK: 0,
+            RFC: 0,
+            GFC: 0,
+            BFC: 0,
+            LR1: 0,
+            LR2: 0,
+            LR3: 0,
+            LG1: 0,
+            LG2: 0,
+            LG3: 0,
+            LB1: 0,
+            LB2: 0,
+            LB3: 0,
+            L11: 0,
+            L12: 0,
+            L13: 0,
+            L21: 0,
+            L22: 0,
+            L23: 0,
+            L31: 0,
+            L32: 0,
+            L33: 0,
+            RT11: 0,
+            RT12: 0,
+            RT13: 0,
+            RT21: 0,
+            RT22: 0,
+            RT23: 0,
+            RT31: 0,
+            RT32: 0,
+            RT33: 0,
             TRX: 0,
             TRY: 0,
             TRZ: 0,
@@ -138,70 +138,70 @@ impl GTE {
     pub(super) fn set_control_register(&mut self, reg: usize, val: u32) {
         match reg {
             0 => {
-                self.RT11 = I4F12::from_bits((val & 0xFFFF) as i16);
-                self.RT12 = I4F12::from_bits(((val >> 16) & 0xFFFF) as i16);
+                self.RT11 = (val & 0xFFFF) as i16;
+                self.RT12 = ((val >> 16) & 0xFFFF) as i16;
             },
             1 => {
-                self.RT13 = I4F12::from_bits((val & 0xFFFF) as i16);
-                self.RT21 = I4F12::from_bits(((val >> 16) & 0xFFFF) as i16);
+                self.RT13 = (val & 0xFFFF) as i16;
+                self.RT21 = ((val >> 16) & 0xFFFF) as i16;
             },
             2 => {
-                self.RT22 = I4F12::from_bits((val & 0xFFFF) as i16);
-                self.RT23 = I4F12::from_bits(((val >> 16) & 0xFFFF) as i16);
+                self.RT22 = (val & 0xFFFF) as i16;
+                self.RT23 = ((val >> 16) & 0xFFFF) as i16;
             },
             3 => {
-                self.RT31 = I4F12::from_bits((val & 0xFFFF) as i16);
-                self.RT32 = I4F12::from_bits(((val >> 16) & 0xFFFF) as i16);
+                self.RT31 = (val & 0xFFFF) as i16;
+                self.RT32 = ((val >> 16) & 0xFFFF) as i16;
             },
-            4 => {self.RT33 = I4F12::from_bits(val as i16)},
+            4 => {self.RT33 = val as i16},
             5 => {self.TRX = val as i32},
             6 => {self.TRY = val as i32},
             7 => {self.TRZ = val as i32},
             8 => {
-                self.L11 = I4F12::from_bits((val & 0xFFFF) as i16);
-                self.L12 = I4F12::from_bits(((val >> 16) & 0xFFFF) as i16);
+                self.L11 = (val & 0xFFFF) as i16;
+                self.L12 = ((val >> 16) & 0xFFFF) as i16;
             },
             9 => {
-                self.L13 = I4F12::from_bits((val & 0xFFFF) as i16);
-                self.L21 = I4F12::from_bits(((val >> 16) & 0xFFFF) as i16);
+                self.L13 = (val & 0xFFFF) as i16;
+                self.L21 = ((val >> 16) & 0xFFFF) as i16;
             },
             10 => {
-                self.L22 = I4F12::from_bits((val & 0xFFFF) as i16);
-                self.L23 = I4F12::from_bits(((val >> 16) & 0xFFFF) as i16);
+                self.L22 = (val & 0xFFFF) as i16;
+                self.L23 = ((val >> 16) & 0xFFFF) as i16;
             },
             11 => {
-                self.L31 = I4F12::from_bits((val & 0xFFFF) as i16);
-                self.L32 = I4F12::from_bits(((val >> 16) & 0xFFFF) as i16);
+                self.L31 = (val & 0xFFFF) as i16;
+                self.L32 = ((val >> 16) & 0xFFFF) as i16;
             },
-            12 => {self.L33 = I4F12::from_bits(val as i16)},
-            13 => {self.RBK = I20F12::from_bits(val as i32)},
-            14 => {self.GBK = I20F12::from_bits(val as i32)},
-            15 => {self.BBK = I20F12::from_bits(val as i32)},
+            12 => {self.L33 = val as i16},
+            13 => {self.RBK = val as i32},
+            14 => {self.GBK = val as i32},
+            15 => {self.BBK = val as i32},
             16 => {
-                self.LR1 = I4F12::from_bits((val & 0xFFFF) as i16);
-                self.LR2 = I4F12::from_bits(((val >> 16) & 0xFFFF) as i16);
+                self.LR1 = (val & 0xFFFF) as i16;
+                self.LR2 = ((val >> 16) & 0xFFFF) as i16;
             },
             17 => {
-                self.LR3 = I4F12::from_bits((val & 0xFFFF) as i16);
-                self.LG1 = I4F12::from_bits(((val >> 16) & 0xFFFF) as i16);
+                self.LR3 = (val & 0xFFFF) as i16;
+                self.LG1 = ((val >> 16) & 0xFFFF) as i16;
             },
             18 => {
-                self.LG2 = I4F12::from_bits((val & 0xFFFF) as i16);
-                self.LG3 = I4F12::from_bits(((val >> 16) & 0xFFFF) as i16);
+                self.LG2 = (val & 0xFFFF) as i16;
+                self.LG3 = ((val >> 16) & 0xFFFF) as i16;
             },
             19 => {
-                self.LB1 = I4F12::from_bits((val & 0xFFFF) as i16);
-                self.LB2 = I4F12::from_bits(((val >> 16) & 0xFFFF) as i16);
+                self.LB1 = (val & 0xFFFF) as i16;
+                self.LB2 = ((val >> 16) & 0xFFFF) as i16;
             },
-            20 => {self.LB3 = I4F12::from_bits(val as i16)},
-            21 => {self.RFC = I28F4::from_bits(val as i32)},
-            22 => {self.GFC = I28F4::from_bits(val as i32)},
-            23 => {self.BFC = I28F4::from_bits(val as i32)},
-            24 => {self.OFX = I16F16::from_bits(val as i32)},
-            25 => {self.OFY = I16F16::from_bits(val as i32)},
+            20 => {self.LB3 = val as i16},
+            21 => {self.RFC = val as i32},
+            22 => {self.GFC = val as i32},
+            23 => {self.BFC = val as i32},
+            24 => {self.OFX = val as i32},
+            25 => {self.OFY = val as i32},
             26 => {self.H = val as u16},
-            27 => {self.DQA = I8F8::from_bits(val as i16)},
-            28 => {self.DQB = I8F24::from_bits(val as i32)},
+            27 => {self.DQA = val as i16},
+            28 => {self.DQB = val as i32},
             29 => {self.ZSF3 = val as i16},
             30 => {self.ZSF4 = val as i16},
             _ => panic!("Tried to write unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg)
@@ -248,7 +248,7 @@ impl GTE {
 // Internal GTE commands
 impl GTE {
     fn rtpt(&mut self) {
-        self.MAC1 = (I4F12::from_num(self.TRX * 0x1000) + self.RT11*self.VX0 + self.RT12*self.VY0 + self.RT13*self.VZ0).to_num();
+        self.MAC1 = (self.TRX * 0x1000 + (self.RT11*self.VX0 + self.RT12*self.VY0 + self.RT13*self.VZ0) as i32);
     }
 }
 

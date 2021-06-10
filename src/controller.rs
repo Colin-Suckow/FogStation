@@ -248,10 +248,10 @@ impl Controllers {
                     return;
                 }
 
-                if self.joy_ctrl.get_bit(13) {
-                    //Trying to return controller 2, do nothing because its not connected
-                    return;
-                }
+                // if self.joy_ctrl.get_bit(13) {
+                //     //Trying to return controller 2, do nothing because its not connected
+                //     return;
+                // }
 
                 self.push_rx_buf(0);
                 self.queue_interrupt();

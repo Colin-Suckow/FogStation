@@ -3,37 +3,59 @@ use glium::{Texture2d, backend::Facade, texture::{ClientFormat, RawImage2d}, uni
 use imgui::*;
 use imgui_glium_renderer::Texture;
 use winit::event::VirtualKeyCode;
-use crate::{EmuState, support};
+use crate::{ClientMessage, EmuMessage, EmuState, support};
 use psx_emu::controller::{ButtonState, ControllerType};
+use psx_emu::gpu::Resolution;
 
 pub(crate) fn run_gui(mut state: EmuState) {
     let system = support::init("VaporStation");
     let mut start = SystemTime::now();
     let mut frame_time = 0;
+    let mut latest_frame: Vec<u16> = vec![0; 524_288];
+    let mut latest_resolution = Resolution {
+        width: 640,
+        height: 480,
+    };
 
     system.main_loop(move |_, ui, gl_ctx, textures| {
-        state.emu.update_controller_state(get_button_state(ui));
-        start = SystemTime::now();
-        if !state.halted {
-            state.emu.run_frame();
-        }
-        frame_time = SystemTime::now()
-            .duration_since(start)
-            .expect("Error getting frame duration")
-            .as_millis();
+        state.comm.tx.send(EmuMessage::UpdateControllers(get_button_state(ui)));
 
-        Window::new(im_str!("Registers"))
-            .size([300.0, 600.0], Condition::FirstUseEver)
-            .build(ui, || {
-                ui.text(format!("PC: {:#X}", &state.emu.r3000.pc));
-                for (i, v) in state.emu.r3000.gen_registers.iter().enumerate() {
-                    ui.text(format!("R{}: {:#X}", i, v));
-                }
-            });
+        loop {
+            match state.comm.rx.try_recv() {
+                Ok(msg) => {
+                    match msg {
+                        ClientMessage::FrameReady(frame) => {
+                            latest_frame = frame;
+                            frame_time = SystemTime::now()
+                                .duration_since(start)
+                                .expect("Error getting frame duration")
+                                .as_millis();
+                            start = SystemTime::now();
+                        },
+                        ClientMessage::ResolutionChanged(res) => latest_resolution = res,
+                    }
+                },
+                Err(e) => {
+                    match e {
+                        std::sync::mpsc::TryRecvError::Empty => break, // No messages left, break out of the loop
+                        std::sync::mpsc::TryRecvError::Disconnected => panic!("Emu thread died!"),
+                    }
+                },
+            }
+        }
+
+        // Window::new(im_str!("Registers"))
+        //     .size([300.0, 600.0], Condition::FirstUseEver)
+        //     .build(ui, || {
+        //         ui.text(format!("PC: {:#X}", &state.emu.r3000.pc));
+        //         for (i, v) in state.emu.r3000.gen_registers.iter().enumerate() {
+        //             ui.text(format!("R{}: {:#X}", i, v));
+        //         }
+        //     });
         Window::new(im_str!("VRAM"))
             .content_size([1024.0, 512.0])
             .build(ui, || {
-                let texture = create_texture_from_buffer(gl_ctx, state.emu.get_vram(), 1024, 512);
+                let texture = create_texture_from_buffer(gl_ctx, &latest_frame, 1024, 512);
                 let id = TextureId::new(0); //This is an awful hack that needs to be replaced
                 textures.replace(id, texture);
                 Image::new(id, [1024.0, 512.0]).build(ui);
@@ -42,8 +64,7 @@ pub(crate) fn run_gui(mut state: EmuState) {
         Window::new(im_str!("Viewport"))
             .content_size([800.0, 600.0])
             .build(ui, || {
-                let res = state.emu.display_resolution();
-                let texture = create_texture_from_buffer(gl_ctx, state.emu.get_vram(), res.width as usize, res.height as usize);
+                let texture = create_texture_from_buffer(gl_ctx, &latest_frame, latest_resolution.width as usize, latest_resolution.height as usize);
                 let id = TextureId::new(1); //This is an awful hack that needs to be replaced
                 textures.replace(id, texture);
                 Image::new(id, [800.0, 600.0]).build(ui);
@@ -53,7 +74,7 @@ pub(crate) fn run_gui(mut state: EmuState) {
             .content_size([250.0, 100.0])
             .build(ui, || {
                 if ui.button(im_str!("Reset"), [80.0, 20.0]) {
-                    state.emu.reset();
+                    state.comm.tx.send(EmuMessage::Reset);
                 }
 
                 if ui.button(
@@ -65,32 +86,37 @@ pub(crate) fn run_gui(mut state: EmuState) {
                     [80.0, 20.0],
                 ) {
                     state.halted = !state.halted;
+                    if state.halted {
+                        state.comm.tx.send(EmuMessage::Halt);
+                    } else {
+                        state.comm.tx.send(EmuMessage::Continue);
+                    }
                 }
                 if !state.halted {
                     ui.text(format!("{:.1} FPS", (1000.0 / frame_time as f64)));
                 } else {
                     ui.text("Halted");
                     if ui.button(im_str!("Step Instruction"), [120.0, 20.0]) {
-                        state.emu.step_cycle();
+                        state.comm.tx.send(EmuMessage::StepCPU);
                     }
                 }
 
-                if ui.button(
-                    if state.logging {
-                        im_str!("Stop Logging")
-                    } else {
-                        im_str!("Start Logging")
-                    },
-                    [120.0, 20.0],
-                ) {
-                    state.logging = !state.logging;
-                    state.emu.r3000.log = state.logging;
-                }
+                // if ui.button(
+                //     if state.logging {
+                //         im_str!("Stop Logging")
+                //     } else {
+                //         im_str!("Start Logging")
+                //     },
+                //     [120.0, 20.0],
+                // ) {
+                //     state.logging = !state.logging;
+                //     state.emu.r3000.log = state.logging;
+                // }
 
-                match state.emu.loaded_disc() {
-                    Some(disc) => ui.text(format!("Drive loaded: {}", disc.title())),
-                    None => ui.text("No disc in drive"),
-                };
+                // match state.emu.loaded_disc() {
+                //     Some(disc) => ui.text(format!("Drive loaded: {}", disc.title())),
+                //     None => ui.text("No disc in drive"),
+                // };
             });
     });
 }

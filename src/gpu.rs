@@ -12,6 +12,7 @@ enum TextureColorMode {
     FifteenBit,
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct Resolution {
     pub height: u32,
     pub width: u32,

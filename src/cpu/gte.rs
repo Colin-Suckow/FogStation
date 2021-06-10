@@ -1,3 +1,4 @@
+use bit_field::BitField;
 use fixed::types::{I16F16, I20F12, I28F4, I4F12, I8F24, I8F8};
 
 pub(super) struct GTE {
@@ -63,6 +64,10 @@ pub(super) struct GTE {
     MAC1: i32,
     MAC2: i32,
     MAC3: i32,
+    SZ0: u16,
+    SZ1: u16,
+    SZ2: u16,
+    SZ3: u16,
 }
 
 // Interface
@@ -131,7 +136,10 @@ impl GTE {
             MAC1: 0,
             MAC2: 0,
             MAC3: 0,
-
+            SZ0: 0,
+            SZ1: 0,
+            SZ2: 0,
+            SZ3: 0,
         }
     }
 
@@ -234,7 +242,7 @@ impl GTE {
 
     pub(super) fn execute_command(&mut self, command: u32) {
         match command & 0x3F {
-            0x30 => self.rtpt(),
+            0x30 => self.rtpt(command),
             _ => panic!("Unknown GTE command {:#X}!", command & 0x3F)
         };
     }
@@ -242,13 +250,30 @@ impl GTE {
 
 // Register functions
 impl GTE {
-   
+   fn push_sz(&mut self, val: u16) {
+       self.SZ0 = self.SZ1;
+       self.SZ1 = self.SZ2;
+       self.SZ2 = self.SZ3;
+       self.SZ3 = val;
+   }
 }
 
 // Internal GTE commands
 impl GTE {
-    fn rtpt(&mut self) {
-        self.MAC1 = (self.TRX * 0x1000 + (self.RT11*self.VX0 + self.RT12*self.VY0 + self.RT13*self.VZ0) as i32);
+    fn rtpt(&mut self, command: u32) {
+        self.MAC1 = (self.TRX * 0x1000 + (self.RT11*self.VX0 + self.RT12*self.VY0 + self.RT13*self.VZ0) as i32) >> ((command.get_bit(19) as usize) * 12);
+        self.MAC2 = (self.TRY * 0x1000 + (self.RT21*self.VX0 + self.RT22*self.VY0 + self.RT23*self.VZ0) as i32) >> ((command.get_bit(19) as usize) * 12);
+        self.MAC3 = (self.TRZ * 0x1000 + (self.RT31*self.VX0 + self.RT32*self.VY0 + self.RT33*self.VZ0) as i32) >> ((command.get_bit(19) as usize) * 12);
+        self.IR1 = self.MAC1 as i16;
+        self.IR2 = self.MAC2 as i16;
+        self.IR3 = self.MAC3 as i16;
+        self.push_sz((self.MAC3 >> ((!command.get_bit(19) as usize) * 12)) as u16);
+
+        let mut div_val = (((self.H as u32*0x20000/self.SZ3 as u32)+1)/2);
+        if div_val > 0x1FFFF {
+            div_val = 0x1FFFF;
+            // TODO set overflow flag
+        }
     }
 }
 

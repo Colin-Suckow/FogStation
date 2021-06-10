@@ -18,7 +18,7 @@ pub mod cdrom;
 pub mod controller;
 pub mod cpu;
 mod dma;
-mod gpu;
+pub mod gpu;
 mod memory;
 mod spu;
 mod timer;
@@ -56,7 +56,7 @@ impl PSXEmu {
         self.r3000.main_bus.gpu.reset();
     }
 
-    /// Runs a "single" cpu clock and all the other clocks that happen within 1 cpu
+    /// Runs a single time unit. Each unit has the correct ratio of cpu:gpu cycles
     pub fn step_cycle(&mut self) {
         for _ in 0..2 {
             self.run_cpu_cycle();
@@ -68,7 +68,7 @@ impl PSXEmu {
         self.run_gpu_cycle();
     }
 
-    fn run_cpu_cycle(&mut self) {
+    pub fn run_cpu_cycle(&mut self) {
         if self.sw_breakpoints.contains(&self.r3000.pc) {
             self.halt_requested = true;
             return;
@@ -167,5 +167,9 @@ impl PSXEmu {
 
     pub fn update_controller_state(&mut self, state: ButtonState) {
         self.r3000.main_bus.controllers.update_button_state(state);
+    }
+
+    pub fn frame_ready(&self) -> bool {
+        self.r3000.main_bus.gpu.end_of_frame()
     }
 }

@@ -2,11 +2,19 @@ use disc::*;
 use gdbstub::{DisconnectReason, GdbStub, GdbStubError};
 use getopts::Options;
 use psx_emu::PSXEmu;
+use psx_emu::gpu::Resolution;
 use byteorder::{ByteOrder, LittleEndian};
+use psx_emu::controller::ButtonState;
 use std::fs;
 use std::env;
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
+use std::sync::Mutex;
+use std::sync::mpsc::Receiver;
+use std::sync::mpsc::Sender;
+use std::sync::mpsc::channel;
+use std::thread;
+use std::thread::JoinHandle;
 
 mod disc;
 mod support;
@@ -20,14 +28,14 @@ const DEFAULT_GDB_PORT: u16 = 4444;
 const DEFAULT_BIOS_PATH: &str = "SCPH1001.BIN";
 
 struct EmuState {
-    logging: bool,
-    headless: bool,
-    emu: PSXEmu,
+    comm: ClientComms,
+    emu_thread: JoinHandle<()>,
     halted: bool,
 }
 
 
 fn main() {
+    let mut headless = false;
     let args: Vec<String> = env::args().collect();
 
     let mut opts = Options::new();
@@ -63,37 +71,31 @@ fn main() {
         }
     };
 
-    let mut state = EmuState {
-        logging: false,
-        headless: false,
-        emu: PSXEmu::new(bios_data),
-        halted: false,
-    };
+    let mut emu = PSXEmu::new(bios_data);
+    emu.reset();
 
-    state.emu.reset();
-
-    if matches.opt_present("l") {
-        state.logging = true;
-        state.emu.r3000.log = true;
-    }
+    // if matches.opt_present("l") {
+    //     state.logging = true;
+    //     state.emu.r3000.log = true;
+    // }
 
     if matches.opt_present("h") {
-        state.headless = true;
+        headless = true;
     }
 
 
 
-    let mut debugger = if matches.opt_present("g") {
-        let gdb_conn = wait_for_gdb_connection(DEFAULT_GDB_PORT).unwrap();
-        Some(GdbStub::<EmuState, TcpStream>::new(gdb_conn))
-    } else {
-        None
-    };
+    // let mut debugger = if matches.opt_present("g") {
+    //     let gdb_conn = wait_for_gdb_connection(DEFAULT_GDB_PORT).unwrap();
+    //     Some(GdbStub::<EmuState, TcpStream>::new(gdb_conn))
+    // } else {
+    //     None
+    // };
 
     if let Some(disc_path) = matches.opt_str("c") {
         println!("Loading CUE: {}", disc_path);
         let disc = load_disc_from_cuesheet(Path::new(&disc_path).to_path_buf());
-        state.emu.load_disc(disc);
+        emu.load_disc(disc);
     }
 
     if let Some(exe_path) = matches.opt_str("e") {
@@ -107,31 +109,49 @@ fn main() {
             "Destination is {:#X}\nEntrypoint is {:#X}\nSP is {:#X}",
             destination, entrypoint, init_sp
         );
-        state
-            .emu
+        emu
             .load_executable(destination, entrypoint, init_sp, &exe_data);
     }
 
-    if let Some(dbg) = &mut debugger {
-        match dbg.run(&mut state) {
-            Ok(disconnect_reason) => match disconnect_reason {
-                DisconnectReason::Disconnect => {
-                    if !state.headless {
-                        gui::run_gui(state);
-                    } else {
-                        run_headless(state);
-                    }
-                },
-                DisconnectReason::TargetHalted => println!("Target halted!"),
-                DisconnectReason::Kill => println!("GDB client sent a kill command!"),
-            },
-            Err(GdbStubError::TargetError(e)) => {
-                println!("Target raised a fatal error: {:?}", e);
-            },
-            Err(e) => println!("Something else happened {}", e.to_string())
-        }
-    } else {
-        if !state.headless {
+    let (emu_sender, client_receiver) = channel();
+    let (client_sender, emu_receiver) = channel();
+    let latest_frame = Mutex::new(Vec::<u16>::new());
+
+    let emu_comm = EmuComms {
+        rx: emu_receiver,
+        tx: emu_sender,
+    };
+
+    let client_comm = ClientComms {
+        rx: client_receiver,
+        tx: client_sender,
+    };
+
+    let emu_thread = start_emu_thread(emu, emu_comm);
+
+    let mut state = EmuState {
+        emu_thread,
+        comm: client_comm,
+        halted: false,
+    };
+
+    // if let Some(dbg) = &mut debugger {
+    //     match dbg.run(&mut state) {
+    //         Ok(disconnect_reason) => match disconnect_reason {
+    //             DisconnectReason::Disconnect => {
+    //                 state.comm.tx.send(EmuMessage::Kill);
+    //             },
+    //             DisconnectReason::TargetHalted => println!("Target halted!"),
+    //             DisconnectReason::Kill => println!("GDB client sent a kill command!"),
+    //         },
+    //         Err(GdbStubError::TargetError(e)) => {
+    //             println!("Target raised a fatal error: {:?}", e);
+    //         },
+    //         Err(e) => println!("Something else happened {}", e.to_string())
+    //     }
+    // } else {
+    {
+        if !headless {
             gui::run_gui(state);
         } else {
             run_headless(state);
@@ -140,9 +160,7 @@ fn main() {
 }
 
 fn run_headless(mut state: EmuState) {
-    loop {   
-        state.emu.step_cycle();
-    }
+    state.comm.tx.send(EmuMessage::Continue);
 }
 
 fn wait_for_gdb_connection(port: u16) -> std::io::Result<TcpStream> {
@@ -156,6 +174,81 @@ fn wait_for_gdb_connection(port: u16) -> std::io::Result<TcpStream> {
 
     eprintln!("Debugger connected from {}", addr);
     Ok(stream)
+}
+
+enum EmuMessage {
+    Halt,
+    Continue,
+    AddBreakpoint(u32),
+    RemoveBreakpoint(u32),
+    Kill,
+    StepCPU,
+    UpdateControllers(ButtonState),
+    Reset,
+}
+
+enum ClientMessage {
+    FrameReady(Vec<u16>),
+    ResolutionChanged(Resolution),
+}
+
+struct EmuComms {
+    rx: Receiver<EmuMessage>,
+    tx: Sender<ClientMessage>,}
+
+struct ClientComms {
+    rx: Receiver<ClientMessage>,
+    tx: Sender<EmuMessage>,
+}
+
+fn start_emu_thread(mut emu: PSXEmu, comms: EmuComms) -> JoinHandle<()> {
+    thread::spawn(move || {
+        let mut halted = false;
+        let mut current_resolution = Resolution {width: 640, height: 480};
+
+        loop {
+            // Handle incoming messages
+            if let Ok(msg) = comms.rx.try_recv() {
+                match msg {
+                    EmuMessage::Halt => halted = true,
+                    EmuMessage::Continue => {
+                        halted = false;
+                        emu.clear_halt();
+                    },
+                    EmuMessage::AddBreakpoint(addr) => emu.add_sw_breakpoint(addr),
+                    EmuMessage::RemoveBreakpoint(addr) => emu.remove_sw_breakpoint(addr),
+                    EmuMessage::Kill => break,
+                    EmuMessage::StepCPU => emu.run_cpu_cycle(), // Warning! Doing this too many times will desync the gpu
+                    EmuMessage::UpdateControllers(state) => emu.update_controller_state(state),
+                    EmuMessage::Reset => emu.reset(),
+                }
+            }
+
+            if emu.halt_requested() {
+                halted = true;
+            }
+
+            if !halted {
+                emu.step_cycle();
+            }
+
+            if emu.frame_ready() {
+
+                //Check for any viewport resolution changes
+                if emu.display_resolution() != current_resolution {
+                    current_resolution = emu.display_resolution();
+                    comms.tx.send(ClientMessage::ResolutionChanged(current_resolution.clone()));
+                }
+
+                // Send the new frame over to the gui thread
+                if let Err(_) = comms.tx.send(ClientMessage::FrameReady(emu.get_vram().clone())) {
+                    //The other side hung up, so lets end the emu thread
+                    break;
+                }
+            }
+
+        }
+    })
 }
 
 #[cfg(test)]

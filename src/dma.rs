@@ -56,10 +56,12 @@ impl DMAState {
                 match addr & 0xFFFFFF0F {
                     0x1F801000 => {
                         //read base address
+                        println!("DMA ACCESS: Read base");
                         self.channels[channel_num].base_addr
                     }
                     0x1F801004 => {
                         //read block control
+                        println!("DMA ACCESS: Read block");
                         self.channels[channel_num].block
                     }
                     0x1F801008 => {
@@ -88,7 +90,7 @@ impl DMAState {
                     0x1F801000 => {
                         //Set base address
                         //println!("Wrote DMA base {} with {:#X} addr {:#X}", channel_num, value, addr);
-                        self.channels[channel_num].base_addr = value & 0xFFFFFF;
+                        self.channels[channel_num].base_addr = value;
                     }
                     0x1F801004 => {
                         //Set block control
@@ -155,7 +157,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                                 let packet = cpu.main_bus.read_word((addr + 4) + (i * 4));
                                 cpu.main_bus.gpu.send_gp0_command(packet);
                             }
-                            //println!("addr {:#X}, header {:#X}, nw {}", addr, header, num_words);
+                            println!("addr {:#X}, header {:#X}, nw {}", addr, header, num_words);
                             if header & 0x800000 != 0 || header == 0x00FFFFFF {
                                 break;
                             }
@@ -165,6 +167,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                             addr = header & 0xFFFFFF;
                             header = cpu.main_bus.read_word(addr);
                         }
+                        cpu.main_bus.dma.channels[num].base_addr = 0xFFFFFF;
                         //println!("DMA2 linked list transfer done.");
                         cpu.main_bus.dma.channels[num].complete();
                         cpu.main_bus.dma.raise_irq(num);
@@ -187,6 +190,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                             }
                         }
                         println!("DMA2 block transfer done.");
+                        cpu.main_bus.dma.channels[num].base_addr += entries * block_size * 4;
                         cpu.main_bus.dma.channels[num].complete();
                         cpu.main_bus.dma.raise_irq(num);
                         cpu.fire_external_interrupt(InterruptSource::DMA);
@@ -203,11 +207,11 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                                 //Lets just write all zeros for now
                                 cpu.main_bus.write_word(
                                     base_addr + ((i * block_size) * 4) + (j * 4),
-                                    0x50005000,
+                                    0x0,
                                 );
                             }
                         }
-
+                        cpu.main_bus.dma.channels[num].base_addr += entries * block_size * 4;
                         cpu.main_bus.dma.channels[num].complete();
                         cpu.main_bus.dma.raise_irq(num);
                         cpu.fire_external_interrupt(InterruptSource::DMA);
@@ -241,20 +245,20 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 //OTC is only used to reset the ordering table. So we can ignore a lot of the parameters
                 let entries = cpu.main_bus.dma.channels[num].block & 0xFFFF;
                 let base = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
-                //println!("Initializing {} entries ending at {:#X}", entries, base);
+                println!("Initializing {} entries ending at {:#X}", entries, base);
                 for i in 0..=entries {
                     let addr = base - ((entries - i) * 4);
                     if i == 0 {
                         //The first entry should point to the end of memory
-                        cpu.main_bus.write_word(addr, 0x00FFFFFF);
-                        //println!("Wrote DMA6 end at {:#X} pointing to {:#X}", addr, 0x00FFFFFF);
+                        cpu.main_bus.write_word(addr, 0xFFFFFF);
+                        //println!("Wrote DMA6 end at {:#X} pointing to {:#X}", addr, 0xFFFFFF);
                     } else {
                         //All the others should point to the address below
-                        cpu.main_bus.write_word(addr, addr - 4);
-                        //println!("Wrote DMA6 header at {:#X} pointing to {:#X}", addr, addr - 4);
+                        cpu.main_bus.write_word(addr, (addr - 4) & 0xFFFFFF);
+                        //println!("Wrote DMA6 header at {:#X} pointing to {:#X}", addr, (addr - 4) & 0xFFFFFF);
                     }
                 }
-                //println!("DMA6 done. Marking complete and raising irq");
+                println!("DMA6 done. Marking complete and raising irq");
                 cpu.main_bus.dma.channels[num].complete();
                 cpu.main_bus.dma.raise_irq(num);
                 cpu.fire_external_interrupt(InterruptSource::DMA);

@@ -56,11 +56,10 @@ impl PSXEmu {
         self.r3000.main_bus.gpu.reset();
     }
 
-    /// Runs a single time unit. Each unit has the correct ratio of cpu:gpu cycles
+    /// Runs a single time unit. Each unit has the correct-ish ratio of cpu:gpu cycles
     pub fn step_cycle(&mut self) {
         for _ in 0..2 {
             self.run_cpu_cycle();
-
             self.run_gpu_cycle();
         }
 

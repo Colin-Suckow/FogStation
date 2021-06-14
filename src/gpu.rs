@@ -559,6 +559,7 @@ impl Gpu {
                             0 => TextureColorMode::FourBit,
                             1 => TextureColorMode::EightBit,
                             2 => TextureColorMode::FifteenBit,
+                            3 => TextureColorMode::FifteenBit, // This one is FifteenBit, for some reason
                             _ => panic!("Unknown texture color mode {}", (command >> 7) & 0x3),
                         };
                     }
@@ -726,7 +727,7 @@ impl Gpu {
     }
 
     pub fn end_of_frame(&self) -> bool {
-        self.pixel_count == H_RES * V_RES
+        self.pixel_count == (self.display_h_res + 20) * (self.display_v_res + 40)
     }
 
     pub fn get_vram(&self) -> &Vec<u16> {
@@ -1181,10 +1182,10 @@ impl Gpu {
                     [point_to_address((clut_x * 16 + clut_index) as u32, clut_y as u32) as usize]
             }
             TextureColorMode::FourBit => {
-                let value = self.vram[point_to_address(
+                let value = self.vram[(point_to_address(
                     (page_x * 64) as u32 + (x / 4) as u32,
                     (page_y * 256) as u32 + y as u32,
-                ) as usize];
+                ) as usize) % 524288];
                 let clut_index = (value >> (x % 4) * 4) & 0xF;
                 self.vram
                     [point_to_address((clut_x * 16 + clut_index) as u32, clut_y as u32) as usize]

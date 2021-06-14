@@ -1,21 +1,23 @@
 use std::{borrow::Cow, rc::Rc, time::{SystemTime, UNIX_EPOCH}};
+use __core::ops::AddAssign;
 use glium::{Texture2d, backend::Facade, texture::{ClientFormat, RawImage2d}, uniforms::{MagnifySamplerFilter, MinifySamplerFilter, SamplerBehavior}};
 use imgui::*;
 use imgui_glium_renderer::Texture;
+use num::{Integer, Unsigned};
 use winit::event::VirtualKeyCode;
-use crate::{ClientMessage, EmuMessage, EmuState, support};
+use crate::{ClientMessage, EmuMessage, ClientState, support};
 use psx_emu::controller::{ButtonState, ControllerType};
 use psx_emu::gpu::Resolution;
 
-pub(crate) fn run_gui(mut state: EmuState) {
+pub(crate) fn run_gui(mut state: ClientState) {
     let system = support::init("VaporStation");
     let mut start = SystemTime::now();
-    let mut frame_time = 0;
     let mut latest_frame: Vec<u16> = vec![0; 524_288];
     let mut latest_resolution = Resolution {
         width: 640,
         height: 480,
     };
+    let mut times = AverageList::new();
 
     system.main_loop(move |_, ui, gl_ctx, textures| {
         state.comm.tx.send(EmuMessage::UpdateControllers(get_button_state(ui)));
@@ -26,10 +28,10 @@ pub(crate) fn run_gui(mut state: EmuState) {
                     match msg {
                         ClientMessage::FrameReady(frame) => {
                             latest_frame = frame;
-                            frame_time = SystemTime::now()
+                            times.push(SystemTime::now()
                                 .duration_since(start)
                                 .expect("Error getting frame duration")
-                                .as_millis();
+                                .as_millis() as usize);
                             start = SystemTime::now();
                         },
                         ClientMessage::ResolutionChanged(res) => latest_resolution = res,
@@ -93,7 +95,7 @@ pub(crate) fn run_gui(mut state: EmuState) {
                     }
                 }
                 if !state.halted {
-                    ui.text(format!("{:.1} FPS", (1000.0 / frame_time as f64)));
+                    ui.text(format!("{:.1} FPS", (1000.0 / times.average())));
                 } else {
                     ui.text("Halted");
                     if ui.button(im_str!("Step Instruction"), [120.0, 20.0]) {
@@ -189,4 +191,31 @@ fn ps_pixel_to_gl(pixel_data: &u16) -> [u8; 3] {
         (((pixel_data >> 5) & 0x1F) * 8) as u8,
         (((pixel_data >> 10) & 0x1F) * 8) as u8,
     ]
+}
+
+struct AverageList {
+    values: [usize; 32]
+}
+
+impl AverageList {
+    fn new() -> Self {
+        Self {
+            values: [0; 32]
+        }
+    }
+
+    fn push(&mut self, val: usize) {
+        self.values.rotate_right(1);
+        self.values[0] = val;
+    }
+
+    fn average(&self) -> f64 {
+        let mut sum = 0;
+        for val in &self.values {
+            sum += val;
+        }
+
+        sum as f64 / 32.0
+
+    }
 }

@@ -540,24 +540,41 @@ impl R3000 {
 
             0x12 => {
                 //COP2 (GTE) instructions
-                match instruction.rs() {
-                    0x6 => {
-                        //CTC2
-                        let val = self.read_reg(instruction.rt());
-                        self.gte.set_control_register(instruction.rd() as usize, val);
+                if instruction.get_bit(25) {
+                    //COP2 imm25
+                    // Execute immediate GTE command
+                    self.gte.execute_command(instruction & 0x1FFFFFF);
+                } else {
+                    match instruction.rs() {
+                        0x0 => {
+                            //MFC2
+                            //This one will just return 0 for now
+                            self.delay_write_reg(instruction.rt(), 0);
+                        }
+    
+                        0x6 => {
+                            //CTC2
+                            let val = self.read_reg(instruction.rt());
+                            self.gte.set_control_register(instruction.rd() as usize, val);
+                        }
+    
+                        0x4 => {
+                            //MTC2
+                            let val = self.read_reg(instruction.rt());
+                            self.gte.set_data_register(instruction.rd() as usize, val);
+                        }
+    
+                        0x2 => {
+                            //CFC2
+                            self.delay_write_reg(instruction.rt(), 0);
+                        }
+    
+                        _ => panic!(
+                            "CPU: Unknown COP2 MFC instruction {:#X} ({0:#b}, {0}) {:#b}",
+                            instruction.rs(),
+                            instruction
+                        ),
                     }
-
-                    0x11 => {
-                        //COP2 imm25
-                        // Execute immediate GTE command
-                        self.gte.execute_command(instruction & 0x1FFFFFF);
-                    }
-
-                    _ => panic!(
-                        "CPU: Unknown COP2 MFC instruction {:#X} ({0:#b}, {0}) {:#b}",
-                        instruction.rs(),
-                        instruction
-                    ),
                 }
             }
 
@@ -631,6 +648,17 @@ impl R3000 {
                     .wrapping_add(self.read_reg(instruction.rs()));
                 let val = self.read_bus_word(addr, timers);
                 self.gte.set_data_register(instruction.rt() as usize, val);
+
+            }
+
+            0x3A => {
+                //SWC2
+                //Stubbing this one out with a 0
+                let addr = instruction
+                    .immediate_sign_extended()
+                    .wrapping_add(self.read_reg(instruction.rs()));
+                let val = 0;
+                self.write_bus_word(addr, val, timers);
 
             }
 
@@ -1211,7 +1239,7 @@ impl R3000 {
         //println!("mask_bit num = {}", mask_bit);
         self.i_status.set_bit(mask_bit, true);
         if self.cop0.interrupt_enabled() && self.i_mask.get_bit(mask_bit) {
-            println!("CPU: INT {:?}", source);
+            //println!("CPU: INT {:?}", source);
             self.cycle_count = self.cycle_count.wrapping_add(1);
             self.fire_exception(Exception::Int);
         }

@@ -17,3 +17,4 @@ byteorder = "1.4.2"
 cue = { git = "https://github.com/lomereiter/libcue.rs" }
 getopts = "0.2.21"
 gdbstub = "0.4.5"
+num = "0.4.0"

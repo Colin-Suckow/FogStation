@@ -15,6 +15,7 @@ use std::sync::mpsc::Sender;
 use std::sync::Mutex;
 use std::thread;
 use std::thread::JoinHandle;
+use std::time::SystemTime;
 
 mod disc;
 mod gdb;
@@ -36,6 +37,7 @@ struct EmuState {
     halted: bool,
     current_resolution: Resolution,
     debugging: bool,
+    last_frame_time: SystemTime,
 }
 
 fn main() {
@@ -131,6 +133,7 @@ fn main() {
             height: 480,
         },
         debugging: matches.opt_present("g"),
+        last_frame_time: SystemTime::now(),
     };
 
     let emu_thread = start_emu_thread(emu_state);
@@ -179,8 +182,10 @@ enum EmuMessage {
 }
 
 enum ClientMessage {
-    FrameReady(Vec<u16>),
+    FrameReady(Vec<u16>, u128),
     ResolutionChanged(Resolution),
+    AwaitingGDBClient,
+    GDBClientConnected,
 }
 
 struct EmuComms {
@@ -199,7 +204,10 @@ fn start_emu_thread(
     thread::spawn(move || {
 
         let mut debugger = if state.debugging {
+            state.comm.tx.send(ClientMessage::AwaitingGDBClient);
             let gdb_conn = wait_for_gdb_connection(DEFAULT_GDB_PORT).unwrap();
+            state.comm.tx.send(ClientMessage::GDBClientConnected);
+            state.halted = false;
             Some(GdbStub::<EmuState, TcpStream>::new(gdb_conn))
         } else {
             None
@@ -271,11 +279,20 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
             ));
         };
 
+        let frame = state.emu.get_vram().clone();
+
+        //Calculate frame time delta
+        let frame_time = SystemTime::now()
+            .duration_since(state.last_frame_time)
+            .expect("Error getting frame duration")
+            .as_millis();
+        state.last_frame_time = SystemTime::now();
+
         // Send the new frame over to the gui thread
         if let Err(_) = state
             .comm
             .tx
-            .send(ClientMessage::FrameReady(state.emu.get_vram().clone()))
+            .send(ClientMessage::FrameReady(frame, frame_time))
         {
             //The other side hung up, so lets end the emu thread
             return Err(EmuThreadError::ClientDied);

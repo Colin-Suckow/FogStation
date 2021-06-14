@@ -157,7 +157,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                                 let packet = cpu.main_bus.read_word((addr + 4) + (i * 4));
                                 cpu.main_bus.gpu.send_gp0_command(packet);
                             }
-                            println!("addr {:#X}, header {:#X}, nw {}", addr, header, num_words);
+                            //println!("addr {:#X}, header {:#X}, nw {}", addr, header, num_words);
                             if header & 0x800000 != 0 || header == 0x00FFFFFF {
                                 break;
                             }

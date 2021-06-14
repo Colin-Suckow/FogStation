@@ -19,6 +19,8 @@ pub(crate) fn run_gui(mut state: ClientState) {
     };
     let mut times = AverageList::new();
 
+    let mut awaiting_gdb = false;
+
     system.main_loop(move |_, ui, gl_ctx, textures| {
         state.comm.tx.send(EmuMessage::UpdateControllers(get_button_state(ui)));
 
@@ -26,15 +28,20 @@ pub(crate) fn run_gui(mut state: ClientState) {
             match state.comm.rx.try_recv() {
                 Ok(msg) => {
                     match msg {
-                        ClientMessage::FrameReady(frame) => {
+                        ClientMessage::FrameReady(frame, frame_time) => {
                             latest_frame = frame;
-                            times.push(SystemTime::now()
-                                .duration_since(start)
-                                .expect("Error getting frame duration")
-                                .as_millis() as usize);
+                            times.push(frame_time as usize);
                             start = SystemTime::now();
                         },
                         ClientMessage::ResolutionChanged(res) => latest_resolution = res,
+                        ClientMessage::AwaitingGDBClient => {
+                            awaiting_gdb = true;
+                            state.halted = true;
+                        },
+                        ClientMessage::GDBClientConnected => {
+                            awaiting_gdb = false;
+                            state.halted = false;
+                        },
                     }
                 },
                 Err(e) => {
@@ -101,6 +108,10 @@ pub(crate) fn run_gui(mut state: ClientState) {
                     if ui.button(im_str!("Step Instruction"), [120.0, 20.0]) {
                         state.comm.tx.send(EmuMessage::StepCPU);
                     }
+                }
+
+                if awaiting_gdb {
+                    ui.text(im_str!("Awaiting connection from GDB client!"));
                 }
 
                 // if ui.button(

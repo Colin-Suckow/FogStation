@@ -33,6 +33,7 @@ pub struct DMAState {
     channels: Vec<Channel>,
     control: u32,
     interrupt: u32,
+    cycles_to_wait: usize,
 }
 
 impl DMAState {
@@ -41,6 +42,7 @@ impl DMAState {
             channels: vec![Channel::new(); NUM_CHANNELS],
             control: 0x07654321, //Initial value on reset
             interrupt: 0,
+            cycles_to_wait: 0,
         }
     }
 
@@ -101,6 +103,9 @@ impl DMAState {
                         //Set control
                         //println!("Wrote DMA control {} with {:#X}", channel_num, value);
                         self.channels[channel_num].control = value;
+                        if value.get_bit(24) {
+                            self.cycles_to_wait = 1000;
+                        }
                     }
                     _ => panic!("Unknown dma write {:#X}", addr),
                 };
@@ -128,6 +133,12 @@ impl DMAState {
 }
 
 pub fn execute_dma_cycle(cpu: &mut R3000) {
+    
+    if cpu.main_bus.dma.cycles_to_wait > 0 {
+        cpu.main_bus.dma.cycles_to_wait -= 1;
+        return;
+    }
+
     //Populate list of running and enabled dma channels
     let mut channels_to_run: Vec<usize> = Vec::new();
     for i in 0..NUM_CHANNELS {
@@ -136,6 +147,8 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
             channels_to_run.push(i);
         }
     }
+
+
 
     //Execute dma copy for each channel
     for num in channels_to_run {
@@ -157,7 +170,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                                 let packet = cpu.main_bus.read_word((addr + 4) + (i * 4));
                                 cpu.main_bus.gpu.send_gp0_command(packet);
                             }
-                            //println!("addr {:#X}, header {:#X}, nw {}", addr, header, num_words);
+                            println!("addr {:#X}, header {:#X}, nw {}", addr, header, num_words);
                             if header & 0x800000 != 0 || header == 0x00FFFFFF {
                                 break;
                             }
@@ -251,11 +264,11 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                     if i == 0 {
                         //The first entry should point to the end of memory
                         cpu.main_bus.write_word(addr, 0xFFFFFF);
-                        //println!("Wrote DMA6 end at {:#X} pointing to {:#X}", addr, 0xFFFFFF);
+                        println!("Wrote DMA6 end at {:#X} pointing to {:#X}", addr, 0xFFFFFF);
                     } else {
                         //All the others should point to the address below
                         cpu.main_bus.write_word(addr, (addr - 4) & 0xFFFFFF);
-                        //println!("Wrote DMA6 header at {:#X} pointing to {:#X}", addr, (addr - 4) & 0xFFFFFF);
+                        println!("Wrote DMA6 header at {:#X} pointing to {:#X}", addr, (addr - 4) & 0xFFFFFF);
                     }
                 }
                 println!("DMA6 done. Marking complete and raising irq");

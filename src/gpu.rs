@@ -506,8 +506,15 @@ impl Gpu {
                 let y_source = (self.gp0_buffer[1] >> 16) & 0xFFFF;
                 let x_dest = self.gp0_buffer[2] & 0xFFFF;
                 let y_dest = (self.gp0_buffer[2] >> 16) & 0xFFFF;
-                let width = self.gp0_buffer[3] & 0xFFFF;
-                let height = (self.gp0_buffer[3] >> 16) & 0xFFFF;
+                let mut width = self.gp0_buffer[3] & 0xFFFF;
+                let mut height = (self.gp0_buffer[3] >> 16) & 0xFFFF;
+
+                if width == 0 {width = 1024};
+                if height == 0 {height = 512};
+
+                if width == 0 || height == 0 {
+                    panic!("0 width or height! w {} h {}", width, height);
+                }
 
                 self.copy_rectangle(x_source, y_source, x_dest, y_dest, width, height);
             }
@@ -517,23 +524,25 @@ impl Gpu {
                     //Not enough for the header
                     return;
                 }
-                let width = (self.gp0_buffer[2] & 0xFFFF) as u16;
-                let height = (((self.gp0_buffer[2] >> 16) & 0xFFFF) as u16) * 2;
-                let length = (((width / 2) * height) / 2) + 3;
+                let mut width = ((self.gp0_buffer[2] & 0xFFFF) as u16);
+                let mut height = (((self.gp0_buffer[2] >> 16) & 0xFFFF) as u16);
+                if width == 0 {width = 1024};
+                if height == 0 {height = 512};
+                let length = (((width) * height + if width % 2 != 0 {1} else {0}) / 2) + 3;
                 if self.gp0_buffer.len() < length as usize {
                     //Not enough commands
                     return;
                 }
 
-                let base_x = (self.gp0_buffer[1] & 0xFFFF) as u16;
+                let base_x = ((self.gp0_buffer[1] & 0xFFFF) as u16);
                 let base_y = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as u16;
 
 
                 for index in 3..(length) {
                     let p2 = ((self.gp0_buffer[index as usize] >> 16) & 0xFFFF) as u16;
                     let p1 = (self.gp0_buffer[index as usize] & 0xFFFF) as u16;
-                    let x = base_x + (((index - 3) * 2) % width);
-                    let y = base_y + (((index - 3) * 2) / width);
+                    let x = base_x + (((index - 3) * 2) % (width));
+                    let y = base_y + (((index - 3) * 2) / (width));
                     let addr = point_to_address(x as u32, y as u32);
                     self.vram[addr as usize] = p1;
                     self.vram[(addr + 1) as usize] = p2;
@@ -544,6 +553,13 @@ impl Gpu {
                 //VRAM to CPU
                 if self.gp0_buffer.len() < 3 {
                     return;
+                }
+
+                let width = (self.gp0_buffer[2] & 0xFFFF) as u16;
+                let height = (((self.gp0_buffer[2] >> 16) & 0xFFFF) as u16) * 2;
+
+                if width == 0 || height == 0 {
+                    panic!("0 width or height! w {} h {}", width, height);
                 }
                 println!("VRAM to CPU")
                 //Lets ignore this one for now

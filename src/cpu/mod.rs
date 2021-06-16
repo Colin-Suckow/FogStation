@@ -549,7 +549,7 @@ impl R3000 {
                         0x0 => {
                             //MFC2
                             //This one will just return 0 for now
-                            self.delay_write_reg(instruction.rt(), 0);
+                            self.delay_write_reg(instruction.rt(), 1);
                         }
     
                         0x6 => {
@@ -566,7 +566,7 @@ impl R3000 {
     
                         0x2 => {
                             //CFC2
-                            self.delay_write_reg(instruction.rt(), 0);
+                            self.delay_write_reg(instruction.rt(), 1);
                         }
     
                         _ => panic!(
@@ -657,7 +657,7 @@ impl R3000 {
                 let addr = instruction
                     .immediate_sign_extended()
                     .wrapping_add(self.read_reg(instruction.rs()));
-                let val = 0;
+                let val = 1;
                 self.write_bus_word(addr, val, timers);
 
             }
@@ -1239,7 +1239,7 @@ impl R3000 {
         //println!("mask_bit num = {}", mask_bit);
         self.i_status.set_bit(mask_bit, true);
         if self.cop0.interrupt_enabled() && self.i_mask.get_bit(mask_bit) {
-            //println!("CPU: INT {:?}", source);
+            println!("CPU: INT {:?}", source);
             self.cycle_count = self.cycle_count.wrapping_add(1);
             self.fire_exception(Exception::Int);
         }

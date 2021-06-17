@@ -16,6 +16,7 @@ use std::sync::Mutex;
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::SystemTime;
+use std::time::Duration;
 
 mod disc;
 mod gdb;
@@ -268,35 +269,39 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
 
     if !state.halted {
         state.emu.step_cycle();
+
+        if state.emu.frame_ready() {
+            //Check for any viewport resolution changes
+            if state.emu.display_resolution() != state.current_resolution {
+                state.current_resolution = state.emu.display_resolution();
+                state.comm.tx.send(ClientMessage::ResolutionChanged(
+                    state.current_resolution.clone(),
+                ));
+            };
+    
+            let frame = state.emu.get_vram().clone();
+    
+            //Calculate frame time delta
+            let frame_time = SystemTime::now()
+                .duration_since(state.last_frame_time)
+                .expect("Error getting frame duration")
+                .as_millis();
+            state.last_frame_time = SystemTime::now();
+    
+            // Send the new frame over to the gui thread
+            if let Err(_) = state
+                .comm
+                .tx
+                .send(ClientMessage::FrameReady(frame, frame_time))
+            {
+                //The other side hung up, so lets end the emu thread
+                return Err(EmuThreadError::ClientDied);
+            };
+        };
+    } else {
+        thread::sleep(Duration::from_millis(16));
     }
 
-    if state.emu.frame_ready() {
-        //Check for any viewport resolution changes
-        if state.emu.display_resolution() != state.current_resolution {
-            state.current_resolution = state.emu.display_resolution();
-            state.comm.tx.send(ClientMessage::ResolutionChanged(
-                state.current_resolution.clone(),
-            ));
-        };
-
-        let frame = state.emu.get_vram().clone();
-
-        //Calculate frame time delta
-        let frame_time = SystemTime::now()
-            .duration_since(state.last_frame_time)
-            .expect("Error getting frame duration")
-            .as_millis();
-        state.last_frame_time = SystemTime::now();
-
-        // Send the new frame over to the gui thread
-        if let Err(_) = state
-            .comm
-            .tx
-            .send(ClientMessage::FrameReady(frame, frame_time))
-        {
-            //The other side hung up, so lets end the emu thread
-            return Err(EmuThreadError::ClientDied);
-        };
-    };
+   
     Ok(())
 }

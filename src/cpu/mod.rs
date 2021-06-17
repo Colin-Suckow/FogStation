@@ -143,6 +143,8 @@ impl R3000 {
         }
 
         if self.pc == 0x000000B0 {
+            // Send character to serial syscall
+            // This catches any characters and prints them to stdout instead
             if self.read_reg(9) == 0x3D {
                 print!(
                     "{}",
@@ -549,7 +551,7 @@ impl R3000 {
                         0x0 => {
                             //MFC2
                             //This one will just return 0 for now
-                            self.delay_write_reg(instruction.rt(), 1);
+                            self.delay_write_reg(instruction.rt(), 0);
                         }
     
                         0x6 => {
@@ -566,7 +568,7 @@ impl R3000 {
     
                         0x2 => {
                             //CFC2
-                            self.delay_write_reg(instruction.rt(), 1);
+                            self.delay_write_reg(instruction.rt(), 0);
                         }
     
                         _ => panic!(
@@ -657,7 +659,7 @@ impl R3000 {
                 let addr = instruction
                     .immediate_sign_extended()
                     .wrapping_add(self.read_reg(instruction.rs()));
-                let val = 1;
+                let val = 0;
                 self.write_bus_word(addr, val, timers);
 
             }
@@ -1262,7 +1264,7 @@ impl R3000 {
             //Cache is isolated, so don't write
             return;
         }
-        
+
         match addr & 0x1fffffff {
             0x1F801070 => {
                 //println!("Writing I_STAT. val {:#X} pc {:#X} oldpc {:#X}", val, self.pc, self.old_pc);

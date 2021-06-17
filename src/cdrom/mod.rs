@@ -231,6 +231,7 @@ impl CDDrive {
                 let response = match command {
                     0x1 => get_stat(self),
                     0x2 => set_loc(self, parameters[0], parameters[1], parameters[2]),
+                    0x3 => play(self),
                     0x6 => read_with_retry(self),
                     0x9 => stop_read(self),
                     0xA => init(self),

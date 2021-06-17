@@ -47,6 +47,7 @@ pub(super) struct GTE {
     TRX: i32,
     TRY: i32,
     TRZ: i32,
+    FLAG: u32,
 
     // Data registers
     VX0: i16,
@@ -119,6 +120,7 @@ impl GTE {
             TRX: 0,
             TRY: 0,
             TRZ: 0,
+            FLAG: 0,
 
             // Data Registers
             VX0: 0,
@@ -213,7 +215,7 @@ impl GTE {
             28 => {self.DQB = val as i32},
             29 => {self.ZSF3 = val as i16},
             30 => {self.ZSF4 = val as i16},
-            _ => error!("Tried to write unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg)
+            _ => panic!("Tried to write unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg)
         }
     }
 
@@ -237,14 +239,15 @@ impl GTE {
             9 => {self.IR1 = val as i16},
             10 => {self.IR2 = val as i16},
             11 => {self.IR3 = val as i16},
-            _ => error!("Tried to write unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
+            _ => panic!("Tried to write unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
         }
     }
 
     pub(super) fn execute_command(&mut self, command: u32) {
+        self.FLAG = 0; // Reset calculation error flags
         match command & 0x3F {
             //0x30 => self.rtpt(command),
-            _ => error!("Unknown GTE command {:#X}!", command & 0x3F)
+            _ => panic!("Unknown GTE command {:#X}!", command & 0x3F)
         };
     }
 }
@@ -273,7 +276,7 @@ impl GTE {
         let mut div_val = (((self.H as u32*0x20000/self.SZ3 as u32)+1)/2);
         if div_val > 0x1FFFF {
             div_val = 0x1FFFF;
-            // TODO set overflow flag
+            self.FLAG.set_bit(17, true);
         }
     }
 }

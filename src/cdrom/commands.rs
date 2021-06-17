@@ -164,3 +164,7 @@ pub(super) fn get_td(state: &mut CDDrive, track: u8) -> Packet {
 
     initial_response
 }
+
+pub(super) fn play(state: &mut CDDrive) -> Packet {
+    stat(state, 0x3)
+}

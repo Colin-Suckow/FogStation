@@ -1239,7 +1239,7 @@ impl R3000 {
         //println!("mask_bit num = {}", mask_bit);
         self.i_status.set_bit(mask_bit, true);
         if self.cop0.interrupt_enabled() && self.i_mask.get_bit(mask_bit) {
-            println!("CPU: INT {:?}", source);
+            //println!("CPU: INT {:?}", source);
             self.cycle_count = self.cycle_count.wrapping_add(1);
             self.fire_exception(Exception::Int);
         }
@@ -1262,11 +1262,7 @@ impl R3000 {
             //Cache is isolated, so don't write
             return;
         }
-
-        if addr == 0x1F8010A4 {
-            println!("Wrote dma2 block at pc {:#X} R31 {:#X} with val {:#X}", self.current_pc, self.read_reg(31), val);
-        }
-
+        
         match addr & 0x1fffffff {
             0x1F801070 => {
                 //println!("Writing I_STAT. val {:#X} pc {:#X} oldpc {:#X}", val, self.pc, self.old_pc);

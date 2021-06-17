@@ -173,7 +173,7 @@ impl TimerState {
     }
 
     pub fn read_half_word(&mut self, addr: u32) -> u16 {
-        println!("Reading halfword timer");
+        //println!("Reading halfword timer");
         0
         // match addr {
         //     0x1F801100 => self.timer_0.value as u16,
@@ -210,7 +210,7 @@ impl TimerState {
     }
 
     pub fn write_half_word(&mut self, addr: u32, value: u16) {
-        println!("Tried to write timer half");
+        //println!("Tried to write timer half");
         match addr {
             0x1F801100 => self.timer_0.value &= (value as u32) & 0xFFFF0000,
             0x1F801102 => self.timer_0.value &= (((value as u32) << 16) & 0xFFFF),

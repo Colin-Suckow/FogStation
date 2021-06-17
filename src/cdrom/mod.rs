@@ -1,6 +1,7 @@
 use bit_field::BitField;
 use commands::*;
 use disc::*;
+use log::{trace, warn};
 
 use crate::cpu::{InterruptSource, R3000};
 use std::{borrow::{Borrow, BorrowMut}, collections::VecDeque};
@@ -147,14 +148,14 @@ impl CDDrive {
                 0 => self.execute_command(val),
                 1 => self.reg_sound_map_data_out = val,
                 2 => panic!("CD: 0x1F801801 write byte unknown index 2"),
-                3 => println!("CD: Wrote Right-CD-Out Right SPU volume"),
+                3 => trace!("CD: Wrote Right-CD-Out Right SPU volume"),
                 _ => unreachable!(),
             },
             0x1F801802 => match self.status_index {
                 0 => self.push_parameter(val),
                 1 => self.write_interrupt_enable_register(val),
-                2 => println!("CD: Wrote Left-CD-Out Right SPU volume"),
-                3 => println!("CD: Wrote Right-CD-Out Left SPU volume"),
+                2 => trace!("CD: Wrote Left-CD-Out Right SPU volume"),
+                3 => trace!("CD: Wrote Right-CD-Out Left SPU volume"),
                 _ => unreachable!(),
             },
             0x1F801803 => match self.status_index {
@@ -163,7 +164,7 @@ impl CDDrive {
                     //self.data_queue.clear();
                 },
                 1 => self.write_interrupt_flag_register(val),
-                2 => println!("CD: Wrote Left-CD-Out Left SPU volume"),
+                2 => trace!("CD: Wrote Left-CD-Out Left SPU volume"),
                 3 => (),
                 _ => unreachable!(),
             },
@@ -220,10 +221,10 @@ impl CDDrive {
             false
         };
 
-        println!("Attemping to execute command!");
+        //println!("Attemping to execute command!");
 
         if self.pending_response.is_none() || is_readn {
-            println!("Executing");
+            //println!("Executing");
             //Execute
             {
                 let parameters: Vec<u8> = self.parameter_queue.iter().map(|v| v.clone()).collect();
@@ -307,7 +308,7 @@ impl CDDrive {
         match self.response_queue.pop_front() {
             Some(val) => val,
             None => {
-                println!("CD: Tried to read response from empty response queue! Returning 0...");
+                warn!("CD: Tried to read response from empty response queue! Returning 0...");
                 0
             }
         }
@@ -316,7 +317,7 @@ impl CDDrive {
     pub fn pop_data(&mut self) -> u8 {
         if self.want_data && self.data_queue.is_empty() {
             //Out of data, get some more
-            println!("Fetching more data!");
+            //println!("Fetching more data!");
             let data = self.disc.as_ref().expect("Tried to read nonexistant disc!").read_sector(
                         self.seek_target.plus_sector_offset(self.read_offset),
                         self.sector_size()
@@ -324,12 +325,12 @@ impl CDDrive {
         
             self.read_offset += 1;
             self.data_queue.extend(data.iter());
-            println!("Fetched {} bytes!", self.data_queue.len())
+            //println!("Fetched {} bytes!", self.data_queue.len())
         }
         match self.data_queue.pop_front() {
             Some(val) => val,
             None => {
-                println!("CD: Tried to read data from empty data queue! Returning 0...");
+                warn!("CD: Tried to read data from empty data queue! Returning 0...");
                 0
             }
         }

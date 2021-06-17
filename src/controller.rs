@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use bit_field::BitField;
+use log::{error, warn};
 
 use crate::cpu::{InterruptSource, R3000};
 
@@ -158,7 +159,7 @@ impl Controllers {
             JOY_CTRL => self.write_joy_ctrl(val),
             JOY_BAUD => self.write_joy_baud(val),
             JOY_MODE => self.write_joy_mode(val),
-            _ => println!("CONTROLLER: Unknown half word write! Addr {:#X} val: {:#X}", addr, val)
+            _ => error!("CONTROLLER: Unknown half word write! Addr {:#X} val: {:#X}", addr, val)
         };
     }
 
@@ -167,7 +168,7 @@ impl Controllers {
             JOY_STAT => self.read_joy_stat(),
             JOY_CTRL => self.read_joy_ctrl(),
             _ =>  {
-                println!("CONTROLLER: Unknown half word read! Addr {:#X}", addr);
+                error!("CONTROLLER: Unknown half word read! Addr {:#X}", addr);
                 0
             }
         }
@@ -177,7 +178,7 @@ impl Controllers {
         match addr {
             JOY_DATA => self.read_joy_data() as u8,
             _ => {
-                println!("CONTROLLER: Unknown byte read! Addr {:#X}", addr);
+                error!("CONTROLLER: Unknown byte read! Addr {:#X}", addr);
                 0
             }
         }
@@ -187,7 +188,7 @@ impl Controllers {
     pub(super) fn write_byte(&mut self, addr: u32, val: u8) {
         match addr {
             JOY_DATA => self.write_joy_data(val),
-            _ => println!("CONTROLLER: Unknown byte write! Addr {:#X} val: {:#X}", addr, val)
+            _ => error!("CONTROLLER: Unknown byte write! Addr {:#X} val: {:#X}", addr, val)
         };
     }
 
@@ -195,7 +196,7 @@ impl Controllers {
 
     fn write_joy_mode(&mut self, val: u16) {
         self.joy_mode = val;
-        println!("JOY_MODE {:#X}", self.joy_mode);
+        //println!("JOY_MODE {:#X}", self.joy_mode);
     }
 
     fn write_joy_baud(&mut self, val: u16) {
@@ -204,16 +205,16 @@ impl Controllers {
 
     fn write_joy_ctrl(&mut self, val: u16) {
 
-        println!("JOY_CTRL {:#X}", val);
+        //println!("JOY_CTRL {:#X}", val);
 
         
         if val.get_bit(0) && self.tx_state == TXstate::Disabled {
-            println!("TX Enabled!");
+            //println!("TX Enabled!");
             self.tx_state = TXstate::Ready;
         }
         
         if !val.get_bit(0) {
-            println!("TX Disabled!");
+            //println!("TX Disabled!");
             self.tx_state = TXstate::Disabled;
             // self.pending_irq = false;
             // self.irq_cycle_timer = 0;
@@ -231,10 +232,10 @@ impl Controllers {
     }
 
     fn write_joy_data(&mut self, val: u8) {
-        println!("Joy data written {:#X} state = {:?}", val, self.tx_state);
+        //println!("Joy data written {:#X} state = {:?}", val, self.tx_state);
         let new_state = match self.tx_state.clone() {
             TXstate::Disabled => {
-                println!("CONTROLLER: Tried to write JOY_DATA while TX is disabled!");
+                warn!("CONTROLLER: Tried to write JOY_DATA while TX is disabled!");
                 TXstate::Disabled
             }
             TXstate::Ready => {
@@ -248,10 +249,7 @@ impl Controllers {
                     return;
                 }
 
-                // if self.joy_ctrl.get_bit(13) {
-                //     //Trying to return controller 2, do nothing because its not connected
-                //     return;
-                // }
+               
 
                 self.push_rx_buf(0);
                 self.queue_interrupt();
@@ -262,6 +260,7 @@ impl Controllers {
             }
             TXstate::Transfering { slot, step } => {
                 if slot == Slot::Controller {
+                     
                     let response = match step {
                         0 => 0x41, // Digital pad idlo
                         1 => 0x5A, // Digital pad idhi
@@ -278,7 +277,7 @@ impl Controllers {
                         step: step + 1
                     }
                 } else {
-                    panic!("Tried to read memory card! Not yet implemented :(");
+                    panic!("Tried to read memory card! It's not implemented yet :(");
                 }
             }
         };
@@ -310,7 +309,7 @@ impl Controllers {
         }
 
         //val |= 0x80;
-        println!("Reading JOY_STAT {:#X}", val);
+        //println!("Reading JOY_STAT {:#X}", val);
 
         val
     }
@@ -321,12 +320,12 @@ impl Controllers {
     }
 
     fn read_joy_data(&mut self) -> u8 {
-        println!("joy data read");
+        //println!("joy data read");
         self.pop_rx_buf()
     }
 
     fn reset(&mut self) {
-        println!("Resetting");
+        //println!("Resetting");
         self.write_joy_ctrl(0);
         self.rx_buf.clear();
         self.pending_irq = false;
@@ -363,7 +362,7 @@ pub(super) fn controller_execute_cycle(cpu: &mut R3000) {
         cpu.main_bus.controllers.irq_cycle_timer -= 1;
     } else if cpu.main_bus.controllers.pending_irq {
         // The dumb ack delay has expired, so now we can fire an INT7
-        println!("Trying to fire ack interrupt");
+        //println!("Trying to fire ack interrupt");
         cpu.fire_external_interrupt(InterruptSource::Controller);
         cpu.main_bus.controllers.pending_irq = false;
     }

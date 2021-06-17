@@ -1,4 +1,5 @@
 use bit_field::BitField;
+use log::{error, trace};
 
 const H_RES: u32 = H_BLANK_START + 20;
 const V_RES: u32 = V_BLANK_START + 40;
@@ -561,7 +562,7 @@ impl Gpu {
                 if width == 0 || height == 0 {
                     panic!("0 width or height! w {} h {}", width, height);
                 }
-                println!("VRAM to CPU")
+                trace!("VRAM to CPU")
                 //Lets ignore this one for now
             }
             0x7 => {
@@ -618,7 +619,7 @@ impl Gpu {
                     }
 
                     
-                    _ => println!(
+                    _ => error!(
                         "Unknown GPU ENV command {:#X}. Full command queue is {:#X}",
                         command.command(),
                         self.gp0_buffer[0]
@@ -630,7 +631,7 @@ impl Gpu {
                 panic!("GPU IRQ requested!");
             }
 
-            _ => println!("unknown gp0 {:#X}!", command.gp0_header()),
+            _ => error!("unknown gp0 {:#X}!", command.gp0_header()),
         }
         //Made it to the end, so the command must have been executed
         self.gp0_clear();
@@ -688,7 +689,7 @@ impl Gpu {
                 //Get gpu information
                 //Ignoring this too
             }
-            _ => println!(
+            _ => error!(
                 "Unknown gp1 command {:#X} parameter {}!",
                 command.command(),
                 command.parameter()

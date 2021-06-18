@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use gdbstub::{arch, target::{Target, TargetResult, ext::{base::{ResumeAction, singlethread::{SingleThreadOps, StopReason}}, breakpoints::{HwBreakpoint, SwBreakpoint, SwBreakpointOps}}}};
+use gdbstub::{arch, target::{Target, TargetResult, ext::{base::{ResumeAction, singlethread::{SingleThreadOps, StopReason}}, breakpoints::{HwBreakpoint, HwWatchpoint, SwBreakpoint, SwBreakpointOps}}}};
 use crate::{EmuMessage, EmuState, emu_loop_step};
 
 impl Target for EmuState {
@@ -21,7 +21,7 @@ impl Target for EmuState {
     }
 
     fn hw_watchpoint(&mut self) -> Option<gdbstub::target::ext::breakpoints::HwWatchpointOps<Self>> {
-        None
+        Some(self)
     }
 
     fn monitor_cmd(&mut self) -> Option<gdbstub::target::ext::monitor_cmd::MonitorCmdOps<Self>> {
@@ -53,15 +53,18 @@ impl SingleThreadOps for EmuState {
             ResumeAction::Continue => {
                 let mut cycles = 0;
                 self.emu.clear_halt();
+                println!("Continuing!");
                 loop {
                     if self.emu.halt_requested() {
+                        println!("Halt hit!");
                         return Ok(StopReason::SwBreak);
                     }
                     if let Err(e) = emu_loop_step(self) {
-                        println!("ERROR | EmuThread: Encountered error: {:?}, exiting...", e);
+                        println!("EmuThread: Encountered error: {:?}, exiting...", e);
                     };
                     cycles += 1;
                     if cycles % 1024 == 0 && check_gdb_interrupt() {
+                        println!("GDB Interrupt hit!");
                         return Ok(StopReason::GdbInterrupt);
                     }
                 }
@@ -151,6 +154,7 @@ impl SwBreakpoint for EmuState {
 
 impl HwBreakpoint for EmuState {
     fn add_hw_breakpoint(&mut self, addr: u32) -> TargetResult<bool, Self> {
+        println!("Set breakpoint");
         self.emu.add_sw_breakpoint(addr);
         TargetResult::<bool, Self>::Ok(true)
     }
@@ -160,6 +164,27 @@ impl HwBreakpoint for EmuState {
         addr: u32,
     ) -> TargetResult<bool, Self> {
         self.emu.remove_sw_breakpoint(addr);
+        TargetResult::<bool, Self>::Ok(true)
+    }
+}
+
+impl HwWatchpoint for EmuState {
+    fn add_hw_watchpoint(
+        &mut self,
+        addr: u32,
+        kind: gdbstub::target::ext::breakpoints::WatchKind,
+    ) -> TargetResult<bool, Self> {
+        println!("Trying to add watchpoint...");
+        self.emu.add_watchpoint(addr);
+        TargetResult::<bool, Self>::Ok(true)
+    }
+
+    fn remove_hw_watchpoint(
+        &mut self,
+        addr: u32,
+        kind: gdbstub::target::ext::breakpoints::WatchKind,
+    ) -> TargetResult<bool, Self> {
+        self.emu.remove_watchpoint(addr);
         TargetResult::<bool, Self>::Ok(true)
     }
 }

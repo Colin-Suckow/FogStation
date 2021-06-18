@@ -29,11 +29,11 @@ pub struct PSXEmu {
     cycle_count: u32,
     halt_requested: bool,
     sw_breakpoints: Vec<u32>,
+    watchpoints: Vec<u32>
 }
 
 impl PSXEmu {
     /// Creates a new instance of the emulator.
-    /// WARNING: Call reset() before using, emulator is not initialized in a valid state.
     pub fn new(bios: Vec<u8>) -> PSXEmu {
         let bios = Bios::new(bios);
         let memory = Memory::new();
@@ -41,13 +41,16 @@ impl PSXEmu {
         let bus = MainBus::new(bios, memory, gpu);
         let r3000 = R3000::new(bus);
 
-        PSXEmu {
+        let mut emu = PSXEmu {
             r3000: r3000,
             timers: TimerState::new(),
             cycle_count: 0,
             halt_requested: false,
             sw_breakpoints: Vec::new(),
-        }
+            watchpoints: Vec::new(),
+        };
+        emu.reset();
+        emu
     }
 
     /// Resets system to startup condition
@@ -59,6 +62,7 @@ impl PSXEmu {
     /// Runs a single time unit. Each unit has the correct-ish ratio of cpu:gpu cycles
     pub fn step_cycle(&mut self) {
         for _ in 0..2 {
+            if self.halt_requested {return};
             self.run_cpu_cycle();
             self.run_gpu_cycle();
         }
@@ -73,7 +77,14 @@ impl PSXEmu {
             return;
         }
 
+        if self.watchpoints.contains(&self.r3000.last_touched_addr) {
+            self.halt_requested = true;
+            return;
+        }
+        //println!("{}", self.r3000.last_touched_addr);
+
         controller_execute_cycle(&mut self.r3000);
+        cdrom::step_cycle(&mut self.r3000);
         self.r3000.step_instruction(&mut self.timers);
         execute_dma_cycle(&mut self.r3000);
         self.cycle_count += 1;
@@ -153,6 +164,7 @@ impl PSXEmu {
     }
 
     pub fn add_sw_breakpoint(&mut self, addr: u32) {
+        println!("Adding breakpoint");
         self.sw_breakpoints.push(addr);
     }
 
@@ -170,5 +182,14 @@ impl PSXEmu {
 
     pub fn frame_ready(&self) -> bool {
         self.r3000.main_bus.gpu.end_of_frame()
+    }
+
+    pub fn add_watchpoint(&mut self, addr: u32) {
+        println!("Adding watchpoint for addr {:#X} ({:#X} masked)", addr, addr & 0x1fffffff);
+        self.watchpoints.push(addr & 0x1FFFFFFF);
+    }
+
+    pub fn remove_watchpoint(&mut self, addr: u32) {
+        self.watchpoints.retain(|&x| x != addr & 0x1FFFFFFF);
     }
 }

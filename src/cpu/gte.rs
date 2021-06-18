@@ -215,7 +215,7 @@ impl GTE {
             28 => {self.DQB = val as i32},
             29 => {self.ZSF3 = val as i16},
             30 => {self.ZSF4 = val as i16},
-            _ => panic!("Tried to write unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg)
+            _ => error!("Tried to write unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg)
         }
     }
 
@@ -239,7 +239,7 @@ impl GTE {
             9 => {self.IR1 = val as i16},
             10 => {self.IR2 = val as i16},
             11 => {self.IR3 = val as i16},
-            _ => panic!("Tried to write unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
+            _ => error!("Tried to write unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
         }
     }
 
@@ -247,7 +247,7 @@ impl GTE {
         self.FLAG = 0; // Reset calculation error flags
         match command & 0x3F {
             //0x30 => self.rtpt(command),
-            _ => panic!("Unknown GTE command {:#X}!", command & 0x3F)
+            _ => error!("Unknown GTE command {:#X}!", command & 0x3F)
         };
     }
 }

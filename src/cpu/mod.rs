@@ -69,6 +69,7 @@ pub struct R3000 {
     exec_delay: bool,
     last_was_branch: bool,
     gte: GTE,
+    pub last_touched_addr: u32,
 }
 
 impl R3000 {
@@ -91,6 +92,7 @@ impl R3000 {
             exec_delay: false,
             last_was_branch: false,
             gte: GTE::new(),
+            last_touched_addr: 0,
         }
     }
     /// Resets cpu registers to zero and sets program counter to reset vector (0xBFC00000)
@@ -143,7 +145,7 @@ impl R3000 {
         }
 
         if self.pc == 0x000000B0 {
-            // Send character to serial syscall
+            // SYSCALL: Send character to serial port
             // This catches any characters and prints them to stdout instead
             if self.read_reg(9) == 0x3D {
                 print!(
@@ -164,8 +166,6 @@ impl R3000 {
             self.fire_external_interrupt(InterruptSource::VBLANK);
         };
 
-        //Update the cdrom drive
-        cdrom::step_cycle(self);
 
         // if self.pc == 0x8005A27C {
         //     self.log = true;
@@ -1248,6 +1248,7 @@ impl R3000 {
     }
 
     fn read_bus_word(&mut self, addr: u32, timers: &mut TimerState) -> u32 {
+        self.last_touched_addr = addr;
         match addr & 0x1fffffff {
             0x1F801070 => {
                 //println!("Reading ISTATUS");
@@ -1260,10 +1261,12 @@ impl R3000 {
     }
 
     fn write_bus_word(&mut self, addr: u32, val: u32, timers: &mut TimerState) {
+        self.last_touched_addr = addr;
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
             return;
         }
+        
 
         match addr & 0x1fffffff {
             0x1F801070 => {
@@ -1280,6 +1283,7 @@ impl R3000 {
     }
 
     fn read_bus_half_word(&mut self, addr: u32, timers: &mut TimerState) -> u16 {
+        self.last_touched_addr = addr;
         match addr & 0x1fffffff {
             0x1F801070 => self.i_status as u16,
             0x1F801074 => self.i_mask as u16,
@@ -1289,6 +1293,7 @@ impl R3000 {
     }
     
     pub fn read_bus_byte(&mut self, addr: u32) -> u8 {
+        self.last_touched_addr = addr;
         match addr & 0x1fffffff {
             0x1F801070 => self.i_status as u8,
             0x1F801072 => (self.i_status >> 8) as u8,
@@ -1300,6 +1305,7 @@ impl R3000 {
    
 
     fn write_bus_half_word(&mut self, addr: u32, val: u16, timers: &mut TimerState) {
+        self.last_touched_addr = addr;
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
             return;
@@ -1313,6 +1319,7 @@ impl R3000 {
     }
 
     pub fn write_bus_byte(&mut self, addr: u32, val: u8) {
+        self.last_touched_addr = addr;
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
             return;

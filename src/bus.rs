@@ -57,6 +57,7 @@ impl MainBus {
     pub fn write_word(&mut self, og_addr: u32, word: u32) {
         let addr = og_addr & 0x1fffffff;
         //println!("Writing {:#X} to addr {:#X}", word, addr);
+        if addr == 0xCAF50 {println!("Hit the thing {:#X}", word)};
         match addr & 0x1fffffff {
             0x1F802002 => info!("Serial: {}", word),
             0x1F802023 => info!("DUART A: {}", word),
@@ -91,6 +92,7 @@ impl MainBus {
     pub fn read_half_word(&mut self, og_addr: u32) -> u16 {
         let addr = og_addr & 0x1fffffff;
 
+
         match addr & 0x1fffffff {
             0x1F801070 => {
                 panic!("Tried to read i_status half");
@@ -105,6 +107,9 @@ impl MainBus {
 
     pub fn write_half_word(&mut self, og_addr: u32, value: u16) {
         let addr = og_addr & 0x1fffffff;
+        if addr == 0x7F10 {println!("Hit the thing half")};
+
+
         match addr & 0x1fffffff {
             0x1F802002 => info!("Serial: {}", value),
             0x1F802023 => info!("DUART A: {}", value),
@@ -151,6 +156,8 @@ impl MainBus {
 
     pub fn write_byte(&mut self, og_addr: u32, value: u8) {
         let addr = og_addr & 0x1fffffff;
+        if addr == 0x7F10 {println!("Hit the thing byte")};
+
         match addr & 0x1fffffff {
             0x0..=0x001f_ffff => self.memory.write_byte(addr, value), //KUSEG
             0x1F801800..=0x1F801803 => self.cd_drive.write_byte(addr, value), //CDROM

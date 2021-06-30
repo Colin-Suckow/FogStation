@@ -2,6 +2,7 @@ use bit_field::BitField;
 
 use cop0::Cop0;
 use instruction::{Instruction, NumberHelpers};
+use log::trace;
 
 use crate::timer::TimerState;
 use crate::{bus::MainBus, cdrom};
@@ -121,29 +122,21 @@ impl R3000 {
 
     pub fn step_instruction(&mut self, timers: &mut TimerState) {
         //Fast load exe
-        if self.load_exe {
-            if self.pc == 0xbfc0700c {
-                println!("Jumping to exe...");
-                self.pc = 0x80010000;
-            }
+
+        if self.load_exe && self.pc == 0xbfc0700c {
+            println!("Jumping to exe...");
+            self.pc = 0x80010000;
         }
+        
+        // if self.pc == 0x8006e9c0 {
+        //     self.log = true;
+        // }
 
         // if self.pc == 0x8005a30 {
         //     self.log = true;
         // }
 
-        // if self.pc == 0x1000 {
-        //     self.log = true;
-        // }
-        if self.pc == 0x000000A0 {
-            if self.read_reg(9) == 0x3F {
-                //printf
-                //self.print_string(self.read_reg(4));
-            } else {
-                //println!("SYSCALL A({:#X}) pc: {:#X}", self.read_reg(9), self.old_pc);
-            }
-        }
-
+     
         if self.pc == 0x000000B0 {
             // SYSCALL: Send character to serial port
             // This catches any characters and prints them to stdout instead
@@ -187,18 +180,6 @@ impl R3000 {
                 instruction
             );
         }
-        //self.trace_file.write(format!("{:08x}: {:08x}\n", self.old_pc, instruction).as_bytes());
-        //println!("{:08x}: {:08x}", self.old_pc, instruction);
-
-        //Handle interrupts
-        // if self.cop0.interrupt_enabled() {
-        //     for i in 0..=10 {
-        //         if self.i_status.get_bit(i) && self.i_mask.get_bit(i) {
-        //             self.cycle_count = self.cycle_count.wrapping_add(1);
-        //             self.fire_exception(Exception::Int);
-        //         }
-        //     }
-        // }
 
         self.exec_delay = false;
         self.last_was_branch = false;
@@ -551,7 +532,7 @@ impl R3000 {
                         0x0 => {
                             //MFC2
                             //This one will just return 0 for now
-                            self.delay_write_reg(instruction.rt(), 0);
+                            self.delay_write_reg(instruction.rt(), self.gte.data_register(instruction.rd() as usize));
                         }
     
                         0x6 => {
@@ -568,7 +549,7 @@ impl R3000 {
     
                         0x2 => {
                             //CFC2
-                            self.delay_write_reg(instruction.rt(), 0);
+                            self.delay_write_reg(instruction.rt(), self.gte.control_register(instruction.rd() as usize));
                         }
     
                         _ => panic!(
@@ -655,11 +636,14 @@ impl R3000 {
 
             0x3A => {
                 //SWC2
-                //Stubbing this one out with a 0
                 let addr = instruction
                     .immediate_sign_extended()
                     .wrapping_add(self.read_reg(instruction.rs()));
-                let val = 0;
+                let val = if instruction.rt() > 31 {
+                    self.gte.control_register(instruction.rt() as usize - 32)
+                } else {
+                    self.gte.data_register(instruction.rt() as usize)
+                };
                 self.write_bus_word(addr, val, timers);
 
             }
@@ -952,19 +936,21 @@ impl R3000 {
     }
 
     fn op_bgezal(&mut self, instruction: u32) {
-        self.write_reg(31, self.pc + 4);
+        let og_pc = self.pc;
         if self.read_reg(instruction.rs()) as i32 >= 0 {
             self.delay_slot = self.pc;
             self.pc = (instruction.immediate_sign_extended() << 2).wrapping_add(self.delay_slot);
         }
+        self.write_reg(31, og_pc + 4);
     }
 
     fn op_bltzal(&mut self, instruction: u32) {
-        self.write_reg(31, self.pc + 4);
+        let og_pc = self.pc;
         if self.read_reg(instruction.rs()).get_bit(31) {
             self.delay_slot = self.pc;
             self.pc = (instruction.immediate_sign_extended() << 2).wrapping_add(self.delay_slot);
         }
+        self.write_reg(31, og_pc + 4);
     }
 
     fn op_bgez(&mut self, instruction: u32) {

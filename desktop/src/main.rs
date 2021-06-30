@@ -17,6 +17,7 @@ use std::thread;
 use std::thread::JoinHandle;
 use std::time::SystemTime;
 use std::time::Duration;
+use simple_logger::SimpleLogger;
 
 mod disc;
 mod gdb;
@@ -80,10 +81,9 @@ fn main() {
     let mut emu = PSXEmu::new(bios_data);
     emu.reset();
 
-    // if matches.opt_present("l") {
-    //     state.logging = true;
-    //     state.emu.r3000.log = true;
-    // }
+    if matches.opt_present("l") {
+        SimpleLogger::new().init().unwrap();
+    }
 
     if matches.opt_present("h") {
         headless = true;

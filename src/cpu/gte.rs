@@ -2,6 +2,31 @@ use bit_field::BitField;
 use fixed::types::{I16F16, I20F12, I28F4, I4F12, I8F24, I8F8};
 use log::error;
 
+struct Color {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub c: u8,
+}
+
+impl Color {
+    fn new() -> Self {
+        Self {
+            r: 0,
+            g: 0,
+            b: 0,
+            c: 0,
+        }
+    }
+
+    fn set_word(&mut self, val: u32) {
+        self.r = (val & 0xFF) as u8;
+        self.g = ((val >> 8) & 0xFF) as u8;
+        self.b = ((val >> 16) & 0xFF) as u8;
+        self.c = ((val >> 24) & 0xFF) as u8;
+    }
+}
+
 pub(super) struct GTE {
     // Control Registers
     ZSF3: i16,
@@ -48,6 +73,8 @@ pub(super) struct GTE {
     TRY: i32,
     TRZ: i32,
     FLAG: u32,
+    LZCS: i32,
+    LZCR: i32,
 
     // Data registers
     VX0: i16,
@@ -59,6 +86,7 @@ pub(super) struct GTE {
     VX2: i16,
     VY2: i16,
     VZ2: i16,
+    IR0: i16,
     IR1: i16,
     IR2: i16,
     IR3: i16,
@@ -70,6 +98,13 @@ pub(super) struct GTE {
     SZ1: u16,
     SZ2: u16,
     SZ3: u16,
+    SX0: u16,
+    SX1: u16,
+    SX2: u16,
+    SY0: u16,
+    SY1: u16,
+    SY2: u16,
+    RGB: Color,
 }
 
 // Interface
@@ -121,6 +156,8 @@ impl GTE {
             TRY: 0,
             TRZ: 0,
             FLAG: 0,
+            LZCS: 0,
+            LZCR: 0,
 
             // Data Registers
             VX0: 0,
@@ -132,6 +169,7 @@ impl GTE {
             VX2: 0,
             VY2: 0,
             VZ2: 0,
+            IR0: 0,
             IR1: 0,
             IR2: 0,
             IR3: 0,
@@ -143,6 +181,13 @@ impl GTE {
             SZ1: 0,
             SZ2: 0,
             SZ3: 0,
+            SX0: 0,
+            SX1: 0,
+            SX2: 0,
+            SY0: 0,
+            SY1: 0,
+            SY2: 0,
+            RGB: Color::new(),
         }
     }
 
@@ -215,7 +260,7 @@ impl GTE {
             28 => {self.DQB = val as i32},
             29 => {self.ZSF3 = val as i16},
             30 => {self.ZSF4 = val as i16},
-            _ => error!("Tried to write unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg)
+            _ => println!("Tried to write unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg)
         }
     }
 
@@ -236,17 +281,44 @@ impl GTE {
                 self.VY2 = ((val >> 16) & 0xFFFF) as i16;
             },
             5 => {self.VZ2 = val as i16},
+            6 => self.RGB.set_word(val),
+            8 => self.IR0 = val as i16,
             9 => {self.IR1 = val as i16},
             10 => {self.IR2 = val as i16},
             11 => {self.IR3 = val as i16},
-            _ => error!("Tried to write unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
+            30 => self.LZCS = val as i32,
+            _ => println!("Tried to write unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
+        }
+    }
+
+    pub(super) fn data_register(&self, reg: usize) -> u32 {
+        match reg {
+            // 0 => ((self.VY0 as u32) << 16 & self.VX0 as u32),
+            // 1 => self.VZ0 as u32,
+            // 2 => ((self.VY1 as u32) << 16 & self.VX1 as u32),
+            // 3 => self.VZ1 as u32,
+            // 4 => ((self.VY2 as u32) << 16 & self.VX2 as u32),
+            // 5 => self.VZ2 as u32,
+            // 9 => self.IR1 as u32,
+            // 10 => self.IR2 as u32,
+            // 11 => self.IR3 as u32,
+            //24 => self.MAC0 as u32,
+            31 => self.lzcr(),
+            _ => {println!("Tried to read unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg); 0}
+        }
+    }
+
+    pub(super) fn control_register(&self, reg: usize) -> u32 {
+        match reg {
+            _ => {println!("Tried to read unknown GTE control register {} ({} RAW)", data_reg_name[reg], reg); 0}
         }
     }
 
     pub(super) fn execute_command(&mut self, command: u32) {
         self.FLAG = 0; // Reset calculation error flags
         match command & 0x3F {
-            //0x30 => self.rtpt(command),
+            0x6 => self.nclip(),
+            0x30 => self.rtpt(command),
             _ => error!("Unknown GTE command {:#X}!", command & 0x3F)
         };
     }
@@ -259,6 +331,26 @@ impl GTE {
        self.SZ1 = self.SZ2;
        self.SZ2 = self.SZ3;
        self.SZ3 = val;
+   }
+
+   fn push_sx(&mut self, val: u16) {
+    self.SX0 = self.SX1;
+    self.SX1 = self.SX2;
+    self.SX2 = val;
+   }
+
+   fn push_sy(&mut self, val: u16) {
+    self.SY0 = self.SY1;
+    self.SY1 = self.SY2;
+    self.SY2 = val;
+   }
+
+   fn lzcr(&self) -> u32 {
+       if self.LZCS >= 0 {
+           self.LZCS.leading_zeros()
+       } else {
+           self.LZCS.leading_ones()
+       }
    }
 }
 
@@ -278,6 +370,14 @@ impl GTE {
             div_val = 0x1FFFF;
             self.FLAG.set_bit(17, true);
         }
+        self.push_sx(((div_val * self.IR1 as u32 + self.OFX as u32) / 0x10000) as u16);
+        self.push_sy(((div_val * self.IR2 as u32 + self.OFY as u32) / 0x10000) as u16);
+        self.IR0 = ((div_val * self.IR1 as u32 + self.OFX as u32) / 0x10000) as i16;
+        self.MAC0 = (div_val * self.IR1 as u32 + self.OFX as u32) as i32;
+    }
+
+    fn nclip(&mut self) {
+        self.MAC0 = (self.SX0 * self.SY1 + self.SX1 * self.SY2 + self.SX2 * self.SY0 - self.SX0 * self.SY2 - self.SX1 * self.SY0 - self.SX2 * self.SY1) as i32;
     }
 }
 

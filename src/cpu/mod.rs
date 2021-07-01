@@ -128,13 +128,12 @@ impl R3000 {
             self.pc = 0x80010000;
         }
         
-        // if self.pc == 0x8006e9c0 {
-        //     self.log = true;
-        // }
 
-        // if self.pc == 0x8005a30 {
-        //     self.log = true;
-        // }
+
+        if self.last_touched_addr == 0x11F9E4 {
+            println!("touched pc {:#X}", self.pc);
+            self.last_touched_addr = 0;
+        }
 
      
         if self.pc == 0x000000B0 {
@@ -150,19 +149,10 @@ impl R3000 {
             }
         }
 
-        if self.pc == 0x000000C0 {
-            //println!("SYSCALL C({:#X}) pc: {:#X}", self.read_reg(9), self.old_pc);
-        }
-
         //Check for vblank
         if self.main_bus.gpu.consume_vblank() {
             self.fire_external_interrupt(InterruptSource::VBLANK);
         };
-
-
-        // if self.pc == 0x8005A27C {
-        //     self.log = true;
-        // }
 
         let instruction = self.main_bus.read_word(self.pc);
         self.current_pc = self.pc;
@@ -183,8 +173,8 @@ impl R3000 {
 
         self.exec_delay = false;
         self.last_was_branch = false;
+        self.cycle_count = self.cycle_count.wrapping_add(1);
         self.execute_instruction(instruction, timers);
-        self.cycle_count = self.cycle_count.wrapping_add(1); //This being here basically disables the load delay
 
         for i in (0..self.load_delays.len()).rev() {
             if self.load_delays[i].cycle_loaded != self.cycle_count {
@@ -1234,7 +1224,7 @@ impl R3000 {
     }
 
     fn read_bus_word(&mut self, addr: u32, timers: &mut TimerState) -> u32 {
-        self.last_touched_addr = addr;
+        //self.last_touched_addr = addr & 0x1fffffff;
         match addr & 0x1fffffff {
             0x1F801070 => {
                 //println!("Reading ISTATUS");
@@ -1247,7 +1237,7 @@ impl R3000 {
     }
 
     fn write_bus_word(&mut self, addr: u32, val: u32, timers: &mut TimerState) {
-        self.last_touched_addr = addr;
+        self.last_touched_addr = addr & 0x1fffffff;
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
             return;
@@ -1269,7 +1259,7 @@ impl R3000 {
     }
 
     fn read_bus_half_word(&mut self, addr: u32, timers: &mut TimerState) -> u16 {
-        self.last_touched_addr = addr;
+        //self.last_touched_addr = addr & 0x1fffffff;
         match addr & 0x1fffffff {
             0x1F801070 => self.i_status as u16,
             0x1F801074 => self.i_mask as u16,
@@ -1279,7 +1269,7 @@ impl R3000 {
     }
     
     pub fn read_bus_byte(&mut self, addr: u32) -> u8 {
-        self.last_touched_addr = addr;
+        //self.last_touched_addr = addr & 0x1fffffff;
         match addr & 0x1fffffff {
             0x1F801070 => self.i_status as u8,
             0x1F801072 => (self.i_status >> 8) as u8,
@@ -1291,7 +1281,7 @@ impl R3000 {
    
 
     fn write_bus_half_word(&mut self, addr: u32, val: u16, timers: &mut TimerState) {
-        self.last_touched_addr = addr;
+        self.last_touched_addr = addr & 0x1fffffff;
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
             return;
@@ -1305,7 +1295,7 @@ impl R3000 {
     }
 
     pub fn write_bus_byte(&mut self, addr: u32, val: u8) {
-        self.last_touched_addr = addr;
+        self.last_touched_addr = addr & 0x1fffffff;
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
             return;

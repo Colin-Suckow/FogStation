@@ -346,18 +346,18 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 //OTC is only used to reset the ordering table. So we can ignore a lot of the parameters
                 let entries = cpu.main_bus.dma.channels[num].block & 0xFFFF;
                 let base = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
-                trace!("Initializing {} entries ending at {:#X}", entries, base);
+                println!("Initializing {} entries ending at {:#X}", entries, base);
                 
                 for i in 0..=entries {
                     let addr = base - ((entries - i) * 4);
                     if i == 0 {
                         //The first entry should point to the end of memory
                         cpu.main_bus.write_word(addr, 0xFFFFFF);
-                        //println!("Wrote DMA6 end at {:#X} pointing to {:#X}", addr, 0xFFFFFF);
+                        //println!("Wrote DMA6 end at {:#X} val {:#X}", addr, 0xFFFFFF);
                     } else {
                         //All the others should point to the address below
                         cpu.main_bus.write_word(addr, (addr - 4) & 0xFFFFFF);
-                        //println!("Wrote DMA6 header at {:#X} pointing to {:#X}", addr, (addr - 4) & 0xFFFFFF);
+                        //println!("Wrote DMA6 header at {:#X} val {:#X}", addr, (addr - 4) & 0xFFFFFF);
                     }
                 }
                 trace!("DMA6 done. Marking complete and raising irq");

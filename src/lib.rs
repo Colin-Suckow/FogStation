@@ -81,8 +81,13 @@ impl PSXEmu {
             self.halt_requested = true;
             return;
         }
-        //println!("{}", self.r3000.last_touched_addr);
 
+        // if self.r3000.pc == 0x80079b44 {
+        //     let a0 = self.r3000.gen_registers[4];
+        //     let a1 = self.r3000.gen_registers[5];
+        //     println!("Add prim: ot_addr {:#X} ({:#X})  p_addr {:#X} ({:#X})", a0, self.r3000.main_bus.read_word(a0), a1, self.r3000.main_bus.read_word(a1));
+        // }
+ 
         controller_execute_cycle(&mut self.r3000);
         cdrom::step_cycle(&mut self.r3000);
         self.r3000.step_instruction(&mut self.timers);

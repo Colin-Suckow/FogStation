@@ -68,7 +68,7 @@ impl MainBus {
             0x1F801004 => info!("Expansion 2 base write"),
             0x1F801008 => info!("Expansion 1 delay/size write"),
             0x1F801010 => info!("BIOS ROM Control WORD write"),
-            0x1F801060 => info!("RAM SIZE WORD write"),
+            0x1F801060 => info!("RAM SIZE WORD write {:#X}", word),
             0x1F801020 => info!("COM_DELAY WORD write"),
             0x1F801014 => info!("SPU_DELAY size write"),
             0x1F801018 => info!("CDROM_DELAY size write"),

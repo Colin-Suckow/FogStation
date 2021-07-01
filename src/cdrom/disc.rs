@@ -103,7 +103,7 @@ impl Disc {
             }
             total_size += track.data.len();
         }
-        panic!("Unable to locate track!");
+        panic!("Unable to locate track at offset {}!", offset);
     }
 
     pub fn track_count(&self) -> usize {

@@ -137,7 +137,7 @@ impl Gpu {
     }
 
     pub fn read_status_register(&mut self) -> u32 {
-        ////println!("Reading GPUSTAT");
+        println!("Reading GPUSTAT");
         let mut stat: u32 = 0;
 
         stat |= (self.texpage_x_base) as u32;
@@ -151,11 +151,12 @@ impl Gpu {
 
         stat |= 0x1C000000;
 
+
         stat
     }
 
     pub fn read_word_gp0(&mut self) -> u32 {
-        //println!("Reading gp0");
+        println!("Reading gp0");
         0x0 as u32
     }
 

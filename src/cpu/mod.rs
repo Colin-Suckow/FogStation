@@ -173,15 +173,15 @@ impl R3000 {
 
         self.exec_delay = false;
         self.last_was_branch = false;
-        self.cycle_count = self.cycle_count.wrapping_add(1);
-        self.execute_instruction(instruction, timers);
-
         for i in (0..self.load_delays.len()).rev() {
             if self.load_delays[i].cycle_loaded != self.cycle_count {
                 self.write_reg(self.load_delays[i].register, self.load_delays[i].value);
                 self.load_delays.remove(i);
             }
         }
+        self.execute_instruction(instruction, timers);
+        self.cycle_count = self.cycle_count.wrapping_add(1);
+
 
         //Execute branch delay operation
         if self.delay_slot != 0 {
@@ -201,18 +201,18 @@ impl R3000 {
             //self.trace_file.write(format!("{:08x}: {:08x}\n", self.delay_slot, delay_instruction).as_bytes());
             //println!("{:08x}: {:08x}", self.delay_slot, delay_instruction);
             self.exec_delay = true;
+            for i in (0..self.load_delays.len()).rev() {
+                if self.load_delays[i].cycle_loaded != self.cycle_count {
+                    self.write_reg(self.load_delays[i].register, self.load_delays[i].value);
+                    self.load_delays.remove(i);
+                }
+            }
             self.execute_instruction(delay_instruction, timers);
             self.cycle_count = self.cycle_count.wrapping_add(1);
             self.exec_delay = false;
             self.delay_slot = 0;
         }
-
-        for i in (0..self.load_delays.len()).rev() {
-            if self.load_delays[i].cycle_loaded != self.cycle_count {
-                self.write_reg(self.load_delays[i].register, self.load_delays[i].value);
-                self.load_delays.remove(i);
-            }
-        }
+        
     }
 
     pub fn execute_instruction(&mut self, instruction: u32, timers: &mut TimerState) {
@@ -522,7 +522,7 @@ impl R3000 {
                         0x0 => {
                             //MFC2
                             //This one will just return 0 for now
-                            self.delay_write_reg(instruction.rt(), self.gte.data_register(instruction.rd() as usize));
+                            self.write_reg(instruction.rt(), self.gte.data_register(instruction.rd() as usize));
                         }
     
                         0x6 => {
@@ -539,7 +539,7 @@ impl R3000 {
     
                         0x2 => {
                             //CFC2
-                            self.delay_write_reg(instruction.rt(), self.gte.control_register(instruction.rd() as usize));
+                            self.write_reg(instruction.rt(), self.gte.control_register(instruction.rd() as usize));
                         }
     
                         _ => panic!(
@@ -816,7 +816,7 @@ impl R3000 {
     }
 
     fn op_mfc0(&mut self, instruction: u32) {
-        self.delay_write_reg(instruction.rt(), self.cop0.read_reg(instruction.rd()));
+        self.write_reg(instruction.rt(), self.cop0.read_reg(instruction.rd()));
     }
 
     fn op_mtc0(&mut self, instruction: u32) {

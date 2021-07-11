@@ -304,14 +304,14 @@ impl GTE {
             11 => self.IR3 as u32,
             24 => self.MAC0 as u32,
             31 => self.lzcr(),
-            _ => {error!("Tried to read unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg); 0}
+            _ => {error!("Tried to read unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg); 10}
         }
     }
 
     pub(super) fn control_register(&self, reg: usize) -> u32 {
         match reg {
             31 => self.FLAG,
-            _ => {error!("Tried to read unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg); 0}
+            _ => {error!("Tried to read unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg); 10}
         }
     }
 
@@ -380,7 +380,7 @@ impl GTE {
 
     fn nclip(&mut self) {
         println!("GTE NCLIP mostly stubbed");
-        self.MAC0 = (self.SX0 * self.SY1 + self.SX1 * self.SY2 + self.SX2 * self.SY0 - self.SX0 * self.SY2 - self.SX1 * self.SY0 - self.SX2 * self.SY1) as i32;
+        //self.MAC0 = (self.SX0 * self.SY1 + self.SX1 * self.SY2 + self.SX2 * self.SY0 - self.SX0 * self.SY2 - self.SX1 * self.SY0 - self.SX2 * self.SY1) as i32;
     }
 
     fn ncds(&mut self) {

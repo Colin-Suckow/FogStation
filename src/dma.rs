@@ -208,7 +208,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
     }
     //Execute dma copy for each channel
     for num in channels_to_run {
-        trace!("Executing DMA");
+        println!("Executing DMA {}", num);
         //cpu.main_bus.dma.channels[num].print_stats();
         match num {
             2 => {
@@ -217,16 +217,16 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                     0x01000401 => {
                         //Linked list mode. mem -> gpu
                         let mut addr = cpu.main_bus.dma.channels[num].base_addr;
-                        trace!("Starting linked list transfer. addr {:#X}", addr);
+                        println!("Starting linked list transfer. addr {:#X}", addr);
                         let mut header = cpu.main_bus.read_word(addr);
-                        //println!("base addr: {:#X}. base header: {:#X}", addr, header);
+                        println!("base addr: {:#X}. base header: {:#X}", addr, header);
                         loop {
                             let num_words = (header >> 24) & 0xFF;
+                            println!("addr {:#X}, header {:#X}, nw {}", addr, header, num_words);
                             for i in 0..num_words {
                                 let packet = cpu.main_bus.read_word((addr + 4) + (i * 4));
                                 cpu.main_bus.gpu.send_gp0_command(packet);
                             }
-                            //println!("addr {:#X}, header {:#X}, nw {}", addr, header, num_words);
                             if header & 0x800000 != 0 || header == 0x00FFFFFF {
                                 break;
                             }
@@ -284,6 +284,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                     0x1000200 => {
                         //VramRead
                         //TODO: Implement properly
+                        trace!("VRAM read");
 
                         let entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
                         let block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
@@ -317,6 +318,8 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 let words = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                 let base_addr = (cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF) as usize;
                 let data = cpu.main_bus.cd_drive.sector_data_take();
+
+                println!("Words {} base_addr {:#X}", words, base_addr);
                 cpu.main_bus.memory.data[base_addr..(base_addr + (words * 4) as usize)].copy_from_slice(data);
                 cpu.main_bus.dma.channels[num].complete();
                 cpu.main_bus.dma.raise_irq(num);
@@ -353,11 +356,11 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                     if i == 0 {
                         //The first entry should point to the end of memory
                         cpu.main_bus.write_word(addr, 0xFFFFFF);
-                        //println!("Wrote DMA6 end at {:#X} val {:#X}", addr, 0xFFFFFF);
+                        println!("Wrote DMA6 end at {:#X} val {:#X}", addr, 0xFFFFFF);
                     } else {
                         //All the others should point to the address below
                         cpu.main_bus.write_word(addr, (addr - 4) & 0xFFFFFF);
-                        //println!("Wrote DMA6 header at {:#X} val {:#X}", addr, (addr - 4) & 0xFFFFFF);
+                        println!("Wrote DMA6 header at {:#X} val {:#X}", addr, (addr - 4) & 0xFFFFFF);
                     }
                 }
                 trace!("DMA6 done. Marking complete and raising irq");

@@ -17,6 +17,8 @@ pub struct MainBus {
     pub cd_drive: CDDrive,
     scratchpad: Memory,
     pub(super) controllers: Controllers,
+
+    pub last_touched_addr: u32,
 }
 
 impl MainBus {
@@ -30,6 +32,8 @@ impl MainBus {
             cd_drive: CDDrive::new(),
             scratchpad: Memory::new_scratchpad(),
             controllers: Controllers::new(),
+
+            last_touched_addr: 0,
         }
     }
 
@@ -56,8 +60,8 @@ impl MainBus {
 
     pub fn write_word(&mut self, og_addr: u32, word: u32) {
         let addr = og_addr & 0x1fffffff;
-        //println!("Writing {:#X} to addr {:#X}", word, addr);
-        if addr == 0xCAF50 {println!("Hit the thing {:#X}", word)};
+        self.last_touched_addr = addr;
+
         match addr & 0x1fffffff {
             0x1F802002 => info!("Serial: {}", word),
             0x1F802023 => info!("DUART A: {}", word),
@@ -107,8 +111,7 @@ impl MainBus {
 
     pub fn write_half_word(&mut self, og_addr: u32, value: u16) {
         let addr = og_addr & 0x1fffffff;
-        if addr == 0x7F10 {println!("Hit the thing half")};
-
+        self.last_touched_addr = addr;
 
         match addr & 0x1fffffff {
             0x1F802002 => info!("Serial: {}", value),
@@ -120,13 +123,13 @@ impl MainBus {
             0x1F800000..=0x1F8003FF => self.scratchpad.write_half_word(addr - 0x1F800000, value),
             0x1F80_1040..=0x1F80_104E => self.controllers.write_half_word(addr, value),
             0x1F80_1000..=0x1F80_2000 => warn!("Something tried to half word write to the I/O ports. This is not currently emulated. The address was {:#X}. value was {:#X}", addr, value),
-            _ => panic!("Invalid half word write at address {:#X}! This address is not mapped to any device.", addr)
+            _ => println!("Invalid half word write at address {:#X}! This address is not mapped to any device.", addr)
         }
     }
 
     pub fn read_byte(&mut self, og_addr: u32) -> u8 {
         let addr = og_addr & 0x1fffffff;
-        match addr & 0x1fffffff {
+        match addr {
             0x1F801070 => {
                 warn!("Tried to read i_status word");
                 0
@@ -156,7 +159,7 @@ impl MainBus {
 
     pub fn write_byte(&mut self, og_addr: u32, value: u8) {
         let addr = og_addr & 0x1fffffff;
-        if addr == 0x7F10 {println!("Hit the thing byte")};
+        self.last_touched_addr = addr & 0x1fffffff;
 
         match addr & 0x1fffffff {
             0x0..=0x001f_ffff => self.memory.write_byte(addr, value), //KUSEG

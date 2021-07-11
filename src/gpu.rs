@@ -1,3 +1,5 @@
+use std::ops::Shr;
+
 use bit_field::BitField;
 use log::{error, trace};
 
@@ -26,6 +28,11 @@ struct Point {
     color: u16,
     tex_x: i16,
     tex_y: i16,
+}
+
+enum ColorDepth {
+    Full, // 24 bit
+    Reduced, // 15 bit
 }
 
 impl Point {
@@ -76,6 +83,7 @@ pub struct Gpu {
     pixel_count: u32,
     enabled: bool,
     gp0_buffer: Vec<u32>,
+    color_depth: ColorDepth,
 
     texpage_x_base: u16,
     texpage_y_base: u16,
@@ -106,6 +114,7 @@ impl Gpu {
             pixel_count: 0,
             enabled: false,
             gp0_buffer: Vec::new(),
+            color_depth: ColorDepth::Reduced,
 
             texpage_x_base: 0,
             texpage_y_base: 0,
@@ -137,7 +146,7 @@ impl Gpu {
     }
 
     pub fn read_status_register(&mut self) -> u32 {
-        println!("Reading GPUSTAT");
+        //println!("Reading GPUSTAT");
         let mut stat: u32 = 0;
 
         stat |= (self.texpage_x_base) as u32;
@@ -526,8 +535,8 @@ impl Gpu {
                     //Not enough for the header
                     return;
                 }
-                let mut width = ((self.gp0_buffer[2] & 0xFFFF) as u16);
-                let mut height = (((self.gp0_buffer[2] >> 16) & 0xFFFF) as u16);
+                let mut width = ((self.gp0_buffer[2] & 0xFFFF) as i16);
+                let mut height = (((self.gp0_buffer[2] >> 16) & 0xFFFF) as i16);
                 if width == 0 {width = 1024};
                 if height == 0 {height = 512};
                 let length = (((width) * height + if width % 2 != 0 {1} else {0}) / 2) + 3;
@@ -536,8 +545,8 @@ impl Gpu {
                     return;
                 }
 
-                let base_x = ((self.gp0_buffer[1] & 0xFFFF) as u16);
-                let base_y = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as u16;
+                let base_x = ((self.gp0_buffer[1] & 0xFFFF) as i16);
+                let base_y = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as i16;
 
 
                 for index in 3..(length) {
@@ -557,8 +566,8 @@ impl Gpu {
                     return;
                 }
 
-                let width = (self.gp0_buffer[2] & 0xFFFF) as u16;
-                let height = (((self.gp0_buffer[2] >> 16) & 0xFFFF) as u16) * 2;
+                let width = (self.gp0_buffer[2] & 0xFFFF) as u32;
+                let height = (((self.gp0_buffer[2] >> 16) & 0xFFFF) as u32) * 2;
 
                 if width == 0 || height == 0 {
                     panic!("0 width or height! w {} h {}", width, height);
@@ -600,11 +609,7 @@ impl Gpu {
                         );
                     }
 
-                    0xE2 => {
-                        //Texture window area
-                        //Not needed rn
-                        //println!("GP0 command E2 not implemented!");
-                    }
+  
 
                     0xE5 => {
                         //Set Drawing Offset
@@ -613,14 +618,10 @@ impl Gpu {
                         self.draw_offset = Point::from_components(x, y, 0);
                     }
 
-                    0xE6 => {
-                        //Mask bit
-                        //Also no needed
-                        //println!("GP0 command E6 not implemented!");
-                    }
+             
 
                     
-                    _ => error!(
+                    _ => println!(
                         "Unknown GPU ENV command {:#X}. Full command queue is {:#X}",
                         command.command(),
                         self.gp0_buffer[0]
@@ -654,9 +655,9 @@ impl Gpu {
                 self.gp0_buffer.clear();
             }
 
-            0x2 => {
-                self.show_frame = true;
-            }
+            // 0x2 => {
+            //     self.show_frame = true;
+            // }
 
             0x6 => {
                 //Horizontal Display Range
@@ -684,13 +685,18 @@ impl Gpu {
                 } else {
                     240
                 };
+
+                self.color_depth = match command.get_bit(4) {
+                    true => ColorDepth::Full,
+                    false => ColorDepth::Reduced,
+                }
             }
 
             0x10 => {
                 //Get gpu information
                 //Ignoring this too
             }
-            _ => error!(
+            _ => println!(
                 "Unknown gp1 command {:#X} parameter {}!",
                 command.command(),
                 command.parameter()
@@ -1204,9 +1210,9 @@ impl Gpu {
                     (page_x * 64) as u32 + (x / 4) as u32,
                     (page_y * 256) as u32 + y as u32,
                 ) as usize) % 524288];
-                let clut_index = (value >> (x % 4) * 4) & 0xF;
+                let (clut_index, _) = (value.overflowing_shr(((x % 4) * 4) as u32));
                 self.vram
-                    [point_to_address((clut_x * 16 + clut_index) as u32, clut_y as u32) as usize]
+                    [point_to_address((clut_x * 16 + (clut_index & 0xF)) as u32, clut_y as u32) as usize]
             }
         };
         if self.blend_enabled {

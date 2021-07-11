@@ -127,14 +127,6 @@ impl R3000 {
             println!("Jumping to exe...");
             self.pc = 0x80010000;
         }
-        
-
-
-        if self.last_touched_addr == 0x11F9E4 {
-            println!("touched pc {:#X}", self.pc);
-            self.last_touched_addr = 0;
-        }
-
      
         if self.pc == 0x000000B0 {
             // SYSCALL: Send character to serial port
@@ -179,8 +171,8 @@ impl R3000 {
                 self.load_delays.remove(i);
             }
         }
-        self.execute_instruction(instruction, timers);
         self.cycle_count = self.cycle_count.wrapping_add(1);
+        self.execute_instruction(instruction, timers);
 
 
         //Execute branch delay operation
@@ -207,8 +199,8 @@ impl R3000 {
                     self.load_delays.remove(i);
                 }
             }
-            self.execute_instruction(delay_instruction, timers);
             self.cycle_count = self.cycle_count.wrapping_add(1);
+            self.execute_instruction(delay_instruction, timers);
             self.exec_delay = false;
             self.delay_slot = 0;
         }
@@ -710,7 +702,7 @@ impl R3000 {
 
         let word = self.read_bus_word(addr & !3, timers);
         let reg_val = self.read_reg(instruction.rt());
-        self.delay_write_reg(
+        self.write_reg(
             instruction.rt(),
             match addr & 3 {
                 3 => (reg_val & 0xffffff00) | (word >> 24),
@@ -730,7 +722,7 @@ impl R3000 {
 
         let word = self.read_bus_word(addr & !3, timers);
         let reg_val = self.read_reg(instruction.rt());
-        self.delay_write_reg(
+        self.write_reg(
             instruction.rt(),
             match addr & 3 {
                 0 => (reg_val & 0x00ffffff) | (word << 24),
@@ -751,6 +743,7 @@ impl R3000 {
             self.fire_exception(Exception::AdES);
         } else {
             let val = (self.read_reg(instruction.rt()) & 0xFFFF) as u16;
+            if addr == 0xD030028 {println!("PC {:#X}", self.pc);}
             self.write_bus_half_word(addr, val, timers);
         };
     }
@@ -770,7 +763,7 @@ impl R3000 {
             self.fire_exception(Exception::AdEL);
         } else {
             let val = self.read_bus_half_word(addr, timers).zero_extended();
-            self.delay_write_reg(instruction.rt(), val);
+            self.write_reg(instruction.rt(), val);
         };
     }
 
@@ -778,7 +771,7 @@ impl R3000 {
         let addr =
             (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         let val = self.main_bus.read_byte(addr).zero_extended();
-        self.delay_write_reg(instruction.rt(), val);
+        self.write_reg(instruction.rt(), val);
     }
 
     fn op_lw(&mut self, instruction: u32, timers: &mut TimerState) {
@@ -788,7 +781,7 @@ impl R3000 {
             self.fire_exception(Exception::AdEL);
         } else {
             let val = self.read_bus_word(addr, timers);
-            self.delay_write_reg(instruction.rt(), val);
+            self.write_reg(instruction.rt(), val);
         };
     }
 
@@ -799,7 +792,7 @@ impl R3000 {
             self.fire_exception(Exception::AdEL);
         } else {
             let val = self.read_bus_half_word(addr, timers).sign_extended();
-            self.delay_write_reg(instruction.rt(), val);
+            self.write_reg(instruction.rt(), val);
         };
     }
 
@@ -807,7 +800,7 @@ impl R3000 {
         let addr =
             (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         let val = self.main_bus.read_byte(addr).sign_extended();
-        self.delay_write_reg(instruction.rt(), val);
+        self.write_reg(instruction.rt(), val);
     }
 
     fn op_rfe(&mut self) {
@@ -867,7 +860,7 @@ impl R3000 {
     fn op_addiu(&mut self, instruction: u32) {
         self.write_reg(
             instruction.rt(),
-            (self.read_reg(instruction.rs())).wrapping_add(instruction.immediate_sign_extended()),
+            ((self.read_reg(instruction.rs()) as i32).wrapping_add((instruction.immediate() as i16) as i32)) as u32,
         );
     }
 
@@ -982,7 +975,7 @@ impl R3000 {
     fn op_addu(&mut self, instruction: u32) {
         self.write_reg(
             instruction.rd(),
-            (self.read_reg(instruction.rt())).wrapping_add(self.read_reg(instruction.rs())),
+            (self.read_reg(instruction.rt()) as i32).wrapping_add(self.read_reg(instruction.rs()) as i32) as u32,
         );
     }
 
@@ -1217,13 +1210,13 @@ impl R3000 {
         //println!("mask_bit num = {}", mask_bit);
         self.i_status.set_bit(mask_bit, true);
         if self.cop0.interrupt_enabled() && self.i_mask.get_bit(mask_bit) {
-            //println!("CPU: INT {:?}", source);
+            println!("CPU: INT {:?}", source);
             self.cycle_count = self.cycle_count.wrapping_add(1);
             self.fire_exception(Exception::Int);
         }
     }
 
-    fn read_bus_word(&mut self, addr: u32, timers: &mut TimerState) -> u32 {
+    pub fn read_bus_word(&mut self, addr: u32, timers: &mut TimerState) -> u32 {
         //self.last_touched_addr = addr & 0x1fffffff;
         match addr & 0x1fffffff {
             0x1F801070 => {
@@ -1236,7 +1229,7 @@ impl R3000 {
         }
     }
 
-    fn write_bus_word(&mut self, addr: u32, val: u32, timers: &mut TimerState) {
+    pub fn write_bus_word(&mut self, addr: u32, val: u32, timers: &mut TimerState) {
         self.last_touched_addr = addr & 0x1fffffff;
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
@@ -1308,7 +1301,7 @@ impl R3000 {
     }
 
     /// Returns the value stored within the given register. Will panic if register_number > 31
-    fn read_reg(&self, register_number: u8) -> u32 {
+    pub fn read_reg(&self, register_number: u8) -> u32 {
         if register_number != 0 {
             self.gen_registers[register_number as usize]
         } else {

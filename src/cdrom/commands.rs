@@ -1,8 +1,11 @@
+use bit_field::BitField;
+use log::trace;
+
 use super::{Block, CDDrive, DriveState, IntCause, MotorState, Packet, disc::dec_to_bcd};
 use crate::cdrom::disc::{BYTES_PER_SECTOR, DiscIndex};
 
-pub(super) const AVG_FIRST_RESPONSE_TIME: u32 = 0xc4e1;
-pub(super) const AVG_SECOND_RESPONSE_TIME: u32 = 0x1000;
+pub(super) const AVG_FIRST_RESPONSE_TIME: u32 = 0xc4e1 / 2;
+pub(super) const AVG_SECOND_RESPONSE_TIME: u32 = 0x1000 / 2;
 
 pub(super) fn get_bios_date() -> Packet {
     Packet {
@@ -91,7 +94,7 @@ pub(super) fn seek_data(state: &mut CDDrive) -> Packet {
 
 pub(super) fn set_mode(state: &mut CDDrive, mode: u8) -> Packet {
     state.drive_mode = mode;
-    //println!("CD MODE: {:#X}", state.drive_mode);
+    println!("CD MODE: {:#b}", state.drive_mode);
     stat(state, 0xE)
 }
 
@@ -102,10 +105,16 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
     let mut initial_response = stat(state, 0x6);
     state.drive_state = DriveState::Read;
     state.read_enabled = true;
+
+    let cycles = match state.drive_mode.get_bit(7) {
+        true => 0x322df, // Double speed
+        false => 0x686da, // Single speed
+    };
+
     let mut response_packet = Packet {
         cause: IntCause::INT1,
         response: vec![state.get_stat()],
-        execution_cycles: 0x36cd2,
+        execution_cycles: cycles / 2,
         extra_response: None,
         command: 0x6,
     };
@@ -122,10 +131,15 @@ pub(super) fn stop_read(state: &mut CDDrive) -> Packet {
     state.drive_state = DriveState::Idle;
     state.read_enabled = false;
 
+    let cycles = match state.drive_mode.get_bit(7) {
+        true => 0x10477A, // Double speed
+        false => 0x20eaef, // Single speed
+    };
+
     let response_packet = Packet {
         cause: IntCause::INT2,
         response: vec![state.get_stat()],
-        execution_cycles: 1_000_000,
+        execution_cycles: cycles / 2,
         extra_response: None,
         command: 0x9,
     };
@@ -158,6 +172,7 @@ pub(super) fn get_tn(state: &mut CDDrive) -> Packet {
 // In practice this will probably send code instead of music to the SPU, and play some crazy audio
 // Future colin, you have been warned
 pub(super) fn get_td(state: &mut CDDrive, track: u8) -> Packet {
+    trace!("get_td track {}", track);
     let mut initial_response = stat(state, 0x14);
     initial_response.response.push(0x0);
     initial_response.response.push(0x2);

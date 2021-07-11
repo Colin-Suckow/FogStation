@@ -214,7 +214,6 @@ impl CDDrive {
     }
 
     fn execute_command(&mut self, command: u8) {
-        // Make sure theres no pending command
         let is_readn = if let Some(res) = &self.pending_response {
             res.cause == IntCause::INT1
         } else {
@@ -222,9 +221,10 @@ impl CDDrive {
         };
 
         //println!("Attemping to execute command!");
-
+        // Make sure theres no pending command
+        // We can safely overwrite pending readn's though. Otherwise those will clog up the system
         if self.pending_response.is_none() || is_readn {
-            //println!("Executing");
+            println!("CDROM Executing command: {:#X}", command);
             //Execute
             {
                 let parameters: Vec<u8> = self.parameter_queue.iter().map(|v| v.clone()).collect();
@@ -370,6 +370,11 @@ pub fn step_cycle(cpu: &mut R3000) {
         if pending_response.execution_cycles == 0 {
     
             let mut packet = cpu.main_bus.cd_drive.pending_response.take().unwrap();
+
+            // If this is a read packet and reading has already been disabled, abort this whole command sequence
+            if packet.command == 0x6 && !cpu.main_bus.cd_drive.read_enabled {
+                return;
+            }
            
             cpu.main_bus.cd_drive.response_queue = VecDeque::with_capacity(packet.response.len()); //Clear queue
             cpu.main_bus.cd_drive.response_queue.extend(packet.response.iter());
@@ -382,7 +387,7 @@ pub fn step_cycle(cpu: &mut R3000) {
             if cpu.main_bus.cd_drive.reg_interrupt_enable & packet.cause.bitflag()
             == packet.cause.bitflag()
             {
-                cpu.fire_external_interrupt(InterruptSource::CDROM);
+                    cpu.fire_external_interrupt(InterruptSource::CDROM);
             }
     
             //If the response has an extra response, push that to the front of the line
@@ -410,10 +415,14 @@ pub fn step_cycle(cpu: &mut R3000) {
                     //println!("Post ReadN");
                   
                     if cpu.main_bus.cd_drive.read_enabled {
+                        let cycles = match cpu.main_bus.cd_drive.drive_mode.get_bit(7) {
+                            true => 0x322df, // Double speed
+                            false => 0x686da, // Single speed
+                        };
                         let response_packet = Packet {
                             cause: IntCause::INT1,
                             response: vec![cpu.main_bus.cd_drive.get_stat()],
-                            execution_cycles: 0x36cd2,
+                            execution_cycles: cycles / 2,
                             extra_response: None,
                             command: 0x6,
                         };

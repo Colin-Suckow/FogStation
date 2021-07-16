@@ -282,15 +282,14 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
                     state.current_resolution.clone(),
                 ));
             };
-    
-            let frame = state.emu.get_vram().clone();
-    
+
             //Calculate frame time delta
             let frame_time = SystemTime::now()
                 .duration_since(state.last_frame_time)
                 .expect("Error getting frame duration")
                 .as_millis();
-            state.last_frame_time = SystemTime::now();
+    
+            let frame = state.emu.get_vram().clone();
     
             // Send the new frame over to the gui thread
             if let Err(_) = state
@@ -302,9 +301,10 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
                 return Err(EmuThreadError::ClientDied);
             };
             state.waiting_for_client = true; // Wait until next frame is ready
+            state.last_frame_time = SystemTime::now();
         };
     } else {
-        thread::sleep(Duration::from_millis(1));
+        //thread::sleep(Duration::from_millis(1));
     }
 
    

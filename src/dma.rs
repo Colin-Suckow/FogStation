@@ -357,11 +357,11 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                     if i == 0 {
                         //The first entry should point to the end of memory
                         cpu.main_bus.write_word(addr, 0xFFFFFF);
-                        trace!("Wrote DMA6 end at {:#X} val {:#X}", addr, 0xFFFFFF);
+                        //trace!("Wrote DMA6 end at {:#X} val {:#X}", addr, 0xFFFFFF);
                     } else {
                         //All the others should point to the address below
                         cpu.main_bus.write_word(addr, (addr - 4) & 0xFFFFFF);
-                        trace!("Wrote DMA6 header at {:#X} val {:#X}", addr, (addr - 4) & 0xFFFFFF);
+                        //trace!("Wrote DMA6 header at {:#X} val {:#X}", addr, (addr - 4) & 0xFFFFFF);
                     }
                 }
                 trace!("DMA6 done. Marking complete and raising irq");

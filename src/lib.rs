@@ -67,7 +67,8 @@ impl PSXEmu {
             self.run_gpu_cycle();
         }
 
-        //One extra gpu cycle gets close enough to correct timing
+        //Two extra gpu cycles gets close enough to correct timing
+        self.run_gpu_cycle();
         self.run_gpu_cycle();
     }
 

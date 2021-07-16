@@ -2,7 +2,7 @@ use bit_field::BitField;
 use log::trace;
 
 use super::{Block, CDDrive, DriveState, IntCause, MotorState, Packet, disc::dec_to_bcd};
-use crate::cdrom::disc::{BYTES_PER_SECTOR, DiscIndex};
+use crate::cdrom::{DriveSpeed, disc::{BYTES_PER_SECTOR, DiscIndex}};
 
 pub(super) const AVG_FIRST_RESPONSE_TIME: u32 = 0xc4e1;
 pub(super) const AVG_SECOND_RESPONSE_TIME: u32 = 0x1000;
@@ -125,15 +125,15 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
 }
 
 //Pause
-pub(super) fn stop_read(state: &mut CDDrive) -> Packet {
+pub(super) fn pause_read(state: &mut CDDrive) -> Packet {
     //println!("stop read (pause)");
     let mut initial_response = stat(state, 0x9);
     state.drive_state = DriveState::Idle;
     state.read_enabled = false;
 
-    let cycles = match state.drive_mode.get_bit(7) {
-        true => 0x10477A, // Double speed
-        false => 0x20eaef, // Single speed
+    let cycles = match state.drive_speed(){
+        DriveSpeed::Double => 0x10477A,
+        DriveSpeed::Single => 0x20eaef,
     };
 
     let response_packet = Packet {

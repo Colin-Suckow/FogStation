@@ -3,10 +3,11 @@ use std::ops::Shr;
 use bit_field::BitField;
 use log::{error, trace};
 
-const H_RES: u32 = H_BLANK_START + 20;
-const V_RES: u32 = V_BLANK_START + 40;
-const H_BLANK_START: u32 = 640;
-const V_BLANK_START: u32 = 480;
+
+const CYCLES_PER_SCANLINE: u32 = 3413;
+const DISPLAY_CYCLES_PER_SCANLINE: u32 = 2560;
+const TOTAL_SCANLINES: u32 = 263;
+const DISPLAY_SCANLINES: u32 = 233;
 
 #[derive(Copy, Clone, Debug)]
 enum TextureColorMode {
@@ -707,22 +708,22 @@ impl Gpu {
     pub fn execute_cycle(&mut self) {
         self.pixel_count += 1;
 
-        if self.pixel_count % H_RES == 0 {
+        if self.pixel_count % CYCLES_PER_SCANLINE == 0 {
             self.hblank_consumed = false;
         }
 
-        if self.pixel_count > H_RES * V_RES {
+        if self.pixel_count > CYCLES_PER_SCANLINE * TOTAL_SCANLINES {
             self.pixel_count = 0;
             self.vblank_consumed = false;
         }
     }
 
     pub fn is_vblank(&self) -> bool {
-        self.pixel_count > H_RES * V_BLANK_START
+        self.pixel_count > DISPLAY_CYCLES_PER_SCANLINE * DISPLAY_SCANLINES
     }
 
     pub fn is_hblank(&self) -> bool {
-        self.pixel_count % H_RES > H_BLANK_START
+        self.pixel_count > DISPLAY_CYCLES_PER_SCANLINE
     }
 
     pub fn resolution(&self) -> Resolution {

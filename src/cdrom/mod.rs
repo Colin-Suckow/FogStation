@@ -30,6 +30,11 @@ pub enum SectorSize {
     DataOnly = 0x800,
     WholeSector = 0x924
 }
+
+enum DriveSpeed {
+    Single,
+    Double
+}
 #[derive(Debug, PartialEq)]
 pub(super) enum IntCause {
     INT1,
@@ -233,7 +238,7 @@ impl CDDrive {
                     0x2 => set_loc(self, parameters[0], parameters[1], parameters[2]),
                     0x3 => play(self),
                     0x6 => read_with_retry(self),
-                    0x9 => stop_read(self),
+                    0x9 => pause_read(self),
                     0xA => init(self),
                     0xE => set_mode(self, parameters[0]),
                     0x13 => get_tn(self),
@@ -276,6 +281,13 @@ impl CDDrive {
         //status |= 0 << 7;
 
         status
+    }
+
+    fn drive_speed(&self) -> DriveSpeed {
+        match self.drive_mode.get_bit(7) {
+            true => DriveSpeed::Double,
+            false => DriveSpeed::Single
+        }
     }
 
     fn get_stat(&self) -> u8 {
@@ -371,8 +383,8 @@ pub fn step_cycle(cpu: &mut R3000) {
     
             let mut packet = cpu.main_bus.cd_drive.pending_response.take().unwrap();
 
-            // If this is a read packet and reading has already been disabled, abort this whole command sequence
-            if packet.command == 0x6 && !cpu.main_bus.cd_drive.read_enabled {
+            // If this is a read packet and reading has already been disabled, abort the entire command sequence
+            if packet.command == 0x6 && !cpu.main_bus.cd_drive.read_enabled {    
                 return;
             }
            
@@ -413,13 +425,12 @@ pub fn step_cycle(cpu: &mut R3000) {
                 }
     
                 0x6 => {
-                    //ReadN
-                    //println!("Post ReadN");
-                  
-                    if cpu.main_bus.cd_drive.read_enabled {
-                        let cycles = match cpu.main_bus.cd_drive.drive_mode.get_bit(7) {
-                            true => 0x322df, // Double speed
-                            false => 0x686da, // Single speed
+                    //ReadN                  
+                    if cpu.main_bus.cd_drive.read_enabled && packet.cause == IntCause::INT1 {
+                        trace!("Inserting next ReadN");
+                        let cycles = match cpu.main_bus.cd_drive.drive_speed() {
+                            DriveSpeed::Double => 0x322df,
+                            DriveSpeed::Single => 0x686da,
                         };
                         let response_packet = Packet {
                             cause: IntCause::INT1,

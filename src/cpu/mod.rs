@@ -2,7 +2,7 @@ use bit_field::BitField;
 
 use cop0::Cop0;
 use instruction::{Instruction, NumberHelpers};
-use log::trace;
+use log::{trace, warn};
 
 use crate::timer::TimerState;
 use crate::{bus::MainBus, cdrom};
@@ -128,7 +128,7 @@ impl R3000 {
             self.pc = 0x80010000;
         }
      
-        if self.pc == 0x000000B0 {
+        if self.pc == 0xB0 {
             // SYSCALL: Send character to serial port
             // This catches any characters and prints them to stdout instead
             if self.read_reg(9) == 0x3D {
@@ -137,9 +137,18 @@ impl R3000 {
                     std::str::from_utf8(&[self.read_reg(4) as u8]).unwrap()
                 );
             } else {
-                //println!("SYSCALL B({:#X}) pc: {:#X}", self.read_reg(9), self.old_pc);
+                trace!("SYSCALL B({:#X}) pc: {:#X}", self.read_reg(9), self.current_pc);
             }
         }
+
+        if self.pc == 0xA0 {
+            trace!("SYSCALL A({:#X}) pc: {:#X}", self.read_reg(9), self.current_pc);
+        }
+
+        if self.pc == 0xC0 {
+            trace!("SYSCALL C({:#X}) pc: {:#X}", self.read_reg(9), self.current_pc);
+        }
+
 
         //Check for vblank
         if self.main_bus.gpu.consume_vblank() {
@@ -218,11 +227,11 @@ impl R3000 {
     }
 
     pub fn execute_instruction(&mut self, instruction: u32, timers: &mut TimerState) {
-        // if self.pc % 4 != 0 || self.delay_slot % 4 != 0 {
-        //     println!("Tried to execute out of alignment");
-        //     self.fire_exception(Exception::AdEL);
-        //     return;
-        // }
+        if self.pc % 4 != 0 || self.delay_slot % 4 != 0 {
+            warn!("Tried to execute out of alignment");
+            self.fire_exception(Exception::AdEL);
+            return;
+        }
 
         match instruction.opcode() {
             0x0 => {
@@ -657,6 +666,7 @@ impl R3000 {
 
         if addr % 4 != 0 {
             //unaligned address
+            trace!("AdES fired by op_sw");
             self.fire_exception(Exception::AdES);
         } else {
             let val = self.read_reg(instruction.rt());
@@ -771,6 +781,7 @@ impl R3000 {
             .wrapping_add(self.read_reg(instruction.rs()));
         if addr % 2 != 0 {
             //unaligned address
+            trace!("AdES fired by op_sh");
             self.fire_exception(Exception::AdES);
         } else {
             let val = (self.read_reg(instruction.rt()) & 0xFFFF) as u16;
@@ -791,6 +802,7 @@ impl R3000 {
         let addr =
             (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         if addr % 2 != 0 {
+            trace!("AdEl fired by op_lhu");
             self.fire_exception(Exception::AdEL);
         } else {
             let val = self.read_bus_half_word(addr, timers).zero_extended();
@@ -809,6 +821,7 @@ impl R3000 {
         let addr =
             (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         if addr % 4 != 0 {
+            trace!("AdEl fired by op_lw");
             self.fire_exception(Exception::AdEL);
         } else {
             let val = self.read_bus_word(addr, timers);
@@ -820,6 +833,7 @@ impl R3000 {
         let addr =
             (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         if addr % 2 != 0 {
+            trace!("AdEl fired by op_lh");
             self.fire_exception(Exception::AdEL);
         } else {
             let val = self.read_bus_half_word(addr, timers).sign_extended();
@@ -1142,6 +1156,7 @@ impl R3000 {
         let target = self.read_reg(instruction.rs());
         self.write_reg(instruction.rd(), self.pc + 4);
         if target % 4 != 0 {
+            trace!("AdEl fired by op_jalr");
             self.fire_exception(Exception::AdEL);
         } else {
             self.delay_slot = self.pc;
@@ -1152,6 +1167,7 @@ impl R3000 {
     fn op_jr(&mut self, instruction: u32) {
         let target = self.read_reg(instruction.rs());
         if target % 4 != 0 {
+            trace!("AdEl fired by op_jr");
             self.fire_exception(Exception::AdEL);
         } else {
             self.delay_slot = self.pc;
@@ -1207,7 +1223,7 @@ impl R3000 {
     }
 
     pub fn fire_exception(&mut self, exception: Exception) {
-        //println!("CPU EXCEPTION: Type: {:?} PC: {:#X}", exception, self.current_pc);
+        trace!("CPU EXCEPTION: Type: {:?} PC: {:#X}", exception, self.current_pc);
         self.cop0.set_cause_execode(&exception);
 
 

@@ -40,6 +40,7 @@ struct EmuState {
     current_resolution: Resolution,
     debugging: bool,
     last_frame_time: SystemTime,
+    waiting_for_client: bool,
 }
 
 fn main() {
@@ -135,6 +136,7 @@ fn main() {
         },
         debugging: matches.opt_present("g"),
         last_frame_time: SystemTime::now(),
+        waiting_for_client: false,
     };
 
     let emu_thread = start_emu_thread(emu_state);
@@ -180,6 +182,7 @@ enum EmuMessage {
     StepCPU,
     UpdateControllers(ButtonState),
     Reset,
+    StartFrame,
 }
 
 enum ClientMessage {
@@ -260,6 +263,7 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
                 state.emu.update_controller_state(button_state)
             }
             EmuMessage::Reset => state.emu.reset(),
+            EmuMessage::StartFrame => state.waiting_for_client = false,
         }
     }
 
@@ -267,7 +271,7 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
         state.halted = true;
     }
 
-    if !state.halted {
+    if !state.halted && !state.waiting_for_client {
         state.emu.step_cycle();
 
         if state.emu.frame_ready() {
@@ -297,9 +301,10 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
                 //The other side hung up, so lets end the emu thread
                 return Err(EmuThreadError::ClientDied);
             };
+            state.waiting_for_client = true; // Wait until next frame is ready
         };
     } else {
-        thread::sleep(Duration::from_millis(16));
+        thread::sleep(Duration::from_millis(1));
     }
 
    

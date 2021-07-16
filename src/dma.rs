@@ -173,6 +173,7 @@ impl DMAState {
             || (self.interrupt.get_bit(23)
                 && (self.interrupt.get_bits(16..=22) > 0 && self.interrupt.get_bits(24..=30) > 0));
         self.interrupt.set_bit(31, should_flag);
+
     }
 
     fn channel_enabled(&self, channel_num: usize) -> bool {
@@ -186,7 +187,7 @@ impl DMAState {
     }
 
     fn irq_channel_enabled(&self, channel_num: usize) -> bool {
-        self.interrupt.get_bit(15) || self.interrupt.get_bit(16 + channel_num) //&& self.interrupt.get_bit(23)// && !self.interrupt.get_bit(24 + channel_num)
+        self.interrupt.get_bit(15) || self.interrupt.get_bit(16 + channel_num) && self.interrupt.get_bit(23)//  && !self.interrupt.get_bit(24 + channel_num)
     }
 }
 
@@ -208,8 +209,8 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
     }
     //Execute dma copy for each channel
     for num in channels_to_run {
-        println!("Executing DMA {}", num);
-        //cpu.main_bus.dma.channels[num].print_stats();
+        //println!("Executing DMA {}", num);
+        cpu.main_bus.dma.channels[num].print_stats();
         match num {
             2 => {
                 //GPU
@@ -217,12 +218,12 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                     0x01000401 => {
                         //Linked list mode. mem -> gpu
                         let mut addr = cpu.main_bus.dma.channels[num].base_addr;
-                        println!("Starting linked list transfer. addr {:#X}", addr);
+                        trace!("Starting linked list transfer. addr {:#X}", addr);
                         let mut header = cpu.main_bus.read_word(addr);
-                        println!("base addr: {:#X}. base header: {:#X}", addr, header);
+                        trace!("base addr: {:#X}. base header: {:#X}", addr, header);
                         loop {
                             let num_words = (header >> 24) & 0xFF;
-                            println!("addr {:#X}, header {:#X}, nw {}", addr, header, num_words);
+                            trace!("addr {:#X}, header {:#X}, nw {}", addr, header, num_words);
                             for i in 0..num_words {
                                 let packet = cpu.main_bus.read_word((addr + 4) + (i * 4));
                                 cpu.main_bus.gpu.send_gp0_command(packet);
@@ -232,7 +233,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                             }
 
                             if addr == 0 {
-                                println!("Hit DMA infinite loop");
+                                trace!("Hit DMA infinite loop");
                                 break;
                             }
 
@@ -319,7 +320,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 let base_addr = (cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF) as usize;
                 let data = cpu.main_bus.cd_drive.sector_data_take();
 
-                println!("Words {} base_addr {:#X}", words, base_addr);
+                trace!("Words {} base_addr {:#X}", words, base_addr);
                 cpu.main_bus.memory.data[base_addr..(base_addr + (words * 4) as usize)].copy_from_slice(data);
                 cpu.main_bus.dma.channels[num].complete();
                 cpu.main_bus.dma.raise_irq(num);
@@ -349,18 +350,18 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 //OTC is only used to reset the ordering table. So we can ignore a lot of the parameters
                 let entries = cpu.main_bus.dma.channels[num].block & 0xFFFF;
                 let base = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
-                println!("Initializing {} entries ending at {:#X}", entries, base);
+                trace!("Initializing {} entries ending at {:#X}", entries, base);
                 
                 for i in 0..=entries {
                     let addr = base - ((entries - i) * 4);
                     if i == 0 {
                         //The first entry should point to the end of memory
                         cpu.main_bus.write_word(addr, 0xFFFFFF);
-                        println!("Wrote DMA6 end at {:#X} val {:#X}", addr, 0xFFFFFF);
+                        trace!("Wrote DMA6 end at {:#X} val {:#X}", addr, 0xFFFFFF);
                     } else {
                         //All the others should point to the address below
                         cpu.main_bus.write_word(addr, (addr - 4) & 0xFFFFFF);
-                        println!("Wrote DMA6 header at {:#X} val {:#X}", addr, (addr - 4) & 0xFFFFFF);
+                        trace!("Wrote DMA6 header at {:#X} val {:#X}", addr, (addr - 4) & 0xFFFFFF);
                     }
                 }
                 trace!("DMA6 done. Marking complete and raising irq");
@@ -377,7 +378,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
         }
     }
     cpu.main_bus.dma.update_master_flag();
-    cpu.main_bus.dma.cycles_to_wait = 200; // Lets give the cpu some time to see that the DMA is done
+    //cpu.main_bus.dma.cycles_to_wait = 200; // Lets give the cpu some time to see that the DMA is done
 }
 
 fn write_dicr(current_value: u32, value: u32) -> u32 {

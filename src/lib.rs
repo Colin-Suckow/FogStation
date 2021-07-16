@@ -88,7 +88,7 @@ impl PSXEmu {
         //     self.r3000.main_bus.last_touched_addr = 0;
         // }
 
-      
+        
  
         controller_execute_cycle(&mut self.r3000);
         cdrom::step_cycle(&mut self.r3000);

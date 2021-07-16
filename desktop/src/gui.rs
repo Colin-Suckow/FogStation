@@ -31,7 +31,7 @@ pub(crate) fn run_gui(mut state: ClientState) {
                         ClientMessage::FrameReady(frame, frame_time) => {
                             latest_frame = frame;
                             times.push(frame_time as usize);
-                            start = SystemTime::now();
+                            state.comm.tx.send(EmuMessage::StartFrame);
                         },
                         ClientMessage::ResolutionChanged(res) => latest_resolution = res,
                         ClientMessage::AwaitingGDBClient => {

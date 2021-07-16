@@ -224,7 +224,7 @@ impl CDDrive {
         // Make sure theres no pending command
         // We can safely overwrite pending readn's though. Otherwise those will clog up the system
         if self.pending_response.is_none() || is_readn {
-            println!("CDROM Executing command: {:#X}", command);
+            trace!("CDROM Executing command: {:#X}", command);
             //Execute
             {
                 let parameters: Vec<u8> = self.parameter_queue.iter().map(|v| v.clone()).collect();
@@ -379,6 +379,8 @@ pub fn step_cycle(cpu: &mut R3000) {
             cpu.main_bus.cd_drive.response_queue = VecDeque::with_capacity(packet.response.len()); //Clear queue
             cpu.main_bus.cd_drive.response_queue.extend(packet.response.iter());
             cpu.main_bus.cd_drive.reg_interrupt_flag = packet.cause.bitflag();
+
+            trace!("CDROM command {:#X} completed", packet.command);
         
     
             
@@ -422,7 +424,7 @@ pub fn step_cycle(cpu: &mut R3000) {
                         let response_packet = Packet {
                             cause: IntCause::INT1,
                             response: vec![cpu.main_bus.cd_drive.get_stat()],
-                            execution_cycles: cycles / 2,
+                            execution_cycles: cycles,
                             extra_response: None,
                             command: 0x6,
                         };

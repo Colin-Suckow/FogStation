@@ -2,6 +2,8 @@ use bit_field::BitField;
 
 use crate::cpu::Exception;
 
+use super::InterruptSource;
+
 #[derive(Debug)]
 pub struct Cop0 {
     gen_registers: [u32; 32],
@@ -24,9 +26,6 @@ impl Cop0 {
     /// Sets register to given value. Prevents setting R0, which should always be zero. Will panic if register_number > 31
     pub fn write_reg(&mut self, register_number: u8, value: u32) {
         self.gen_registers[register_number as usize] = value;
-        if self.gen_registers[13].get_bits(8..=12) != 0 {
-            //panic!("INT bits set!");
-        }
     }
 
     pub fn cache_isolated(&self) -> bool {
@@ -38,8 +37,12 @@ impl Cop0 {
             (!((0x1F as u32) << 2) & self.gen_registers[13]) | ((exception.clone() as u32) << 2);
     }
 
-    pub fn interrupt_enabled(&self) -> bool {
+    pub fn interrupts_enabled(&self) -> bool {
         self.gen_registers[12].get_bit(0)
+    }
+
+    pub fn interrupt_mask(&self) -> u8 {
+        ((self.gen_registers[12] << 8) & 0xFF) as u8
     }
 }
 

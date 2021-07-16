@@ -146,6 +146,16 @@ impl R3000 {
             self.fire_external_interrupt(InterruptSource::VBLANK);
         };
 
+        // Handle interrupts
+        let mut cause = self.cop0.read_reg(13);
+        cause.set_bit(10, self.i_status & self.i_mask != 0);
+        self.cop0.write_reg(13, cause);
+
+
+        if self.cop0.interrupts_enabled() && cause & 0x700 != 0 {
+            self.fire_exception(Exception::Int);
+        }
+
         let instruction = self.main_bus.read_word(self.pc);
         self.current_pc = self.pc;
         self.pc += 4;
@@ -171,8 +181,8 @@ impl R3000 {
                 self.load_delays.remove(i);
             }
         }
-        self.cycle_count = self.cycle_count.wrapping_add(1);
         self.execute_instruction(instruction, timers);
+        self.cycle_count = self.cycle_count.wrapping_add(1);
 
 
         //Execute branch delay operation
@@ -199,8 +209,8 @@ impl R3000 {
                     self.load_delays.remove(i);
                 }
             }
-            self.cycle_count = self.cycle_count.wrapping_add(1);
             self.execute_instruction(delay_instruction, timers);
+            self.cycle_count = self.cycle_count.wrapping_add(1);
             self.exec_delay = false;
             self.delay_slot = 0;
         }
@@ -695,14 +705,25 @@ impl R3000 {
     }
 
     fn op_lwr(&mut self, instruction: u32, timers: &mut TimerState) {
+
         let addr = instruction
             .immediate()
             .sign_extended()
             .wrapping_add(self.read_reg(instruction.rs()));
 
         let word = self.read_bus_word(addr & !3, timers);
-        let reg_val = self.read_reg(instruction.rt());
-        self.write_reg(
+
+        // LWR can ignore the load delay, so check if theres an existing load delay and fetch the rt value
+        // from there if it exists
+        let mut reg_val = self.read_reg(instruction.rt());
+
+        for ld in &self.load_delays {
+            if ld.register == instruction.rt() {
+                reg_val = ld.value;
+            }
+        }
+
+        self.delay_write_reg(
             instruction.rt(),
             match addr & 3 {
                 3 => (reg_val & 0xffffff00) | (word >> 24),
@@ -721,8 +742,18 @@ impl R3000 {
             .wrapping_add(self.read_reg(instruction.rs()));
 
         let word = self.read_bus_word(addr & !3, timers);
-        let reg_val = self.read_reg(instruction.rt());
-        self.write_reg(
+        
+        // LWL can ignore the load delay, so check if theres an existing load delay and fetch the rt value
+        // from there if it exists
+        let mut reg_val = self.read_reg(instruction.rt());
+
+        for ld in &self.load_delays {
+            if ld.register == instruction.rt() {
+                reg_val = ld.value;
+            }
+        }
+
+        self.delay_write_reg(
             instruction.rt(),
             match addr & 3 {
                 0 => (reg_val & 0x00ffffff) | (word << 24),
@@ -763,7 +794,7 @@ impl R3000 {
             self.fire_exception(Exception::AdEL);
         } else {
             let val = self.read_bus_half_word(addr, timers).zero_extended();
-            self.write_reg(instruction.rt(), val);
+            self.delay_write_reg(instruction.rt(), val);
         };
     }
 
@@ -771,7 +802,7 @@ impl R3000 {
         let addr =
             (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         let val = self.main_bus.read_byte(addr).zero_extended();
-        self.write_reg(instruction.rt(), val);
+        self.delay_write_reg(instruction.rt(), val);
     }
 
     fn op_lw(&mut self, instruction: u32, timers: &mut TimerState) {
@@ -781,7 +812,7 @@ impl R3000 {
             self.fire_exception(Exception::AdEL);
         } else {
             let val = self.read_bus_word(addr, timers);
-            self.write_reg(instruction.rt(), val);
+            self.delay_write_reg(instruction.rt(), val);
         };
     }
 
@@ -792,7 +823,7 @@ impl R3000 {
             self.fire_exception(Exception::AdEL);
         } else {
             let val = self.read_bus_half_word(addr, timers).sign_extended();
-            self.write_reg(instruction.rt(), val);
+            self.delay_write_reg(instruction.rt(), val);
         };
     }
 
@@ -800,12 +831,13 @@ impl R3000 {
         let addr =
             (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         let val = self.main_bus.read_byte(addr).sign_extended();
-        self.write_reg(instruction.rt(), val);
+        self.delay_write_reg(instruction.rt(), val);
     }
 
     fn op_rfe(&mut self) {
-        let status = self.cop0.read_reg(12) & 0x3f;
-        self.cop0.write_reg(12, (status & !0xf) | (status >> 2));
+        let mode = self.cop0.read_reg(12) & 0x3f;
+        let status = self.cop0.read_reg(12);
+        self.cop0.write_reg(12, (status & !0xf) | (mode >> 2));
     }
 
     fn op_mfc0(&mut self, instruction: u32) {
@@ -1207,13 +1239,7 @@ impl R3000 {
 
     pub fn fire_external_interrupt(&mut self, source: InterruptSource) {
         let mask_bit = source.clone() as usize;
-        //println!("mask_bit num = {}", mask_bit);
         self.i_status.set_bit(mask_bit, true);
-        if self.cop0.interrupt_enabled() && self.i_mask.get_bit(mask_bit) {
-            println!("CPU: INT {:?}", source);
-            self.cycle_count = self.cycle_count.wrapping_add(1);
-            self.fire_exception(Exception::Int);
-        }
     }
 
     pub fn read_bus_word(&mut self, addr: u32, timers: &mut TimerState) -> u32 {
@@ -1239,7 +1265,6 @@ impl R3000 {
 
         match addr & 0x1fffffff {
             0x1F801070 => {
-                //println!("Writing I_STAT. val {:#X} pc {:#X} oldpc {:#X}", val, self.pc, self.old_pc);
                 self.i_status &= val;
             }
             0x1F801074 => {

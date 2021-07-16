@@ -165,7 +165,7 @@ impl Gpu {
     }
 
     pub fn read_word_gp0(&mut self) -> u32 {
-        println!("Reading gp0");
+        //println!("Reading gp0");
         0x0 as u32
     }
 
@@ -621,7 +621,7 @@ impl Gpu {
              
 
                     
-                    _ => println!(
+                    _ => error!(
                         "Unknown GPU ENV command {:#X}. Full command queue is {:#X}",
                         command.command(),
                         self.gp0_buffer[0]
@@ -696,7 +696,7 @@ impl Gpu {
                 //Get gpu information
                 //Ignoring this too
             }
-            _ => println!(
+            _ => error!(
                 "Unknown gp1 command {:#X} parameter {}!",
                 command.command(),
                 command.parameter()

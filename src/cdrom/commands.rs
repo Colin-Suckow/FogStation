@@ -4,8 +4,8 @@ use log::trace;
 use super::{Block, CDDrive, DriveState, IntCause, MotorState, Packet, disc::dec_to_bcd};
 use crate::cdrom::disc::{BYTES_PER_SECTOR, DiscIndex};
 
-pub(super) const AVG_FIRST_RESPONSE_TIME: u32 = 0xc4e1 / 2;
-pub(super) const AVG_SECOND_RESPONSE_TIME: u32 = 0x1000 / 2;
+pub(super) const AVG_FIRST_RESPONSE_TIME: u32 = 0xc4e1;
+pub(super) const AVG_SECOND_RESPONSE_TIME: u32 = 0x1000;
 
 pub(super) fn get_bios_date() -> Packet {
     Packet {
@@ -94,7 +94,7 @@ pub(super) fn seek_data(state: &mut CDDrive) -> Packet {
 
 pub(super) fn set_mode(state: &mut CDDrive, mode: u8) -> Packet {
     state.drive_mode = mode;
-    println!("CD MODE: {:#b}", state.drive_mode);
+    //println!("CD MODE: {:#b}", state.drive_mode);
     stat(state, 0xE)
 }
 
@@ -114,7 +114,7 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
     let mut response_packet = Packet {
         cause: IntCause::INT1,
         response: vec![state.get_stat()],
-        execution_cycles: cycles / 2,
+        execution_cycles: cycles,
         extra_response: None,
         command: 0x6,
     };
@@ -139,7 +139,7 @@ pub(super) fn stop_read(state: &mut CDDrive) -> Packet {
     let response_packet = Packet {
         cause: IntCause::INT2,
         response: vec![state.get_stat()],
-        execution_cycles: cycles / 2,
+        execution_cycles: cycles,
         extra_response: None,
         command: 0x9,
     };

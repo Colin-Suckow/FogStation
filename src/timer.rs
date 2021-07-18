@@ -136,6 +136,7 @@ impl TimerState {
     }
 
     pub fn read_word(&mut self, addr: u32) -> u32 {
+        //println!("Timer read");
         match addr {
             0x1F801100 => self.timer_0.value,
             0x1F801104 => self.timer_0.read_mode(),

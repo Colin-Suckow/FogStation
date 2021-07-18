@@ -144,6 +144,7 @@ impl Gpu {
         self.vram = vec![0; 1_048_576 / 2];
         self.status_reg = 0x1C000000;
         self.gp0_buffer = Vec::new();
+        self.pixel_count = 0;
     }
 
     pub fn read_status_register(&mut self) -> u32 {

@@ -1,6 +1,6 @@
 use bit_field::BitField;
 use fixed::types::{I16F16, I20F12, I28F4, I4F12, I8F24, I8F8};
-use log::error;
+use log::{error, warn};
 
 struct Color {
     pub r: u8,
@@ -379,12 +379,12 @@ impl GTE {
     }
 
     fn nclip(&mut self) {
-        println!("GTE NCLIP mostly stubbed");
+        warn!("GTE NCLIP mostly stubbed");
         //self.MAC0 = (self.SX0 * self.SY1 + self.SX1 * self.SY2 + self.SX2 * self.SY0 - self.SX0 * self.SY2 - self.SX1 * self.SY0 - self.SX2 * self.SY1) as i32;
     }
 
     fn ncds(&mut self) {
-        println!("GTE NCDS stubbed");
+        warn!("GTE NCDS stubbed");
     }
 }
 

@@ -1272,7 +1272,7 @@ impl R3000 {
     }
 
     pub fn write_bus_word(&mut self, addr: u32, val: u32, timers: &mut TimerState) {
-        self.last_touched_addr = addr & 0x1fffffff;
+        //self.last_touched_addr = addr & 0x1fffffff;
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
             return;

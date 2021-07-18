@@ -246,6 +246,7 @@ impl CDDrive {
                     0x15 => seek_data(self),
                     0x16 => seek_data(self), //This should actually be seek_p, but I'm never using audio discs so we can reuse the data seek function
                     0x1A => get_id(self),
+                    0x1B => read_with_retry(self), // This is actually ReadS (read without retry), but it behaves the same as ReadN, so I'm just using that
                     0xC => demute(self),
                     0x19 => {
                         //sub_function commands

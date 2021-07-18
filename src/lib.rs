@@ -3,6 +3,7 @@ use bus::MainBus;
 use controller::{ButtonState, controller_execute_cycle, ControllerType};
 use cpu::R3000;
 use gpu::Resolution;
+use log::trace;
 use std::panic;
 use timer::TimerState;
 
@@ -82,12 +83,6 @@ impl PSXEmu {
             self.halt_requested = true;
             return;
         }
-
-        // if self.r3000.main_bus.last_touched_addr & 0xFFFFFF == 0x11F9E4 {
-        //     println!("touched pc {:#X} ra {:#X}", self.r3000.pc, self.r3000.read_reg(31));
-        //     println!("VAL of 0x11f9e4 is {:#X}", self.r3000.read_bus_word(0x11f9e4, &mut self.timers));
-        //     self.r3000.main_bus.last_touched_addr = 0;
-        // }
 
         
  

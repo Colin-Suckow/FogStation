@@ -7,7 +7,7 @@ use log::{error, trace};
 const CYCLES_PER_SCANLINE: u32 = 3413;
 const DISPLAY_CYCLES_PER_SCANLINE: u32 = 2560;
 const TOTAL_SCANLINES: u32 = 263;
-const DISPLAY_SCANLINES: u32 = 233;
+const DISPLAY_SCANLINES: u32 = 240;
 
 #[derive(Copy, Clone, Debug)]
 enum TextureColorMode {
@@ -720,7 +720,7 @@ impl Gpu {
     }
 
     pub fn is_vblank(&self) -> bool {
-        self.pixel_count > DISPLAY_CYCLES_PER_SCANLINE * DISPLAY_SCANLINES
+        self.pixel_count > CYCLES_PER_SCANLINE * DISPLAY_SCANLINES
     }
 
     pub fn is_hblank(&self) -> bool {

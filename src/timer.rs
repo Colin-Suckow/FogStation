@@ -175,39 +175,39 @@ impl TimerState {
 
     pub fn read_half_word(&mut self, addr: u32) -> u16 {
         //println!("Reading halfword timer");
-        0
-        // match addr {
-        //     0x1F801100 => self.timer_0.value as u16,
-        //     //0x1F801102 => (self.timer_0.value >> 16) as u16,
+        
+        match addr {
+            0x1F801100 => self.timer_0.value as u16,
+            0x1F801102 => (self.timer_0.value >> 16) as u16,
 
-        //     0x1F801104 => self.timer_0.read_mode() as u16,
-        //     //0x1F801106 => (self.timer_0.read_mode() >> 16) as u16,
+            0x1F801104 => self.timer_0.read_mode() as u16,
+            0x1F801106 => (self.timer_0.read_mode() >> 16) as u16,
 
-        //     0x1F801108 => self.timer_0.target as u16,
-        //     //0x1F80110A => (self.timer_0.target >> 16) as u16,
+            0x1F801108 => self.timer_0.target as u16,
+            0x1F80110A => (self.timer_0.target >> 16) as u16,
 
-        //     0x1F801110 => self.timer_1.value as u16,
-        //     //0x1F801112 => (self.timer_1.value >> 16) as u16,
+            0x1F801110 => self.timer_1.value as u16,
+            0x1F801112 => (self.timer_1.value >> 16) as u16,
 
-        //     0x1F801114 => self.timer_1.read_mode() as u16,
-        //     //0x1F801116 => (self.timer_1.read_mode() >> 16) as u16,
+            0x1F801114 => self.timer_1.read_mode() as u16,
+            0x1F801116 => (self.timer_1.read_mode() >> 16) as u16,
 
-        //     0x1F801118 => self.timer_1.target as u16,
-        //     //0x1F80111A => (self.timer_1.target >> 16) as u16,
+            0x1F801118 => self.timer_1.target as u16,
+            0x1F80111A => (self.timer_1.target >> 16) as u16,
 
-        //     0x1F801120 => self.timer_2.value as u16,
-        //     //0x1F801122 => (self.timer_2.value >> 16) as u16,
+            0x1F801120 => self.timer_2.value as u16,
+            0x1F801122 => (self.timer_2.value >> 16) as u16,
 
-        //     0x1F801124 => self.timer_2.read_mode() as u16,
-        //     //0x1F801126 => (self.timer_2.read_mode() >> 16) as u16,
+            0x1F801124 => self.timer_2.read_mode() as u16,
+            0x1F801126 => (self.timer_2.read_mode() >> 16) as u16,
 
-        //     0x1F801128 => self.timer_2.target as u16,
-        //     //0x1F80112A => (self.timer_2.target >> 16) as u16,
-        //     _ => {
-        //         println!("Unknown timer address. Returning 0");
-        //         0
-        //     }
-        //}
+            0x1F801128 => self.timer_2.target as u16,
+            0x1F80112A => (self.timer_2.target >> 16) as u16,
+            _ => {
+                println!("Unknown timer address. Returning 0");
+                0
+            }
+        }
     }
 
     pub fn write_half_word(&mut self, addr: u32, value: u16) {

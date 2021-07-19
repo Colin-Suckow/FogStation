@@ -39,6 +39,9 @@ impl MainBus {
 
     pub fn read_word(&mut self, og_addr: u32) -> u32 {
         let addr = og_addr & 0x1fffffff;
+        if addr == 0x1F01F00{
+            println!("The thingy got read")
+        }
         let word = match addr {
             0x0..=0x001f_ffff => self.memory.read_word(addr),
             0x1f801810 => self.gpu.read_word_gp0(),
@@ -62,6 +65,10 @@ impl MainBus {
     pub fn write_word(&mut self, og_addr: u32, word: u32) {
         let addr = og_addr & 0x1fffffff;
         self.last_touched_addr = addr;
+
+        if addr == 0x1F01F18 {
+            println!("touched");
+        }
 
         match addr & 0x1fffffff {
             0x1F802002 => info!("Serial: {}", word),
@@ -97,6 +104,8 @@ impl MainBus {
     pub fn read_half_word(&mut self, og_addr: u32) -> u16 {
         let addr = og_addr & 0x1fffffff;
 
+        
+
 
         match addr & 0x1fffffff {
             0x1F801070 => {
@@ -113,6 +122,10 @@ impl MainBus {
     pub fn write_half_word(&mut self, og_addr: u32, value: u16) {
         let addr = og_addr & 0x1fffffff;
         self.last_touched_addr = addr;
+
+        if addr == 0x1F01F18 {
+            println!("touched");
+        }
 
         match addr & 0x1fffffff {
             0x1F802002 => info!("Serial: {}", value),
@@ -161,6 +174,10 @@ impl MainBus {
     pub fn write_byte(&mut self, og_addr: u32, value: u8) {
         let addr = og_addr & 0x1fffffff;
         self.last_touched_addr = addr & 0x1fffffff;
+
+        if addr == 0x1F01F18 {
+            println!("touched");
+        }
 
         match addr & 0x1fffffff {
             0x0..=0x001f_ffff => self.memory.write_byte(addr, value), //KUSEG

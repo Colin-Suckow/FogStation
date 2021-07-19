@@ -223,7 +223,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                         trace!("base addr: {:#X}. base header: {:#X}", addr, header);
                         loop {
                             let num_words = (header >> 24) & 0xFF;
-                            trace!("addr {:#X}, header {:#X}, nw {}", addr, header, num_words);
+                            //trace!("addr {:#X}, header {:#X}, nw {}", addr, header, num_words);
                             for i in 0..num_words {
                                 let packet = cpu.main_bus.read_word((addr + 4) + (i * 4));
                                 cpu.main_bus.gpu.send_gp0_command(packet);
@@ -295,7 +295,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                                 //Lets just write all zeros for now
                                 cpu.main_bus.write_word(
                                     base_addr + ((i * block_size) * 4) + (j * 4),
-                                    0x0,
+                                    0xFFFFFFFF,
                                 );
                             }
                         }
@@ -321,6 +321,9 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 let data = cpu.main_bus.cd_drive.sector_data_take();
 
                 trace!("Words {} base_addr {:#X}", words, base_addr);
+                if base_addr <= 0x1F01F18 && base_addr + (words * 4) as usize >= 0x1F01F18 {
+                    println!("CD DMA thing touched it");
+                }
                 cpu.main_bus.memory.data[base_addr..(base_addr + (words * 4) as usize)].copy_from_slice(data);
                 cpu.main_bus.dma.channels[num].complete();
                 cpu.main_bus.dma.raise_irq(num);

@@ -1,7 +1,7 @@
 use bit_field::BitField;
 
 use cop0::Cop0;
-use instruction::{Instruction, NumberHelpers};
+use instruction::{InstructionArgs, NumberHelpers};
 use log::{trace, warn};
 
 use crate::timer::TimerState;
@@ -149,7 +149,6 @@ impl R3000 {
             trace!("SYSCALL C({:#X}) pc: {:#X}", self.read_reg(9), self.current_pc);
         }
 
-
         //Check for vblank
         if self.main_bus.gpu.consume_vblank() {
             self.fire_external_interrupt(InterruptSource::VBLANK);
@@ -165,21 +164,28 @@ impl R3000 {
             self.fire_exception(Exception::Int);
         }
 
+        
+
+        // if self.pc == 0x80015760 {
+        //     println!("a0 {:#X} a1 {:#X}", self.read_reg(4), self.read_reg(5));
+        // }
+
+        if self.pc == 0x80015858  {
+            println!("\nFunc start");
+            self.log = true;
+        }
+
+        if self.pc == 0x800158e4 {
+            self.log = false;
+            println!("Func end\n");
+        }
+
         let instruction = self.main_bus.read_word(self.pc);
         self.current_pc = self.pc;
         self.pc += 4;
 
         if self.log {
-            println!(
-                "Executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} rt: {} rd: {} (FULL {:#X})",
-                instruction.opcode(),
-                instruction.funct(),
-                self.current_pc,
-                instruction.rs(),
-                instruction.rt(),
-                instruction.rd(),
-                instruction
-            );
+            self.log_instruction(instruction);
         }
 
         self.exec_delay = false;
@@ -193,21 +199,17 @@ impl R3000 {
         self.execute_instruction(instruction, timers);
         self.cycle_count = self.cycle_count.wrapping_add(1);
 
+        if self.last_touched_addr == 0x1F01F18 {
+            println!("lta {:#X}", self.last_touched_addr);
+            self.last_touched_addr = 0;
+        }
+
 
         //Execute branch delay operation
         if self.delay_slot != 0 {
             let delay_instruction = self.main_bus.read_word(self.delay_slot);
             if self.log {
-                println!(
-                    "DS executing {:#X} (FUNCT {:#X}) at {:#X} rs: {} ({:#}) rt: {} rd: {}",
-                    delay_instruction.opcode(),
-                    delay_instruction.funct(),
-                    self.current_pc + 4,
-                    instruction.rs(),
-                    self.gen_registers[instruction.rs() as usize],
-                    instruction.rt(),
-                    instruction.rd()
-                );
+                self.log_instruction(delay_instruction);
             }
             //self.trace_file.write(format!("{:08x}: {:08x}\n", self.delay_slot, delay_instruction).as_bytes());
             //println!("{:08x}: {:08x}", self.delay_slot, delay_instruction);
@@ -222,8 +224,26 @@ impl R3000 {
             self.cycle_count = self.cycle_count.wrapping_add(1);
             self.exec_delay = false;
             self.delay_slot = 0;
+
+            if self.last_touched_addr == 0x1F01F18 {
+                println!("lta {:#X}", self.last_touched_addr);
+                self.last_touched_addr = 0;
+            }
+    
         }
         
+    }
+
+    fn log_instruction(&self, instruction: u32) {
+        println!(
+            "{:#X} : {:#X} (FUNCT {:#X}) rs: {:#X} rt: {:#X} rd: {:#X}",
+            self.current_pc,
+            instruction.opcode(),
+            instruction.funct(),
+            self.read_reg(instruction.rs()),
+            self.read_reg(instruction.rt()),
+            self.read_reg(instruction.rd()),
+        );
     }
 
     pub fn execute_instruction(&mut self, instruction: u32, timers: &mut TimerState) {
@@ -785,7 +805,11 @@ impl R3000 {
             self.fire_exception(Exception::AdES);
         } else {
             let val = (self.read_reg(instruction.rt()) & 0xFFFF) as u16;
-            if addr == 0xD030028 {println!("PC {:#X}", self.pc);}
+            if addr == 0xD030028 {
+                println!("imm {:#X} rs {:#X} reg {}", instruction.immediate_sign_extended(), self.read_reg(instruction.rs()), instruction.rs());
+                let r = self.read_bus_word(self.read_reg(16), timers);
+                println!("PC {:#X} S0 {:#X} ra {:#X} s0_val {:#X}", self.current_pc, self.read_reg(16), self.read_reg(31), r);
+            };
             self.write_bus_half_word(addr, val, timers);
         };
     }
@@ -1272,7 +1296,7 @@ impl R3000 {
     }
 
     pub fn write_bus_word(&mut self, addr: u32, val: u32, timers: &mut TimerState) {
-        //self.last_touched_addr = addr & 0x1fffffff;
+        self.last_touched_addr = addr & 0x1fffffff;
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
             return;
@@ -1320,6 +1344,7 @@ impl R3000 {
             //Cache is isolated, so don't write
             return;
         }
+
         match addr & 0x1fffffff {
             0x1F801070 => self.i_status &= val as u32,
             0x1F801074 => self.i_mask = val as u32,

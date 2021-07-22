@@ -214,7 +214,7 @@ impl TimerState {
         //println!("Tried to write timer half");
         match addr {
             0x1F801100 => self.timer_0.value &= (value as u32) & 0xFFFF0000,
-            0x1F801102 => self.timer_0.value &= (((value as u32) << 16) & 0xFFFF),
+            0x1F801102 => self.timer_0.value &= ((value as u32) << 16) & 0xFFFF,
 
             0x1F801104 => self.timer_0.write_mode(value as u32),
             //0x1F801106 => self.timer_0.read_mode(value as u32),

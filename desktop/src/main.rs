@@ -114,7 +114,6 @@ fn main() {
 
     let (emu_sender, client_receiver) = channel();
     let (client_sender, emu_receiver) = channel();
-    let latest_frame = Mutex::new(Vec::<u16>::new());
 
     let emu_comm = EmuComms {
         rx: emu_receiver,

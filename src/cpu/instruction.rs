@@ -1,4 +1,8 @@
+use std::fmt::Display;
+
 use bit_field::BitField;
+use num_derive::FromPrimitive;    
+use num_traits::FromPrimitive;
 
 pub trait InstructionArgs {
     fn opcode(&self) -> u8;
@@ -13,13 +17,13 @@ pub trait InstructionArgs {
 }
 
 pub trait NumberHelpers {
-    fn sign_extended(&self) -> u32;
+    fn sign_extended(&self) -> i32;
     fn zero_extended(&self) -> u32;
 }
 
 impl NumberHelpers for u8 {
-    fn sign_extended(&self) -> u32 {
-        (self.clone() as i8) as u32
+    fn sign_extended(&self) -> i32 {
+        (self.clone() as i8) as i32
     }
 
     fn zero_extended(&self) -> u32 {
@@ -28,8 +32,8 @@ impl NumberHelpers for u8 {
 }
 
 impl NumberHelpers for u16 {
-    fn sign_extended(&self) -> u32 {
-        (self.clone() as i16) as u32
+    fn sign_extended(&self) -> i32 {
+        (self.clone() as i16) as i32
     }
 
     fn zero_extended(&self) -> u32 {
@@ -38,8 +42,8 @@ impl NumberHelpers for u16 {
 }
 
 impl NumberHelpers for u32 {
-    fn sign_extended(&self) -> u32 {
-        (self.clone() as i32) as u32
+    fn sign_extended(&self) -> i32 {
+        (self.clone() as i32) as i32
     }
 
     fn zero_extended(&self) -> u32 {
@@ -85,8 +89,8 @@ impl InstructionArgs for u32 {
     }
 }
 
-
-enum Instruction {
+#[derive(Debug)]
+pub(super) enum Instruction {
     SLL{rt: u8, rd: u8, sa: u8},
     SRL{rt: u8, rd: u8, sa: u8},
     SRA{rt: u8, rd: u8, sa: u8},
@@ -157,7 +161,7 @@ enum Instruction {
     SWC2{rt: u8, offset: u16, base: u8},
 }
 
-fn decode_opcode(inst: u32) -> Option<Instruction> {
+pub(super) fn decode_opcode(inst: u32) -> Option<Instruction> {
     match inst.opcode() {
         0x0 => {
             //SPECIAL INSTRUCTIONS
@@ -264,6 +268,81 @@ fn decode_opcode(inst: u32) -> Option<Instruction> {
 
 }
 
+#[derive(FromPrimitive)]
+pub enum RegisterNames {
+    zero = 0,
+    at = 1,
+    v0 = 2,
+    v1 = 3,
+    a0 = 4,
+    a1 = 5,
+    a2 = 6,
+    a3 = 7,
+    t0 = 8,
+    t1 = 9,
+    t2 = 10,
+    t3 = 11,
+    t4 = 12,
+    t5 = 13,
+    t6 = 14,
+    t7 = 15,
+    s0 = 16,
+    s1 = 17,
+    s2 = 18,
+    s3 = 19,
+    s4 = 20,
+    s5 = 21,
+    s6 = 22,
+    s7 = 23,
+    t8 = 24,
+    t9 = 25,
+    k0 = 26,
+    k1 = 27,
+    gp = 28,
+    sp = 29,
+    fp = 30,
+    ra = 31,
+
+}
+
+impl Display for RegisterNames {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RegisterNames::zero => write!(f, "zero"),
+            RegisterNames::at => write!(f,"at"),
+            RegisterNames::v0 => write!(f,"v0"),
+            RegisterNames::v1 => write!(f,"v1"),
+            RegisterNames::a0 => write!(f,"a0"),
+            RegisterNames::a1 => write!(f,"a1"),
+            RegisterNames::a2 => write!(f,"a2"),
+            RegisterNames::a3 => write!(f,"a3"),
+            RegisterNames::t0 => write!(f,"t0"),
+            RegisterNames::t1 => write!(f,"t1"),
+            RegisterNames::t2 => write!(f,"t2"),
+            RegisterNames::t3 => write!(f,"t3"),
+            RegisterNames::t4 => write!(f,"t4"),
+            RegisterNames::t5 => write!(f,"t5"),
+            RegisterNames::t6 => write!(f,"t6"),
+            RegisterNames::t7 => write!(f,"t7"),
+            RegisterNames::s0 => write!(f,"s0"),
+            RegisterNames::s1 => write!(f,"s1"),
+            RegisterNames::s2 => write!(f,"s2"),
+            RegisterNames::s3 => write!(f,"s3"),
+            RegisterNames::s4 => write!(f,"s4"),
+            RegisterNames::s5 => write!(f,"s5"),
+            RegisterNames::s6 => write!(f,"s6"),
+            RegisterNames::s7 => write!(f,"s7"),
+            RegisterNames::t8 => write!(f,"t8"),
+            RegisterNames::t9 => write!(f,"t9"),
+            RegisterNames::k0 => write!(f,"k0"),
+            RegisterNames::k1 => write!(f,"k1"),
+            RegisterNames::gp => write!(f,"gp"),
+            RegisterNames::sp => write!(f,"sp"),
+            RegisterNames::fp => write!(f,"fp"),
+            RegisterNames::ra => write!(f,"ra"),
+        }
+    }
+}
 
 
 

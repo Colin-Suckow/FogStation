@@ -107,7 +107,7 @@ impl PSXEmu {
 
     ///Runs the emulator till one frame has been generated
     pub fn run_frame(&mut self) {
-        while !self.r3000.main_bus.gpu.end_of_frame() {
+        while !self.r3000.main_bus.gpu.take_frame_ready() {
             self.step_cycle();
         }
         //Step the gpu once more to get it off this frame
@@ -183,8 +183,8 @@ impl PSXEmu {
         self.r3000.main_bus.controllers.update_button_state(state);
     }
 
-    pub fn frame_ready(&self) -> bool {
-        self.r3000.main_bus.gpu.end_of_frame()
+    pub fn frame_ready(&mut self) -> bool {
+        self.r3000.main_bus.gpu.take_frame_ready()
     }
 
     pub fn add_watchpoint(&mut self, addr: u32) {

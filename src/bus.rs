@@ -66,11 +66,11 @@ impl MainBus {
         let addr = og_addr & 0x1fffffff;
         self.last_touched_addr = addr;
 
-        if addr == 0x1F01F18 {
+        if addr == 0x80121CD4 {
             println!("touched");
         }
 
-        match addr & 0x1fffffff {
+        match addr {
             0x1F802002 => info!("Serial: {}", word),
             0x1F802023 => info!("DUART A: {}", word),
             0x1F80202B => info!("DUART B: {}", word),
@@ -107,7 +107,7 @@ impl MainBus {
         
 
 
-        match addr & 0x1fffffff {
+        match addr {
             0x1F801070 => {
                 panic!("Tried to read i_status half");
             },
@@ -127,7 +127,7 @@ impl MainBus {
             println!("touched");
         }
 
-        match addr & 0x1fffffff {
+        match addr {
             0x1F802002 => info!("Serial: {}", value),
             0x1F802023 => info!("DUART A: {}", value),
             0x1F80202B => info!("DUART B: {}", value),
@@ -179,7 +179,7 @@ impl MainBus {
             println!("touched");
         }
 
-        match addr & 0x1fffffff {
+        match addr {
             0x0..=0x001f_ffff => self.memory.write_byte(addr, value), //KUSEG
             0x1F801800..=0x1F801803 => self.cd_drive.write_byte(addr, value), //CDROM
             0x1F802002 => info!("Serial: {}", value),

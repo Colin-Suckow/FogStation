@@ -5,9 +5,7 @@ use log::{error, trace};
 
 
 const CYCLES_PER_SCANLINE: u32 = 3413;
-const DISPLAY_CYCLES_PER_SCANLINE: u32 = 2560;
 const TOTAL_SCANLINES: u32 = 263;
-const DISPLAY_SCANLINES: u32 = 240;
 
 #[derive(Copy, Clone, Debug)]
 enum TextureColorMode {
@@ -102,9 +100,13 @@ pub struct Gpu {
     vblank_consumed: bool,
     hblank_consumed: bool,
     show_frame: bool,
+    frame_ready: bool,
 
     display_h_res: u32,
     display_v_res: u32,
+
+    ntsc_y1: u32,
+    ntsc_y2: u32,
 }
 
 impl Gpu {
@@ -133,9 +135,13 @@ impl Gpu {
             vblank_consumed: false,
             hblank_consumed: false,
             show_frame: false,
+            frame_ready: false,
 
             display_h_res: 640,
             display_v_res: 480,
+
+            ntsc_y1: 16,
+            ntsc_y2: 256,
         }
     }
 
@@ -666,6 +672,13 @@ impl Gpu {
                 //Ignore this one for now
             }
 
+            0x7 => {
+                //Vertical display range
+                self.ntsc_y1 = command.get_bits(0..9);
+                self.ntsc_y2 = command.get_bits(10..19);
+                println!("V_RANGE updated. y1 {} y2 {}", self.ntsc_y1, self.ntsc_y2);
+            }
+
             0x8 => {
                 //Display mode
                 self.display_h_res = {
@@ -716,15 +729,17 @@ impl Gpu {
         if self.pixel_count > CYCLES_PER_SCANLINE * TOTAL_SCANLINES {
             self.pixel_count = 0;
             self.vblank_consumed = false;
+            self.frame_ready = true;
+            trace!("VBLANK DONE");
         }
     }
 
     pub fn is_vblank(&self) -> bool {
-        self.pixel_count > CYCLES_PER_SCANLINE * DISPLAY_SCANLINES
+        self.pixel_count > CYCLES_PER_SCANLINE * (self.ntsc_y2 - self.ntsc_y1)
     }
 
     pub fn is_hblank(&self) -> bool {
-        self.pixel_count > DISPLAY_CYCLES_PER_SCANLINE
+        self.pixel_count % CYCLES_PER_SCANLINE > self.display_h_res
     }
 
     pub fn resolution(&self) -> Resolution {
@@ -736,6 +751,7 @@ impl Gpu {
 
     pub fn consume_vblank(&mut self) -> bool {
         if !self.vblank_consumed && self.is_vblank() {
+            trace!("VBLANK consumed");
             self.vblank_consumed = true;
             true
         } else {
@@ -752,8 +768,13 @@ impl Gpu {
         }
     }
 
-    pub fn end_of_frame(&self) -> bool {
-        self.pixel_count == (self.display_h_res + 20) * (self.display_v_res + 40)
+    pub fn take_frame_ready(&mut self) -> bool {
+        if self.frame_ready {
+            self.frame_ready = false;
+            true
+        } else {
+            false
+        }
     }
 
     pub fn get_vram(&self) -> &Vec<u16> {

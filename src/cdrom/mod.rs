@@ -166,7 +166,9 @@ impl CDDrive {
             0x1F801803 => match self.status_index {
                 0 => {
                     self.want_data = val.get_bit(7); //Only handle want_data. This will probably bite me later
-                    //self.data_queue.clear();
+                    if !self.want_data {
+                        self.data_queue.clear();
+                    }
                 },
                 1 => self.write_interrupt_flag_register(val),
                 2 => trace!("CD: Wrote Left-CD-Out Left SPU volume"),
@@ -225,7 +227,7 @@ impl CDDrive {
             false
         };
 
-        //println!("Attemping to execute command!");
+        println!("Attemping to execute command! {}", command);
         // Make sure theres no pending command
         // We can safely overwrite pending readn's though. Otherwise those will clog up the system
         if self.pending_response.is_none() || is_readn {
@@ -430,8 +432,8 @@ pub fn step_cycle(cpu: &mut R3000) {
                     if cpu.main_bus.cd_drive.read_enabled && packet.cause == IntCause::INT1 {
                         trace!("Inserting next ReadN");
                         let cycles = match cpu.main_bus.cd_drive.drive_speed() {
-                            DriveSpeed::Double => 0x322df,
-                            DriveSpeed::Single => 0x686da,
+                            DriveSpeed::Single => 0x6e1cd,
+                            DriveSpeed::Double => 0x36cd2,
                         };
                         let response_packet = Packet {
                             cause: IntCause::INT1,

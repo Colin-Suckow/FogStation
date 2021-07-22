@@ -321,7 +321,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 let data = cpu.main_bus.cd_drive.sector_data_take();
 
                 trace!("Words {} base_addr {:#X}", words, base_addr);
-                if base_addr <= 0x1F01F18 && base_addr + (words * 4) as usize >= 0x1F01F18 {
+                if base_addr <= 0x121CA8 && base_addr + (words * 4) as usize >= 0x121CA8 {
                     println!("CD DMA thing touched it");
                 }
                 cpu.main_bus.memory.data[base_addr..(base_addr + (words * 4) as usize)].copy_from_slice(data);

@@ -24,6 +24,8 @@ mod memory;
 mod spu;
 mod timer;
 
+static mut LOGGING: bool = false;
+
 pub struct PSXEmu {
     pub r3000: R3000,
     timers: TimerState,

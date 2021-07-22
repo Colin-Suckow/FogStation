@@ -1,11 +1,10 @@
 use bit_field::BitField;
 use log::trace;
 
-use super::{Block, CDDrive, DriveState, IntCause, MotorState, Packet, disc::dec_to_bcd};
-use crate::cdrom::{DriveSpeed, disc::{BYTES_PER_SECTOR, DiscIndex}};
+use super::{CDDrive, DriveState, IntCause, MotorState, Packet, disc::dec_to_bcd};
+use crate::cdrom::{DriveSpeed, disc::DiscIndex};
 
 pub(super) const AVG_FIRST_RESPONSE_TIME: u32 = 0xc4e1;
-pub(super) const AVG_SECOND_RESPONSE_TIME: u32 = 0x1000;
 
 pub(super) fn get_bios_date() -> Packet {
     Packet {
@@ -40,7 +39,7 @@ pub(super) fn get_id(state: &CDDrive) -> Packet {
         let second_response = Packet {
             cause: IntCause::INT2,
             response: vec![state.get_stat(), 0x00, 0x20, 0x00, 0x53, 0x43, 0x45, 0x41], //SCEA disk inserted
-            execution_cycles: AVG_SECOND_RESPONSE_TIME,
+            execution_cycles: 0x4a00,
             extra_response: None,
             command: 0x1a,
         };
@@ -51,7 +50,7 @@ pub(super) fn get_id(state: &CDDrive) -> Packet {
         let second_response = Packet {
             cause: IntCause::INT5,
             response: vec![0x08, 0x40, 0, 0, 0, 0, 0, 0], //No disk
-            execution_cycles: AVG_SECOND_RESPONSE_TIME,
+            execution_cycles: 0x4a00,
             extra_response: None,
             command: 0x1a
         };
@@ -106,12 +105,12 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
     state.drive_state = DriveState::Read;
     state.read_enabled = true;
 
-    let cycles = match state.drive_mode.get_bit(7) {
-        true => 0x322df, // Double speed
-        false => 0x686da, // Single speed
+    let cycles = match state.drive_speed() {
+        DriveSpeed::Single => 0x6e1cd,
+        DriveSpeed::Double => 0x36cd2,
     };
 
-    let mut response_packet = Packet {
+    let response_packet = Packet {
         cause: IntCause::INT1,
         response: vec![state.get_stat()],
         execution_cycles: cycles,
@@ -128,13 +127,19 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
 pub(super) fn pause_read(state: &mut CDDrive) -> Packet {
     //println!("stop read (pause)");
     let mut initial_response = stat(state, 0x9);
+   
+
+    let cycles = if state.drive_state == DriveState::Idle {
+        0x1df2 // pausing is much faster when already paused
+    } else {
+        match state.drive_speed(){
+            DriveSpeed::Double => 0x10bd93,
+            DriveSpeed::Single => 0x21181c,
+        }
+    };
+
     state.drive_state = DriveState::Idle;
     state.read_enabled = false;
-
-    let cycles = match state.drive_speed(){
-        DriveSpeed::Double => 0x10477A,
-        DriveSpeed::Single => 0x20eaef,
-    };
 
     let response_packet = Packet {
         cause: IntCause::INT2,

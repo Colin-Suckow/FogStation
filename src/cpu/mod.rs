@@ -4,6 +4,7 @@ use cop0::Cop0;
 use instruction::{InstructionArgs, NumberHelpers, Instruction, decode_opcode};
 use log::{trace, warn};
 
+use crate::LOGGING;
 use crate::timer::TimerState;
 use crate::{bus::MainBus, cdrom};
 
@@ -174,15 +175,17 @@ impl R3000 {
         //     println!("first {:#X} second{:#X}", self.read_bus_word(0x80121CD4, timers), self.read_bus_word(0x80121C90, timers))
         // }
 
-        // if self.pc == 0x80015858  {
-        //     println!("\nFunc start");
-        //     self.log = true;
-        // }
+        if self.pc == 0x80015858  {
+            println!("\nFunc start");
+            unsafe{LOGGING = true;}
+            self.log = true;
+        }
 
-        // if self.pc == 0x800158e4 {
-        //     self.log = false;
-        //     println!("Func end\n");
-        // }
+        if self.pc == 0x800158e4 {
+            unsafe{LOGGING = false;}
+            self.log = false;
+            println!("Func end\n");
+        }
 
         let instruction = self.main_bus.read_word(self.pc);
         self.current_pc = self.pc;
@@ -203,8 +206,8 @@ impl R3000 {
         self.execute_instruction(instruction, timers);
         self.cycle_count = self.cycle_count.wrapping_add(1);
 
-        if self.last_touched_addr == 0x80121C90 || self.last_touched_addr == 0x80121CD4 {
-            println!("lta {:#X}", self.last_touched_addr);
+        if self.main_bus.last_touched_addr == 0x121CA8 {
+            println!("lta pc {:#X} val {:#X}", self.current_pc, self.main_bus.read_word(0x121CA8));
             self.last_touched_addr = 0;
         }
 
@@ -227,13 +230,7 @@ impl R3000 {
             self.execute_instruction(delay_instruction, timers);
             self.cycle_count = self.cycle_count.wrapping_add(1);
             self.exec_delay = false;
-            self.delay_slot = 0;
-
-            if self.last_touched_addr == 0x1F01F18 {
-                println!("lta {:#X}", self.last_touched_addr);
-                self.last_touched_addr = 0;
-            }
-    
+            self.delay_slot = 0;    
         }
         
     }

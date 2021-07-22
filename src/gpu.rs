@@ -3,7 +3,6 @@ use std::ops::Shr;
 use bit_field::BitField;
 use log::{error, trace};
 
-
 const CYCLES_PER_SCANLINE: u32 = 3413;
 const TOTAL_SCANLINES: u32 = 263;
 
@@ -676,7 +675,6 @@ impl Gpu {
                 //Vertical display range
                 self.ntsc_y1 = command.get_bits(0..9);
                 self.ntsc_y2 = command.get_bits(10..19);
-                println!("V_RANGE updated. y1 {} y2 {}", self.ntsc_y1, self.ntsc_y2);
             }
 
             0x8 => {

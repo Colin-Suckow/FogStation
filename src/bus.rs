@@ -1,5 +1,6 @@
 use log::{error, info, warn};
 
+use crate::LOGGING;
 use crate::bios::Bios;
 use crate::cdrom::CDDrive;
 use crate::controller::Controllers;
@@ -59,6 +60,7 @@ impl MainBus {
             ),
         };
         //println!("Read {:#X} word from bus address {:#X}", word, addr);
+        if unsafe{LOGGING} {println!("Loaded {:#X} from addr {:#X}", word, addr)};
         word
     }
 
@@ -66,7 +68,7 @@ impl MainBus {
         let addr = og_addr & 0x1fffffff;
         self.last_touched_addr = addr;
 
-        if addr == 0x80121CD4 {
+        if addr == 0x121CA8 {
             println!("touched");
         }
 
@@ -103,11 +105,7 @@ impl MainBus {
 
     pub fn read_half_word(&mut self, og_addr: u32) -> u16 {
         let addr = og_addr & 0x1fffffff;
-
-        
-
-
-        match addr {
+        let val = match addr {
             0x1F801070 => {
                 panic!("Tried to read i_status half");
             },
@@ -116,14 +114,16 @@ impl MainBus {
             0x1F800000..=0x1F8003FF => self.scratchpad.read_half_word(addr - 0x1F800000),
             0x1F80_1040..=0x1F80_104E => self.controllers.read_half_word(addr),
             _ => panic!("Invalid half word read at address {:#X}! This address is not mapped to any device.", addr)
-        }
+        };
+        if unsafe{LOGGING} {println!("Loaded {:#X} from addr {:#X}", val, addr)};
+        val
     }
 
     pub fn write_half_word(&mut self, og_addr: u32, value: u16) {
         let addr = og_addr & 0x1fffffff;
         self.last_touched_addr = addr;
 
-        if addr == 0x1F01F18 {
+        if addr == 0x121CA8 {
             println!("touched");
         }
 
@@ -143,7 +143,7 @@ impl MainBus {
 
     pub fn read_byte(&mut self, og_addr: u32) -> u8 {
         let addr = og_addr & 0x1fffffff;
-        match addr {
+        let val = match addr {
             0x1F801070 => {
                 warn!("Tried to read i_status word");
                 0
@@ -168,14 +168,16 @@ impl MainBus {
                 );
                 0
             }
-        }
+        };
+        if unsafe{LOGGING} {println!("Loaded {:#X} from addr {:#X}", val, addr)};
+        val
     }
 
     pub fn write_byte(&mut self, og_addr: u32, value: u8) {
         let addr = og_addr & 0x1fffffff;
         self.last_touched_addr = addr & 0x1fffffff;
 
-        if addr == 0x1F01F18 {
+        if addr == 0x121CA8 {
             println!("touched");
         }
 

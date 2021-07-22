@@ -2,6 +2,7 @@ use super::SectorSize;
 
 pub(super) const SECTORS_PER_SECOND: usize = 75;
 pub(super) const BYTES_PER_SECTOR: usize = 2352;
+// Sector format is Mode2/Form1 CD-XA
 
 #[derive(Debug)]
 pub struct DiscIndex {
@@ -87,8 +88,11 @@ impl Disc {
     pub fn read_sector(&self, location: DiscIndex, sector_size: &SectorSize) -> &[u8] {
         let address = location.as_address() as usize;
         let (track, track_offset) = self.track_of_offset(address as usize);
-        let sector_address = (address - track_offset) + 24;
-        let data = &track.data[sector_address..sector_address + *sector_size as usize];
+        let sector_address = address - track_offset;
+        let data = match sector_size {
+            SectorSize::DataOnly => &track.data[(sector_address + 24)..sector_address + 24 + *sector_size as usize],
+            SectorSize::WholeSector => &track.data[sector_address..sector_address + *sector_size as usize],
+        };
         //println!("data Byte 0 {:#X}", data[0]);
         //println!("Reading sector from address {}. Sector mode: {} Sector size {:?}", address, track.data[address + 15], sector_size);
         //println!("According to the sector header, this is M: {:X} ({}) S: {:X} ({}) F: {:X} ({})", track.data[(address - track_offset) + 12], bcd_to_dec(track.data[(address - track_offset) + 12] as usize), track.data[(address - track_offset) + 13], bcd_to_dec(track.data[(address - track_offset) + 13] as usize), track.data[(address - track_offset) + 14], bcd_to_dec(track.data[(address - track_offset) + 14] as usize));

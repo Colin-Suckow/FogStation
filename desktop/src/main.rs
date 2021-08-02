@@ -128,7 +128,7 @@ fn main() {
     let emu_state = EmuState {
         emu: emu,
         comm: emu_comm,
-        halted: false,
+        halted: true,
         current_resolution: Resolution {
             width: 640,
             height: 480,
@@ -143,7 +143,7 @@ fn main() {
     let mut state = ClientState {
         emu_thread,
         comm: client_comm,
-        halted: false,
+        halted: true,
     };
 
     

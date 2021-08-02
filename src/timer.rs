@@ -136,8 +136,7 @@ impl TimerState {
     }
 
     pub fn read_word(&mut self, addr: u32) -> u32 {
-        //println!("Timer read");
-        match addr {
+        let val = match addr {
             0x1F801100 => self.timer_0.value,
             0x1F801104 => self.timer_0.read_mode(),
             0x1F801108 => self.timer_0.target,
@@ -153,10 +152,13 @@ impl TimerState {
                 println!("Unknown timer address {:#X}. Returning 0", addr);
                 0
             }
-        }
+        };
+        //println!("Timer read addr {:#X} val {:#X}", addr, val);
+        val
     }
 
     pub fn write_word(&mut self, addr: u32, val: u32) {
+        println!("Timer write word addr {:#X} val {:#X}", addr, val);
         match addr {
             0x1F801100 => self.timer_0.value = val,
             0x1F801104 => self.timer_0.write_mode(val),
@@ -174,7 +176,7 @@ impl TimerState {
     }
 
     pub fn read_half_word(&mut self, addr: u32) -> u16 {
-        //println!("Reading halfword timer");
+        //println!("Reading halfword timer addr {:#X}", addr);
         
         match addr {
             0x1F801100 => self.timer_0.value as u16,
@@ -211,7 +213,7 @@ impl TimerState {
     }
 
     pub fn write_half_word(&mut self, addr: u32, value: u16) {
-        //println!("Tried to write timer half");
+        println!("Tried to write timer half addr {:#X} val {:#X}", addr, value);
         match addr {
             0x1F801100 => self.timer_0.value &= (value as u32) & 0xFFFF0000,
             0x1F801102 => self.timer_0.value &= ((value as u32) << 16) & 0xFFFF,
@@ -221,7 +223,7 @@ impl TimerState {
             0x1F801108 => self.timer_0.target = value as u32,
             0x1F80110A => self.timer_0.target &= (value as u32) << 16,
 
-            0x1F801110 => self.timer_1.value = value as u32,
+            0x1F801110 => self.timer_1.value &= value as u32,
             0x1F801112 => self.timer_1.value &= (value as u32) << 16,
 
             0x1F801114 => self.timer_1.write_mode(value as u32),

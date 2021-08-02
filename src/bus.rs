@@ -38,11 +38,20 @@ impl MainBus {
         }
     }
 
-    pub fn read_word(&mut self, og_addr: u32) -> u32 {
-        let addr = og_addr & 0x1fffffff;
-        if addr == 0x1F01F00{
-            println!("The thingy got read")
+    pub fn peek_word(&self, og_addr: u32) -> u32 {
+        let addr = translate_address(og_addr);
+        if addr <= 0x001f_ffff {
+            self.memory.read_word(addr)
+        } else {
+            0x42
         }
+    }
+
+    pub fn read_word(&mut self, og_addr: u32) -> u32 {
+        let addr = translate_address(og_addr);
+        // if og_addr == 0x800c14a8{
+        //     return 3;
+        // }
         let word = match addr {
             0x0..=0x001f_ffff => self.memory.read_word(addr),
             0x1f801810 => self.gpu.read_word_gp0(),
@@ -65,11 +74,11 @@ impl MainBus {
     }
 
     pub fn write_word(&mut self, og_addr: u32, word: u32) {
-        let addr = og_addr & 0x1fffffff;
+        let addr = translate_address(og_addr);
         self.last_touched_addr = addr;
 
-        if addr == 0x121CA8 {
-            println!("touched");
+        if addr == 0x7C7C8 {
+            println!("0x7c7c8 written with val {:#X}", word);
         }
 
         match addr {
@@ -104,7 +113,7 @@ impl MainBus {
     }
 
     pub fn read_half_word(&mut self, og_addr: u32) -> u16 {
-        let addr = og_addr & 0x1fffffff;
+        let addr = translate_address(og_addr);
         let val = match addr {
             0x1F801070 => {
                 panic!("Tried to read i_status half");
@@ -120,11 +129,11 @@ impl MainBus {
     }
 
     pub fn write_half_word(&mut self, og_addr: u32, value: u16) {
-        let addr = og_addr & 0x1fffffff;
+        let addr = translate_address(og_addr);
         self.last_touched_addr = addr;
 
-        if addr == 0x121CA8 {
-            println!("touched");
+        if addr == 0x7C7C8 {
+            println!("0x7c7c8 written with hw val {:#X}", value);
         }
 
         match addr {
@@ -142,7 +151,7 @@ impl MainBus {
     }
 
     pub fn read_byte(&mut self, og_addr: u32) -> u8 {
-        let addr = og_addr & 0x1fffffff;
+        let addr = translate_address(og_addr);
         let val = match addr {
             0x1F801070 => {
                 warn!("Tried to read i_status word");
@@ -174,11 +183,11 @@ impl MainBus {
     }
 
     pub fn write_byte(&mut self, og_addr: u32, value: u8) {
-        let addr = og_addr & 0x1fffffff;
+        let addr = translate_address(og_addr);
         self.last_touched_addr = addr & 0x1fffffff;
 
-        if addr == 0x121CA8 {
-            println!("touched");
+        if addr == 0x7C7C8 {
+            println!("0x7c7c8 written with b val {:#X}", value);
         }
 
         match addr {
@@ -197,4 +206,12 @@ impl MainBus {
             ),
         }
     }
+}
+
+fn translate_address(raw_addr: u32) -> u32 {
+    let mut addr = raw_addr & 0x1fffffff;
+    if addr < 0x7FFFFF {
+        addr = addr & 0x1FFFFF;
+    }
+    addr
 }

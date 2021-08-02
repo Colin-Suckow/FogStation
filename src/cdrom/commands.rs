@@ -86,7 +86,7 @@ pub(super) fn seek_data(state: &mut CDDrive) -> Packet {
     state.drive_state = DriveState::Seek;
     let mut first_response = stat(state, 0x15);
     second_response.cause = IntCause::INT2;
-    second_response.execution_cycles = 120000;
+    second_response.execution_cycles = 1000000;
     first_response.extra_response = Some(Box::new(second_response));
     first_response
 }
@@ -101,14 +101,20 @@ pub(super) fn set_mode(state: &mut CDDrive, mode: u8) -> Packet {
 //This is only the initial return. All of the reading is handled in the post condition
 //It's messy, but it works for now
 pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
+
     let mut initial_response = stat(state, 0x6);
     state.drive_state = DriveState::Read;
     state.read_enabled = true;
 
     let cycles = match state.drive_speed() {
-        DriveSpeed::Single => 0x6e1cd,
+        DriveSpeed::Single => 0x6e1cd, // Add some extra time for a seek
         DriveSpeed::Double => 0x36cd2,
-    };
+    } + if !state.seek_complete {1000000} else {0}; //Add some extra time if we need to seek
+
+    if !state.seek_complete {
+        state.read_offset = 0;
+        state.seek_complete = true;
+    }
 
     let response_packet = Packet {
         cause: IntCause::INT1,
@@ -139,6 +145,7 @@ pub(super) fn pause_read(state: &mut CDDrive) -> Packet {
     };
 
     state.drive_state = DriveState::Idle;
+    state.read_offset = 0;
     state.read_enabled = false;
 
     let response_packet = Packet {
@@ -162,7 +169,7 @@ pub(super) fn demute(state: &mut CDDrive) -> Packet {
 // Assumes theres only one session
 pub(super) fn get_tn(state: &mut CDDrive) -> Packet {
     let first_track = 0x1;
-    let last_track = dec_to_bcd(state.disc.as_ref().expect("Tried to read non-existant disc!").track_count() + 1);
+    let last_track = dec_to_bcd(state.disc.as_ref().expect("Tried to read non-existent disc!").track_count() + 1);
 
     let mut initial_response = stat(state, 0x13);
 

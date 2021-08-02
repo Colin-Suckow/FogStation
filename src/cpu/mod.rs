@@ -5,6 +5,7 @@ use instruction::{InstructionArgs, NumberHelpers, Instruction, decode_opcode};
 use log::{trace, warn};
 
 use crate::LOGGING;
+use crate::cpu::instruction::RegisterNames;
 use crate::timer::TimerState;
 use crate::{bus::MainBus, cdrom};
 
@@ -121,25 +122,43 @@ impl R3000 {
         self.print_string(addr + 1);
     }
 
+
     pub fn step_instruction(&mut self, timers: &mut TimerState) {
         //Fast load exe
 
         if self.load_exe && self.pc == 0xbfc0700c {
             println!("Jumping to exe...");
-            self.pc = 0x80010000;
+            //self.pc = 0x80010000;
+            self.pc = 0x8001F9AC;
+            //self.log = true;
         }
      
         if self.pc == 0xB0 {
             // SYSCALL: Send character to serial port
             // This catches any characters and prints them to stdout instead
-            if self.read_reg(9) == 0x3D {
-                print!(
+            match self.read_reg(9) {
+                0x35 => {
+                    if self.read_reg(RegisterNames::a0 as u8) == 1 {
+                        //Writing to stdout
+                        let len = self.read_reg(RegisterNames::a2 as u8);
+                        let base = self.read_reg(RegisterNames::a1 as u8);
+                        for i in 0..len {
+                            let char = self.read_bus_byte(base + i);
+                            print!("{}",
+                            std::str::from_utf8(&[char]).unwrap()
+                            );
+                        }
+                    }
+                },
+
+                0x3D => {
+                    print!(
                     "{}",
-                    std::str::from_utf8(&[self.read_reg(4) as u8]).unwrap()
-                );
-            } else {
-                //trace!("SYSCALL B({:#X}) pc: {:#X}", self.read_reg(9), self.current_pc);
+                    std::str::from_utf8(&[self.read_reg(4) as u8]).unwrap());
+                },
+                _ => ()
             }
+            
         }
 
         if self.pc == 0xA0 {
@@ -175,25 +194,53 @@ impl R3000 {
         //     println!("first {:#X} second{:#X}", self.read_bus_word(0x80121CD4, timers), self.read_bus_word(0x80121C90, timers))
         // }
 
-        if self.pc == 0x80015858  {
-            println!("\nFunc start");
-            unsafe{LOGGING = true;}
-            self.log = true;
-        }
+        // if self.pc == 0x8008dd40  {
+        //     println!("\nstart");
+        //     //unsafe{LOGGING = true;}
+        //     self.log = true;
+        // }
 
-        if self.pc == 0x800158e4 {
-            unsafe{LOGGING = false;}
-            self.log = false;
-            println!("Func end\n");
-        }
+        // if self.pc == 0x8008dd4c {
+        //     //unsafe{LOGGING = false;}
+        //     self.log = false;
+        //     println!("end\n");
+        //     panic!("stop");
+        // }
+
+        // if self.current_pc == 0x80072898 {
+        //     println!("CD_readm  buf* {:#X} sectors {} mode {}", self.gen_registers[RegisterNames::a0 as usize], self.gen_registers[RegisterNames::a1 as usize], self.gen_registers[RegisterNames::a2 as usize]);
+        // }
+
+        // if self.pc == 0x800705c4 {
+        //     println!("cd_read called sectors {} i {} buf* {:#X} ra {:#X}",self.gen_registers[RegisterNames::a0 as usize], self.gen_registers[RegisterNames::a1 as usize], self.gen_registers[RegisterNames::a2 as usize], self.gen_registers[31]);
+        // }
+
+        // if self.current_pc == 0x80070d24 {
+        //     println!("CDRead called sectors {} buf* {:#X} mode {:#X} ra {:#X}", self.gen_registers[RegisterNames::a0 as usize], self.gen_registers[RegisterNames::a1 as usize], self.gen_registers[RegisterNames::a2 as usize], self.read_reg(RegisterNames::ra as u8));
+        // }
+
+        // if self.pc == 0x8008dd40 {
+        //     println!("malloc called size {} ra {:#X}", self.read_reg(RegisterNames::a0 as u8), self.read_reg(31));
+        // }
+
+        // if self.pc == 0x8008be98 {
+        //     println!("higher hit ra {:#X}", self.read_reg(31));
+        // }
+
+        // if self.current_pc == 0x8008dd80 {
+        //     println!("After read sync V0 {:#X}", self.read_reg(RegisterNames::v0 as u8))
+        // }
+
+        // if self.pc == 0x8008bef8 {
+        //     println!("Higher read returning {:#X}", self.read_reg(RegisterNames::v0 as u8));
+        // }
+        
 
         let instruction = self.main_bus.read_word(self.pc);
         self.current_pc = self.pc;
         self.pc += 4;
 
-        if self.log {
-            self.log_instruction(instruction);
-        }
+        
 
         self.exec_delay = false;
         self.last_was_branch = false;
@@ -203,13 +250,17 @@ impl R3000 {
                 self.load_delays.remove(i);
             }
         }
+        if self.log  {
+            self.log_instruction(instruction);
+        }
         self.execute_instruction(instruction, timers);
         self.cycle_count = self.cycle_count.wrapping_add(1);
 
-        if self.main_bus.last_touched_addr == 0x121CA8 {
-            println!("lta pc {:#X} val {:#X}", self.current_pc, self.main_bus.read_word(0x121CA8));
-            self.last_touched_addr = 0;
-        }
+
+        // if self.main_bus.last_touched_addr == 0x121CA8 {
+        //     println!("lta pc {:#X} val {:#X}", self.current_pc, self.main_bus.read_word(0x121CA8));
+        //     self.last_touched_addr = 0;
+        // }
 
 
         //Execute branch delay operation
@@ -237,14 +288,16 @@ impl R3000 {
 
     fn log_instruction(&self, instruction: u32) {
         let inst = decode_opcode(instruction).unwrap();
-        println!(
-            "{:#X} : {:?} rs: {:#X} rt: {:#X} rd: {:#X}",
-            self.current_pc,
-            inst,
-            self.read_reg(instruction.rs()),
-            self.read_reg(instruction.rt()),
-            self.read_reg(instruction.rd()),
-        );
+        // println!(
+        //     "{:#X} : {:?} rs: {:#X} rt: {:#X} rd: {:#X}",
+        //     self.current_pc,
+        //     inst,
+        //     self.read_reg(instruction.rs()),
+        //     self.read_reg(instruction.rt()),
+        //     self.read_reg(instruction.rd()),
+        // );
+
+        println!("{:08x} {:08x}: {:<7}{}", self.current_pc, instruction, inst.mnemonic(), inst.arguments(self));
     }
 
     pub fn execute_instruction(&mut self, instruction: u32, timers: &mut TimerState) {
@@ -846,6 +899,7 @@ impl R3000 {
             self.fire_exception(Exception::AdEL);
         } else {
             let val = self.read_bus_word(addr as u32, timers);
+            //println!("lw addr {:08x} val {:08x}", addr, val);
             self.delay_write_reg(instruction.rt(), val);
         };
     }
@@ -927,8 +981,9 @@ impl R3000 {
     fn op_addiu(&mut self, instruction: u32) {
         self.write_reg(
             instruction.rt(),
-            ((self.read_reg(instruction.rs())).wrapping_add(instruction.immediate_sign_extended() as u32)) as u32,
+            ((self.read_reg(instruction.rs())).wrapping_add(instruction.immediate_sign_extended())) as u32,
         );
+        //trace!("ADDIU result {:#X}", self.read_reg(instruction.rt()));
     }
 
     fn op_addi(&mut self, instruction: u32) {
@@ -1065,6 +1120,7 @@ impl R3000 {
             instruction.rd(),
             self.read_reg(instruction.rs()) | self.read_reg(instruction.rt()),
         );
+        //println!("or ${}({:08x}) | ${}({:08x}) = ${}({:08x})", instruction.rs(), self.read_reg(instruction.rs()), instruction.rt(), self.read_reg(instruction.rt()), instruction.rd(), self.read_reg(instruction.rd()))
     }
 
     fn op_and(&mut self, instruction: u32) {
@@ -1248,7 +1304,7 @@ impl R3000 {
     }
 
     pub fn fire_exception(&mut self, exception: Exception) {
-        trace!("CPU EXCEPTION: Type: {:?} PC: {:#X}", exception, self.current_pc);
+        println!("CPU EXCEPTION: Type: {:?} PC: {:#X}", exception, self.current_pc);
         self.cop0.set_cause_execode(&exception);
 
 
@@ -1298,6 +1354,10 @@ impl R3000 {
 
     pub fn write_bus_word(&mut self, addr: u32, val: u32, timers: &mut TimerState) {
         self.last_touched_addr = addr & 0x1fffffff;
+
+        if self.last_touched_addr == 0x1F8010B0 && val == 0x8011F9E8 {
+            println!("TOUCHED BAD PART pc {:#X} ra {:#X}", self.current_pc, self.read_reg(31));
+        }
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
             return;
@@ -1378,6 +1438,9 @@ impl R3000 {
 
     /// Sets register to given value. Prevents setting R0, which should always be zero. Will panic if register_number > 31
     fn write_reg(&mut self, register_number: u8, value: u32) {
+        if register_number == RegisterNames::sp as u8 {
+            //println!("Writing sp {:#X}", value);
+        }
         match register_number {
             0 => (), //Prevent writing to the zero register
             _ => self.gen_registers[register_number as usize] = value,
@@ -1385,18 +1448,19 @@ impl R3000 {
     }
 
     fn delay_write_reg(&mut self, register_number: u8, value: u32) {
-        if register_number != 0 {
-            //Get rid of old writes to the same register
-            for i in (0..self.load_delays.len()).rev() {
-                if self.load_delays[i].register == register_number {
-                    self.load_delays.remove(i);
-                }
-            }
-            self.load_delays.push(LoadDelay {
-                register: register_number,
-                value: value,
-                cycle_loaded: self.cycle_count,
-            });
-        }
+        self.write_reg(register_number, value);
+    //     if register_number != 0 {
+    //         //Get rid of old writes to the same register
+    //         for i in (0..self.load_delays.len()).rev() {
+    //             if self.load_delays[i].register == register_number {
+    //                 self.load_delays.remove(i);
+    //             }
+    //         }
+    //         self.load_delays.push(LoadDelay {
+    //             register: register_number,
+    //             value: value,
+    //             cycle_loaded: self.cycle_count,
+    //         });
+    //     }
     }
 }

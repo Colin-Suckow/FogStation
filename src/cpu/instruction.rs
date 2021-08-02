@@ -4,6 +4,8 @@ use bit_field::BitField;
 use num_derive::FromPrimitive;    
 use num_traits::FromPrimitive;
 
+use super::R3000;
+
 pub trait InstructionArgs {
     fn opcode(&self) -> u8;
     fn rs(&self) -> u8;
@@ -85,7 +87,9 @@ impl InstructionArgs for u32 {
     }
 
     fn immediate_sign_extended(&self) -> u32 {
-        (self.clone() & 0xFFFF) as i16 as u32
+        let val = (self.clone() & 0xFFFF) as i16 as u32;
+        //println!("immse {:#X}", val);
+        val
     }
 }
 
@@ -159,6 +163,172 @@ pub(super) enum Instruction {
     SW{rt: u8, offset: u16, base: u8},
     LWC2{rt: u8, offset: u16, base: u8},
     SWC2{rt: u8, offset: u16, base: u8},
+}
+
+impl Instruction {
+    pub fn mnemonic(&self) -> &str {
+        match self {
+            Instruction::SLL { rt, rd, sa } => "sll",
+            Instruction::SRL { rt, rd, sa } => "srl",
+            Instruction::SRA { rt, rd, sa } => "sra",
+            Instruction::SLLV { rd, rt, rs } => "sllv",
+            Instruction::SRLV { rd, rt, rs } => "srlv",
+            Instruction::SRAV { rd, rt, rs } => "srav",
+            Instruction::JR { rs } => "jr",
+            Instruction::JALR { rd, rs } => "jalr",
+            Instruction::SYSCALL { code } => "syscall",
+            Instruction::BREAK { code } => "break",
+            Instruction::MFHI { rd } => "mfhi",
+            Instruction::MTHI { rs } => "mthi",
+            Instruction::MFLO { rd } => "mflo",
+            Instruction::MTLO { rs } => "mtlo",
+            Instruction::DIV { rs, rt } => "div",
+            Instruction::DIVU { rs, rt } => "divu",
+            Instruction::ADD { rd, rs, rt } => "add",
+            Instruction::SUB { rd, rs, rt } => "sub",
+            Instruction::SLTU { rd, rs, rt } => "sltu",
+            Instruction::SUBU { rd, rs, rt } => "subu",
+            Instruction::AND { rd, rs, rt } => "and",
+            Instruction::OR { rd, rs, rt } => "or",
+            Instruction::XOR { rd, rs, rt } => "xor",
+            Instruction::NOR { rd, rs, rt } => "nor",
+            Instruction::ADDU { rd, rs, rt } => "addu",
+            Instruction::MULT { rs, rt } => "mult",
+            Instruction::MULTU { rs, rt } => "multu",
+            Instruction::SLT { rd, rs, rt } => "slt",
+            Instruction::BLTZ { rs, offset } => "bltz",
+            Instruction::BGEZ { rs, offset } => "bgez",
+            Instruction::BLTZAL { rs, offset } => "bltzal",
+            Instruction::BGEZAL { rs, offset } => "bgezal",
+            Instruction::J { target } => "j",
+            Instruction::JAL { target } => "jal",
+            Instruction::BEQ { rs, rt, offset } => "beq",
+            Instruction::BNE { rs, rt, offset } => "bne",
+            Instruction::BLEZ { rs, offset } => "blez",
+            Instruction::BGTZ { rs, offset } => "bgtz",
+            Instruction::ADDI { rt, rs, immediate } => "addi",
+            Instruction::ADDIU { rt, rs, immediate } => "addiu",
+            Instruction::SLTI { rt, rs, immediate } => "slti",
+            Instruction::SLTIU { rt, rs, immediate } => "sltiu",
+            Instruction::ANDI { rt, rs, immediate } => "andi",
+            Instruction::ORI { rt, rs, immediate } => "ori",
+            Instruction::XORI { rt, rs, immediate } => "xori",
+            Instruction::LUI { rt, immediate } => "lui",
+            Instruction::MTC0 { rt, rd } => "mtc0",
+            Instruction::MFC0 { rt, rd } => "mfc0",
+            Instruction::RFE => "rfe",
+            Instruction::MFC2 { rt, rd } => "mfc2",
+            Instruction::CTC2 { rt, rd } => "ctc2",
+            Instruction::MTC2 { rt, rd } => "mtc2",
+            Instruction::CFC2 { rt, rd } => "cfc2",
+            Instruction::IMM25 { command } => "imm25",
+            Instruction::LB { rt, offset, base } => "lb",
+            Instruction::LH { rt, offset, base } => "lh",
+            Instruction::LW { rt, offset, base } => "lw",
+            Instruction::LBU { rt, offset, base } => "lbu",
+            Instruction::LHU { rt, offset, base } => "lhu",
+            Instruction::SB { rt, offset, base } => "sb",
+            Instruction::SH { rt, offset, base } => "sh",
+            Instruction::LWL { rt, offset, base } => "lwl",
+            Instruction::LWR { rt, offset, base } => "lwr",
+            Instruction::SWL { rt, offset, base } => "swl",
+            Instruction::SWR { rt, offset, base } => "swr",
+            Instruction::SW { rt, offset, base } => "sw",
+            Instruction::LWC2 { rt, offset, base } => "lwc2",
+            Instruction::SWC2 { rt, offset, base } => "swc2",
+        }
+    }
+
+    pub fn arguments(&self, cpu: &R3000) -> String {
+        match self {
+            Instruction::SLL { rt, rd, sa } |
+            Instruction::SRL { rt, rd, sa } |
+            Instruction::SRA { rt, rd, sa } => format!("${}({:08x}), {:#x}", RegisterNames::from_u8(*rt).unwrap(), cpu.gen_registers[*rt as usize], sa),
+
+            Instruction::JR { rs } =>  format!("${}({:08x}", RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize]),
+            
+            Instruction::JALR { rd, rs } => format!("${}({:08x}", RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize]),
+
+            Instruction::SYSCALL { code } |
+            Instruction::BREAK { code } => format!("{:#08x}", code),
+
+            Instruction::MFHI { rd } => format!("${}({:08x}, $hi({:08x})", RegisterNames::from_u8(*rd).unwrap(), cpu.gen_registers[*rd as usize], cpu.hi),
+            Instruction::MFLO { rd } => format!("${}({:08x}, $lo({:08x})", RegisterNames::from_u8(*rd).unwrap(), cpu.gen_registers[*rd as usize], cpu.lo),
+            
+            Instruction::MTHI { rs } => format!("$hi({:08x}), ${}({:08x}",  cpu.hi, RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize]),
+            Instruction::MTLO { rs } => format!("$lo({:08x}), ${}({:08x}",  cpu.lo, RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize]),
+
+            Instruction::DIV { rs, rt } |
+            Instruction::DIVU { rs, rt } |
+            Instruction::MULT { rs, rt } |
+            Instruction::MULTU { rs, rt } => format!("${}({:08x}, ${}({:08x})", RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize], RegisterNames::from_u8(*rt).unwrap(), cpu.gen_registers[*rt as usize]),
+
+            Instruction::SLLV { rd, rt, rs } |
+            Instruction::SRLV { rd, rt, rs } |
+            Instruction::SRAV { rd, rt, rs } |
+            Instruction::ADD { rd, rs, rt } |
+            Instruction::SUB { rd, rs, rt } |
+            Instruction::SLTU { rd, rs, rt } |
+            Instruction::SUBU { rd, rs, rt } |
+            Instruction::AND { rd, rs, rt } |
+            Instruction::OR { rd, rs, rt } |
+            Instruction::XOR { rd, rs, rt } |
+            Instruction::NOR { rd, rs, rt } |
+            Instruction::ADDU { rd, rs, rt } |           
+            Instruction::SLT { rd, rs, rt } => format!("${}({:08x}, ${}({:08x}, ${}({:08x})", RegisterNames::from_u8(*rd).unwrap(), cpu.gen_registers[*rd as usize], RegisterNames::from_u8(*rt).unwrap(), cpu.gen_registers[*rt as usize], RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize]),
+
+            Instruction::BLTZ { rs, offset } |
+            Instruction::BGEZ { rs, offset } |
+            Instruction::BLTZAL { rs, offset } |
+            Instruction::BLEZ { rs, offset } |
+            Instruction::BGTZ { rs, offset } |
+            Instruction::BGEZAL { rs, offset } => format!("${}({:08x}), {:#x}", RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize], offset),
+
+            Instruction::J { target } |
+            Instruction::JAL { target } => format!("{:#08x}", target),
+
+            Instruction::BEQ { rs, rt, offset } |
+            Instruction::BNE { rs, rt, offset } => format!("${}({:08x}, ${}({:08x}), {:#08x}", RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize], RegisterNames::from_u8(*rt).unwrap(), cpu.gen_registers[*rt as usize], offset),
+
+
+            Instruction::ADDI { rt, rs, immediate } |
+            Instruction::ADDIU { rt, rs, immediate } |
+            Instruction::SLTI { rt, rs, immediate } |
+            Instruction::SLTIU { rt, rs, immediate } |
+            Instruction::ANDI { rt, rs, immediate } |
+            Instruction::ORI { rt, rs, immediate } |
+            Instruction::XORI { rt, rs, immediate } => format!("${}({:08x}, ${}({:08x}), {:#04x}", RegisterNames::from_u8(*rt).unwrap(), cpu.gen_registers[*rt as usize], RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize], immediate),
+
+            Instruction::LUI { rt, immediate } => format!("${}({:08x}, {:#04x}", RegisterNames::from_u8(*rt).unwrap(), cpu.gen_registers[*rt as usize], immediate),
+
+            Instruction::RFE => "".to_string(),
+
+            Instruction::MFC0 { rt, rd } |
+            Instruction::MFC2 { rt, rd } |
+            Instruction::CFC2 { rt, rd } => format!("${}({:08x}, ${}({:08x})", RegisterNames::from_u8(*rd).unwrap(), cpu.gen_registers[*rd as usize], rt, cpu.cop0.read_reg(*rt as u8)),
+
+            Instruction::MTC0 { rt, rd } |
+            Instruction::MTC2 { rt, rd } |
+            Instruction::CTC2 { rt, rd } => format!("${}({:08x}, ${}({:08x})",rt, cpu.cop0.read_reg(*rt as u8), RegisterNames::from_u8(*rd).unwrap(), cpu.gen_registers[*rd as usize]),
+
+            Instruction::IMM25 { command } => format!("{:08x}", command),
+
+            Instruction::LB { rt, offset, base } |
+            Instruction::LH { rt, offset, base } |
+            Instruction::LW { rt, offset, base } |
+            Instruction::LBU { rt, offset, base } |
+            Instruction::LHU { rt, offset, base } |
+            Instruction::SB { rt, offset, base } |
+            Instruction::SH { rt, offset, base } |
+            Instruction::LWL { rt, offset, base } |
+            Instruction::LWR { rt, offset, base } |
+            Instruction::SWL { rt, offset, base } |
+            Instruction::SWR { rt, offset, base } |
+            Instruction::SW { rt, offset, base } |
+            Instruction::LWC2 { rt, offset, base } |
+            Instruction::SWC2 { rt, offset, base } => format!("${}({:08x}), {:#04x}({})([{:08x}] = {:08x})", RegisterNames::from_u8(*rt).unwrap(), cpu.read_reg(*rt as u8), offset, RegisterNames::from_u8(*base).unwrap(), cpu.gen_registers[*base as usize] + *offset as u32, cpu.main_bus.peek_word((cpu.gen_registers[*base as usize] as i32 + (*offset  as i16)as i32) as u32)),
+        }
+    }
 }
 
 pub(super) fn decode_opcode(inst: u32) -> Option<Instruction> {

@@ -136,7 +136,7 @@ impl DMAState {
 
     pub fn write_word(&mut self, addr: u32, value: u32) {
         let channel_num = (((addr & 0x000000F0) >> 4) - 0x8) as usize;
-        //println!("Write DMA word: addr {:#X} value {:#X}", addr, value);
+        //trace!("Write DMA word: addr {:#X} value {:#X}", addr, value);
         match addr {
             0x1F8010F0 => self.control = value,
             0x1F8010F4 => {
@@ -318,13 +318,29 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
             3 => {
                 let words = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                 let base_addr = (cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF) as usize;
-                let data = cpu.main_bus.cd_drive.sector_data_take();
+                let data = cpu.main_bus.cd_drive.data_queue();
+
+                if data.len() == 0 {
+                    panic!("Tried to do dma on empty cd buffer");
+                } else {
+                    if data.len() < (words as usize) * 4 {
+                        let diff = ((words as usize) * 4) - data.len();
+                        for i in 0..diff {
+                            data.push(data[i]);
+                        }
+                    }
+                }
+
 
                 trace!("Words {} base_addr {:#X}", words, base_addr);
                 if base_addr <= 0x121CA8 && base_addr + (words * 4) as usize >= 0x121CA8 {
                     println!("CD DMA thing touched it");
                 }
-                cpu.main_bus.memory.data[base_addr..(base_addr + (words * 4) as usize)].copy_from_slice(data);
+                for i in 0..(words * 4) {
+                    cpu.main_bus.memory.data[(base_addr + i as usize)] = data[i as usize];
+                }
+                //cpu.main_bus.memory.data[base_addr..(base_addr + (words * 4) as usize)].copy_from_slice(data);
+                data.drain(0..((words as usize) * 4));
                 cpu.main_bus.dma.channels[num].complete();
                 cpu.main_bus.dma.raise_irq(num);
                 if cpu.main_bus.dma.irq_channel_enabled(num) {

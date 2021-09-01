@@ -36,16 +36,13 @@ impl SPU {
         match addr {
             0x1F801DAE => self.status_register(),
             0x1F801DAA => {
-                //println!("{:#X}", self.spu_control);
+                println!("{:#X}", self.spu_control);
                 self.spu_control
             },
             0x1F801DAC => 0x4, //SPU transfer control
             0x1F801C00 => (self.voice0_volume & 0xFFFF) as u16,
             0x1F801DA6 => self.transfer_address,
-            _ => {
-                //println!("Read unknown SPU address {:#X}", addr); 
-                0
-            }
+            _ => {println!("Read unknown SPU address {:#X}", addr); 0}
         }
     }
 
@@ -68,7 +65,7 @@ impl SPU {
                     3 => SpuMode::DMAread,
                     i => panic!("Unknown SPU mode {}", i)
                 };
-                //println!("spu_cnt <- {:#X}", value);
+                println!("spu_cnt <- {:#X}", value);
             },
             0x1F801C00 => self.voice0_volume = value as u32, //TODO implement real voice registers
             0x1F801DA6 => self.transfer_address = value,

@@ -26,7 +26,6 @@ mod support;
 
 const DEFAULT_GDB_PORT: u16 = 4444;
 const DEFAULT_BIOS_PATH: &str = "SCPH1001.BIN";
-const START_HALTED: bool = false;
 
 struct ClientState {
     comm: ClientComms,
@@ -129,7 +128,7 @@ fn main() {
     let emu_state = EmuState {
         emu: emu,
         comm: emu_comm,
-        halted: START_HALTED,
+        halted: true,
         current_resolution: Resolution {
             width: 640,
             height: 480,
@@ -144,7 +143,7 @@ fn main() {
     let mut state = ClientState {
         emu_thread,
         comm: client_comm,
-        halted: START_HALTED,
+        halted: true,
     };
 
     

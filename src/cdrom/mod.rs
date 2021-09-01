@@ -223,7 +223,7 @@ impl CDDrive {
 
     fn execute_command(&mut self, command: u8) {
         let is_readn = if let Some(res) = &self.pending_response {
-            true
+            res.cause == IntCause::INT1
         } else {
             false
         };
@@ -232,9 +232,6 @@ impl CDDrive {
         // We can safely overwrite pending readn's though. Otherwise those will clog up the system
         if self.pending_response.is_none() || is_readn {
             //println!("CDROM Executing command: {:#X}", command);
-            if self.reg_interrupt_flag != 0 {
-                panic!("Executing command before the previous was acknowledged!");
-            }
             //Execute
             {
                 let parameters: Vec<u8> = self.parameter_queue.iter().map(|v| v.clone()).collect();
@@ -465,8 +462,6 @@ pub fn step_cycle(cpu: &mut R3000) {
 
                         trace!("Filling CD buffer with new data");
 
-           
-
                         let data = cpu.main_bus.cd_drive.disc.as_ref().expect("Tried to read nonexistant disc!").read_sector(
                             cpu.main_bus.cd_drive.seek_target.plus_sector_offset(cpu.main_bus.cd_drive.read_offset),
                             cpu.main_bus.cd_drive.sector_size()
@@ -492,8 +487,6 @@ pub fn step_cycle(cpu: &mut R3000) {
                         };
     
                         cpu.main_bus.cd_drive.pending_response = Some(response_packet);
-                    } else if !cpu.main_bus.cd_drive.read_enabled {
-                        println!("ReadN hit while reading is disabled");
                     }
                 }
                 _ => () //No actions for this command

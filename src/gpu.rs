@@ -547,16 +547,16 @@ impl Gpu {
                     //Not enough for the header
                     return;
                 }
-                let mut width = ((self.gp0_buffer[2] & 0xFFFF) as i16);
-                let mut height = (((self.gp0_buffer[2] >> 16) & 0xFFFF) as i16);
+                let mut width = ((self.gp0_buffer[2] & 0xFFFF) as u32);
+                let mut height = (((self.gp0_buffer[2] >> 16) & 0xFFFF) as u32);
                 if width == 0 {width = 1024};
                 if height == 0 {height = 512};
-                let length = (((width) * height + if width % 2 != 0 {1} else {0}) / 2) + 3;
+                let length = ((width * height) / 2) + if width % 2 != 0 {1} else {0} + 3;
                 if self.gp0_buffer.len() < length as usize {
                     //Not enough commands
                     return;
                 }
-                trace!("GPU: CPU to VRAM");
+                trace!("GPU: CPU to VRAM length: {} ({} x {})", length, width, height);
 
                 let base_x = ((self.gp0_buffer[1] & 0xFFFF) as i16);
                 let base_y = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as i16;
@@ -565,8 +565,8 @@ impl Gpu {
                 for index in 3..(length) {
                     let p2 = ((self.gp0_buffer[index as usize] >> 16) & 0xFFFF) as u16;
                     let p1 = (self.gp0_buffer[index as usize] & 0xFFFF) as u16;
-                    let x = base_x + (((index - 3) * 2) % (width));
-                    let y = base_y + (((index - 3) * 2) / (width));
+                    let x = base_x + (((index - 3) * 2) % (width)) as i16;
+                    let y = base_y + (((index - 3) * 2) / (width)) as i16;
                     let addr = point_to_address(x as u32, y as u32);
                     self.vram[addr as usize] = p1;
                     self.vram[(addr + 1) as usize] = p2;

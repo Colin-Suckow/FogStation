@@ -145,7 +145,7 @@ pub(super) fn pause_read(state: &mut CDDrive) -> Packet {
     };
 
     state.drive_state = DriveState::Idle;
-    state.read_offset = 0;
+    //state.read_offset = 0;
     state.read_enabled = false;
 
     let response_packet = Packet {

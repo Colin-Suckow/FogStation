@@ -146,21 +146,18 @@ impl DMAState {
                 match addr & 0xFFFFFF0F {
                     0x1F801000 => {
                         //Set base address
-                        //println!("Wrote DMA base {} with {:#X} addr {:#X}", channel_num, value, addr);
+                        println!("Wrote DMA base {} with {:#X} addr {:#X}", channel_num, value, addr);
                         self.channels[channel_num].base_addr = value & 0xFFFFFF;
                     }
                     0x1F801004 => {
                         //Set block control
-                        //println!("Wrote DMA block {} with {:#X}", channel_num, value);
+                        println!("Wrote DMA block {} with {:#X}", channel_num, value);
                         self.channels[channel_num].block = value;
                     }
                     0x1F801008 => {
                         //Set control
-                        //println!("Wrote DMA control {} with {:#X}", channel_num, value);
+                        println!("Wrote DMA control {} with {:#X}", channel_num, value);
                         self.channels[channel_num].control = value;
-                        if value.get_bit(24) {
-                            self.cycles_to_wait = 500;
-                        }
                     }
                     _ => panic!("Unknown dma write {:#X}", addr),
                 };
@@ -265,6 +262,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                         trace!("Block size {} Num blocks {} base {:#X}", block_size, entries, base_addr);
                         for i in 0..entries {
                             for j in 0..block_size {
+                                println!("Writing block {} word {}", i, j);
                                 let packet = cpu
                                     .main_bus
                                     .read_word(base_addr + ((i * block_size) * 4) + (j * 4));

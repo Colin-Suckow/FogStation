@@ -21,11 +21,11 @@ pub struct Resolution {
 
 #[derive(Copy, Clone, Debug)]
 struct Point {
-    x: i16,
-    y: i16,
+    x: u16,
+    y: u16,
     color: u16,
-    tex_x: i16,
-    tex_y: i16,
+    tex_x: u16,
+    tex_y: u16,
 }
 
 enum ColorDepth {
@@ -36,8 +36,8 @@ enum ColorDepth {
 impl Point {
     fn from_word(word: u32, color: u16) -> Self {
         Self {
-            x: (word & 0xFFFF) as i16,
-            y: ((word >> 16) & 0xFFFF) as i16,
+            x: (word & 0xFFFF) as u16,
+            y: ((word >> 16) & 0xFFFF) as u16,
             color,
             tex_x: 0,
             tex_y: 0,
@@ -46,15 +46,15 @@ impl Point {
 
     fn from_word_with_offset(word: u32, color: u16, offset: Point) -> Self {
         Self {
-            x: ((word & 0xFFFF) as i32 + offset.x as i32) as i16,
-            y: (((word >> 16) & 0xFFFF) as i32 + offset.y as i32) as i16,
+            x: ((word & 0xFFFF) as u32 + offset.x as u32) as u16,
+            y: (((word >> 16) & 0xFFFF) as u32 + offset.y as u32) as u16,
             color,
             tex_x: 0,
             tex_y: 0,
         }
     }
 
-    fn from_components(x: i16, y: i16, color: u16) -> Self {
+    fn from_components(x: u16, y: u16, color: u16) -> Self {
         Self {
             x,
             y,
@@ -64,10 +64,10 @@ impl Point {
         }
     }
 
-    fn new_textured_point(word: u32, tex_y: i16, tex_x: i16) -> Self {
+    fn new_textured_point(word: u32, tex_y: u16, tex_x: u16) -> Self {
         Self {
-            x: (word & 0xFFFF) as i16,
-            y: ((word >> 16) & 0xFFFF) as i16,
+            x: (word & 0xFFFF) as u16,
+            y: ((word >> 16) & 0xFFFF) as u16,
             color: 0,
             tex_x,
             tex_y,
@@ -179,6 +179,8 @@ impl Gpu {
     pub fn send_gp0_command(&mut self, value: u32) {
         self.gp0_push(value);
 
+        println!("Pushing gp0 value. buf len is {}", self.gp0_buffer.len());
+
         let command = self.gp0_buffer[0];
 
         match command.gp0_header() {
@@ -244,23 +246,23 @@ impl Gpu {
                         let points: Vec<Point> = vec![
                             Point::new_textured_point(
                                 self.gp0_buffer[1],
-                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[2] & 0xFF) as i16,
+                                ((self.gp0_buffer[2] >> 8) & 0xFF) as u16,
+                                (self.gp0_buffer[2] & 0xFF) as u16,
                             ),
                             Point::new_textured_point(
                                 self.gp0_buffer[3],
-                                ((self.gp0_buffer[4] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[4] & 0xFF) as i16,
+                                ((self.gp0_buffer[4] >> 8) & 0xFF) as u16,
+                                (self.gp0_buffer[4] & 0xFF) as u16,
                             ),
                             Point::new_textured_point(
                                 self.gp0_buffer[5],
-                                ((self.gp0_buffer[6] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[6] & 0xFF) as i16,
+                                ((self.gp0_buffer[6] >> 8) & 0xFF) as u16,
+                                (self.gp0_buffer[6] & 0xFF) as u16,
                             ),
                             Point::new_textured_point(
                                 self.gp0_buffer[7],
-                                ((self.gp0_buffer[8] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[8] & 0xFF) as i16,
+                                ((self.gp0_buffer[8] >> 8) & 0xFF) as u16,
+                                (self.gp0_buffer[8] & 0xFF) as u16,
                             ),
                         ];
 
@@ -306,18 +308,18 @@ impl Gpu {
                         let points: Vec<Point> = vec![
                             Point::new_textured_point(
                                 self.gp0_buffer[1],
-                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[2] & 0xFF) as i16,
+                                ((self.gp0_buffer[2] >> 8) & 0xFF) as u16,
+                                (self.gp0_buffer[2] & 0xFF) as u16,
                             ),
                             Point::new_textured_point(
                                 self.gp0_buffer[3],
-                                ((self.gp0_buffer[4] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[4] & 0xFF) as i16,
+                                ((self.gp0_buffer[4] >> 8) & 0xFF) as u16,
+                                (self.gp0_buffer[4] & 0xFF) as u16,
                             ),
                             Point::new_textured_point(
                                 self.gp0_buffer[5],
-                                ((self.gp0_buffer[6] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[6] & 0xFF) as i16,
+                                ((self.gp0_buffer[6] >> 8) & 0xFF) as u16,
+                                (self.gp0_buffer[6] & 0xFF) as u16,
                             ),
                         ];
                         ////trace!("{:?}", points);
@@ -420,8 +422,8 @@ impl Gpu {
                             trace!("GPU: Tex box");
                             let tl_point = Point::new_textured_point(
                                 self.gp0_buffer[1],
-                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[2] & 0xFF) as i16,
+                                ((self.gp0_buffer[2] >> 8) & 0xFF) as u16,
+                                (self.gp0_buffer[2] & 0xFF) as u16,
                             );
 
                             let size = Point::from_word(self.gp0_buffer[3], 0);
@@ -429,14 +431,14 @@ impl Gpu {
                             self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
                             self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
 
-                            self.draw_textured_box(&tl_point, size.x, size.y, command.get_bit(25));
+                            self.draw_textured_box(&tl_point, size.x as i16, size.y as i16, command.get_bit(25));
                         } else {
                             trace!("GPU: solid box");
                             let tl_point = Point::from_word(self.gp0_buffer[1], 0);
                             let br_point =
                                 Point::from_word_with_offset(self.gp0_buffer[2], 0, tl_point);
 
-                            //trace!("tl: {:?} br: {:?}", tl_point, br_point);
+                            println!("tl: {:?} br: {:?}", tl_point, br_point);
 
                             self.draw_solid_box(
                                 (tl_point.x + self.draw_offset.x) as u32,
@@ -455,8 +457,8 @@ impl Gpu {
                         if command.get_bit(26) {
                             let tl_point = Point::new_textured_point(
                                 self.gp0_buffer[1],
-                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[2] & 0xFF) as i16,
+                                ((self.gp0_buffer[2] >> 8) & 0xFF) as u16,
+                                (self.gp0_buffer[2] & 0xFF) as u16,
                             );
 
                             let size = Point::from_components(8, 8, 0);
@@ -464,7 +466,7 @@ impl Gpu {
                             self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
                             self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
 
-                            self.draw_textured_box(&tl_point, size.x, size.y, command.get_bit(25));
+                            self.draw_textured_box(&tl_point, size.x as i16, size.y as i16, command.get_bit(25));
                         } else {
                             let x1 = self.gp0_buffer[1] & 0xFFFF;
                             let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
@@ -485,8 +487,8 @@ impl Gpu {
                         if command.get_bit(26) {
                             let tl_point = Point::new_textured_point(
                                 self.gp0_buffer[1],
-                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[2] & 0xFF) as i16,
+                                ((self.gp0_buffer[2] >> 8) & 0xFF) as u16,
+                                (self.gp0_buffer[2] & 0xFF) as u16,
                             );
 
                             let size = Point::from_components(16, 16, 0);
@@ -494,7 +496,7 @@ impl Gpu {
                             self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
                             self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
 
-                            self.draw_textured_box(&tl_point, size.x, size.y, command.get_bit(25));
+                            self.draw_textured_box(&tl_point, size.x as i16, size.y as i16, command.get_bit(25));
                         } else {
                             let x1 = self.gp0_buffer[1] & 0xFFFF;
                             let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
@@ -556,7 +558,7 @@ impl Gpu {
                     //Not enough commands
                     return;
                 }
-                trace!("GPU: CPU to VRAM");
+                trace!("GPU: CPU to VRAM length: {}", length);
 
                 let base_x = ((self.gp0_buffer[1] & 0xFFFF) as i16);
                 let base_y = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as i16;
@@ -607,8 +609,8 @@ impl Gpu {
                     0xE3 => {
                         //Set Drawing Area Top Left
                         self.draw_area_tl_point = Point::from_components(
-                            ((command & 0x3FF) as u16) as i16,
-                            (((command >> 10) & 0x1FF) as u16) as i16,
+                            ((command & 0x3FF) as u16) as u16,
+                            (((command >> 10) & 0x1FF) as u16),
                             0,
                         );
                     }
@@ -616,8 +618,8 @@ impl Gpu {
                     0xE4 => {
                         //Set Drawing Area Bottom Right
                         self.draw_area_br_point = Point::from_components(
-                            ((command & 0x3FF) as u16) as i16,
-                            (((command >> 10) & 0x1FF) as u16) as i16,
+                            ((command & 0x3FF) as u16) as u16,
+                            (((command >> 10) & 0x1FF) as u16),
                             0,
                         );
                     }
@@ -628,7 +630,7 @@ impl Gpu {
                         //Set Drawing Offset
                         let x = (command & 0x7FF) as i16;
                         let y = ((command >> 11) & 0x7FF) as i16;
-                        self.draw_offset = Point::from_components(x, y, 0);
+                        self.draw_offset = Point::from_components(x as u16, y as u16, 0);
                     }
 
              
@@ -846,7 +848,7 @@ impl Gpu {
     fn draw_horizontal_line(&mut self, x1: u32, x2: u32, y: u32, fill: u16, transparent: bool) {
         
         for x in x1..x2 {
-            if self.out_of_draw_area(&Point::from_components(x as i16, y as i16, 0)) {
+            if self.out_of_draw_area(&Point::from_components(x as u16, y as u16, 0)) {
                 continue;
             }
             let address = point_to_address(x, y) as usize;
@@ -876,7 +878,7 @@ impl Gpu {
             (x1, x2, x1_color, x2_color)
         };
         for x in start..end {
-            if self.out_of_draw_area(&Point::from_components(x, y, 0)) {
+            if self.out_of_draw_area(&Point::from_components(x as u16, y as u16, 0)) {
                 continue;
             }
             let address = point_to_address(x as u32, y as u32) as usize;
@@ -913,7 +915,7 @@ impl Gpu {
         let (start, end) = if x1 > x2 { (x2, x1) } else { (x1, x2) };
         ////trace!("x1: {} y1: {} x2: {} y2: {}", x1_tex, y1_tex, x2_tex, y2_tex);
         for x in start..end {
-            if self.out_of_draw_area(&Point::from_components(x, y, 0)) {
+            if self.out_of_draw_area(&Point::from_components(x as u16, y as u16, 0)) {
                 continue;
             }
 
@@ -946,13 +948,13 @@ impl Gpu {
     fn draw_textured_box(&mut self, tl_point: &Point, width: i16, height: i16, transparent: bool) {
         for offset in 0..height {
             self.draw_horizontal_line_textured(
-                tl_point.x,
-                tl_point.x + width,
-                tl_point.y + offset,
-                tl_point.tex_y + offset,
-                tl_point.tex_y + offset,
-                tl_point.tex_x,
-                tl_point.tex_x + width,
+                tl_point.x as i16,
+                tl_point.x as i16 + width as i16,
+                tl_point.y as i16 + offset as i16,
+                tl_point.tex_y as i16 + offset as i16,
+                tl_point.tex_y as i16 + offset as i16,
+                tl_point.tex_x as i16,
+                tl_point.tex_x as i16 + width as i16,
                 transparent,
             )
         }
@@ -1026,12 +1028,12 @@ impl Gpu {
         let mut curx2 = p1.x as f32;
 
         for scanline in p1.y..p3.y {
-            let curx1_color = lerp_color(p1.color, p2.color, p1.y, p3.y, scanline);
-            let curx2_color = lerp_color(p1.color, p3.color, p1.y, p3.y, scanline);
+            let curx1_color = lerp_color(p1.color, p2.color, p1.y as i16, p3.y as i16, scanline as i16);
+            let curx2_color = lerp_color(p1.color, p3.color, p1.y as i16, p3.y as i16, scanline as i16);
             self.draw_horizontal_line_shaded(
                 curx1 as i16,
                 curx2 as i16,
-                scanline,
+                scanline as i16,
                 curx1_color,
                 curx2_color,
                 transparent,
@@ -1055,12 +1057,12 @@ impl Gpu {
         let mut curx2 = p3.x as f32;
 
         for scanline in (p1.y..=p3.y).rev() {
-            let curx1_color = lerp_color(p1.color, p3.color, p1.y, p3.y, scanline);
-            let curx2_color = lerp_color(p2.color, p3.color, p1.y, p3.y, scanline);
+            let curx1_color = lerp_color(p1.color, p3.color, p1.y as i16, p3.y as i16, scanline as i16);
+            let curx2_color = lerp_color(p2.color, p3.color, p1.y as i16, p3.y as i16, scanline as i16);
             self.draw_horizontal_line_shaded(
                 (curx1 + 0.5) as i16,
                 (curx2 + 0.5) as i16,
-                scanline,
+                scanline as i16,
                 curx1_color,
                 curx2_color,
                 transparent,
@@ -1084,14 +1086,14 @@ impl Gpu {
         let mut curx2 = p1.x as f32;
 
         for scanline in p1.y..p3.y {
-            let y1 = lerp_coords(p1.tex_y, p3.tex_y, p1.y, p3.y, scanline);
-            let y2 = lerp_coords(p1.tex_y, p2.tex_y, p1.y, p3.y, scanline);
-            let x1 = lerp_coords(p1.tex_x, p3.tex_x, p1.y, p3.y, scanline);
-            let x2 = lerp_coords(p1.tex_x, p2.tex_x, p1.y, p3.y, scanline);
+            let y1 = lerp_coords(p1.tex_y as i16, p3.tex_y as i16, p1.y as i16, p3.y as i16, scanline as i16);
+            let y2 = lerp_coords(p1.tex_y as i16, p2.tex_y as i16, p1.y as i16, p3.y as i16, scanline as i16);
+            let x1 = lerp_coords(p1.tex_x as i16, p3.tex_x as i16, p1.y as i16, p3.y as i16, scanline as i16);
+            let x2 = lerp_coords(p1.tex_x as i16, p2.tex_x as i16, p1.y as i16, p3.y as i16, scanline as i16);
             self.draw_horizontal_line_textured(
                 curx1 as i16,
                 curx2 as i16,
-                scanline,
+                scanline as i16,
                 y1,
                 y2,
                 x1,
@@ -1117,14 +1119,14 @@ impl Gpu {
         let mut curx2 = p3.x as f32;
 
         for scanline in (p1.y..=p3.y).rev() {
-            let y1 = lerp_coords(p1.tex_y, p3.tex_y, p1.y, p3.y, scanline);
-            let y2 = lerp_coords(p2.tex_y, p3.tex_y, p1.y, p3.y, scanline);
-            let x1 = lerp_coords(p1.tex_x, p3.tex_x, p1.y, p3.y, scanline);
-            let x2 = lerp_coords(p2.tex_x, p3.tex_x, p1.y, p3.y, scanline);
+            let y1 = lerp_coords(p1.tex_y as i16, p3.tex_y as i16, p1.y as i16, p3.y as i16, scanline as i16);
+            let y2 = lerp_coords(p2.tex_y as i16, p3.tex_y as i16, p1.y as i16, p3.y as i16, scanline as i16);
+            let x1 = lerp_coords(p1.tex_x as i16, p3.tex_x as i16, p1.y as i16, p3.y as i16, scanline as i16);
+            let x2 = lerp_coords(p2.tex_x as i16, p3.tex_x as i16, p1.y as i16, p3.y as i16, scanline as i16);
             self.draw_horizontal_line_textured(
                 (curx1 + 0.5) as i16,
                 (curx2 + 0.5) as i16,
-                scanline,
+                scanline as i16,
                 y1,
                 y2,
                 x1,
@@ -1145,10 +1147,10 @@ impl Gpu {
         } else if sp[0].y == sp[1].y {
             self.draw_solid_flat_top_triangle(sp[0], sp[1], sp[2], fill, transparent);
         } else {
-            let bound_x = (sp[0].x
-                + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as i16
-                    * (sp[2].x - sp[0].x)) as i16;
-            let bound_point = Point::from_components(bound_x, sp[1].y, 0);
+            let bound_x = sp[0].x
+                + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as u16
+                    * (sp[2].x - sp[0].x);
+            let bound_point = Point::from_components(bound_x as u16, sp[1].y, 0);
             self.draw_solid_flat_bottom_triangle(sp[0], sp[1], bound_point, fill, transparent);
             self.draw_solid_flat_top_triangle(sp[1], bound_point, sp[2], fill, transparent);
         }
@@ -1164,8 +1166,8 @@ impl Gpu {
             self.draw_shaded_flat_top_triangle(sp[0], sp[1], sp[2], transparent);
         } else {
             let bound_x = (sp[0].x
-                + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as i16
-                    * (sp[2].x - sp[0].x)) as i16;
+                + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as u16
+                    * (sp[2].x - sp[0].x));
             let bound_point = Point::from_components(bound_x, sp[1].y, sp[2].color);
             self.draw_shaded_flat_bottom_triangle(sp[0], bound_point, sp[1], transparent);
             self.draw_shaded_flat_top_triangle(sp[1], bound_point, sp[2], transparent);
@@ -1182,14 +1184,14 @@ impl Gpu {
             self.draw_textured_flat_top_triangle(sp[0], sp[1], sp[2], transparent);
         } else {
             let progress =
-                sp[0].x + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as i16;
-            let bound_x = progress * ((sp[2].x - sp[0].x) as i16);
+                sp[0].x + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as u16;
+            let bound_x = progress * ((sp[2].x - sp[0].x));
             let bound_point = Point {
                 x: bound_x,
                 y: sp[1].y,
                 color: 0,
-                tex_x: lerp_coords(sp[0].tex_x, sp[1].tex_x, sp[0].y, sp[1].y, progress),
-                tex_y: lerp_coords(sp[0].tex_y, sp[1].tex_y, sp[0].y, sp[1].y, progress),
+                tex_x: lerp_coords(sp[0].tex_x as i16, sp[1].tex_x as i16, sp[0].y  as i16, sp[1].y as i16, progress as i16) as u16,
+                tex_y: lerp_coords(sp[0].tex_y as i16, sp[1].tex_y as i16, sp[0].y  as i16, sp[1].y as i16, progress as i16) as u16,
             };
 
             self.draw_textured_flat_bottom_triangle(sp[0], bound_point, sp[1], transparent);

@@ -189,51 +189,11 @@ impl R3000 {
 
         
 
-        // if self.pc == 0x80015760 {
-        //     println!("a0 {:#X} a1 {:#X}", self.read_reg(4), self.read_reg(5));
-        //     println!("first {:#X} second{:#X}", self.read_bus_word(0x80121CD4, timers), self.read_bus_word(0x80121C90, timers))
-        // }
+        if self.pc == 0x80016234 {
+            println!("Bit hit");
+        }
 
-        // if self.pc == 0x8008dd40  {
-        //     println!("\nstart");
-        //     //unsafe{LOGGING = true;}
-        //     self.log = true;
-        // }
-
-        // if self.pc == 0x8008dd4c {
-        //     //unsafe{LOGGING = false;}
-        //     self.log = false;
-        //     println!("end\n");
-        //     panic!("stop");
-        // }
-
-        // if self.current_pc == 0x80072898 {
-        //     println!("CD_readm  buf* {:#X} sectors {} mode {}", self.gen_registers[RegisterNames::a0 as usize], self.gen_registers[RegisterNames::a1 as usize], self.gen_registers[RegisterNames::a2 as usize]);
-        // }
-
-        // if self.pc == 0x800705c4 {
-        //     println!("cd_read called sectors {} i {} buf* {:#X} ra {:#X}",self.gen_registers[RegisterNames::a0 as usize], self.gen_registers[RegisterNames::a1 as usize], self.gen_registers[RegisterNames::a2 as usize], self.gen_registers[31]);
-        // }
-
-        // if self.current_pc == 0x80070d24 {
-        //     println!("CDRead called sectors {} buf* {:#X} mode {:#X} ra {:#X}", self.gen_registers[RegisterNames::a0 as usize], self.gen_registers[RegisterNames::a1 as usize], self.gen_registers[RegisterNames::a2 as usize], self.read_reg(RegisterNames::ra as u8));
-        // }
-
-        // if self.pc == 0x8008dd40 {
-        //     println!("malloc called size {} ra {:#X}", self.read_reg(RegisterNames::a0 as u8), self.read_reg(31));
-        // }
-
-        // if self.pc == 0x8008be98 {
-        //     println!("higher hit ra {:#X}", self.read_reg(31));
-        // }
-
-        // if self.current_pc == 0x8008dd80 {
-        //     println!("After read sync V0 {:#X}", self.read_reg(RegisterNames::v0 as u8))
-        // }
-
-        // if self.pc == 0x8008bef8 {
-        //     println!("Higher read returning {:#X}", self.read_reg(RegisterNames::v0 as u8));
-        // }
+        
         
 
         let instruction = self.main_bus.read_word(self.pc);
@@ -895,7 +855,7 @@ impl R3000 {
         let addr =
             (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         if addr % 4 != 0 {
-            trace!("AdEl fired by op_lw");
+            println!("AdEl fired by op_lw addr {:#X}", addr);
             self.fire_exception(Exception::AdEL);
         } else {
             let val = self.read_bus_word(addr as u32, timers);
@@ -1355,14 +1315,15 @@ impl R3000 {
     pub fn write_bus_word(&mut self, addr: u32, val: u32, timers: &mut TimerState) {
         self.last_touched_addr = addr & 0x1fffffff;
 
-        if self.last_touched_addr == 0x1F8010B0 && val == 0x8011F9E8 {
-            println!("TOUCHED BAD PART pc {:#X} ra {:#X}", self.current_pc, self.read_reg(31));
-        }
+       
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
             return;
         }
         
+        if addr == 0x1F8010A4 {
+            println!("Wrote DMA block. pc {:#X}", self.current_pc);
+        }
 
         match addr & 0x1fffffff {
             0x1F801070 => {
@@ -1448,19 +1409,19 @@ impl R3000 {
     }
 
     fn delay_write_reg(&mut self, register_number: u8, value: u32) {
-        self.write_reg(register_number, value);
-    //     if register_number != 0 {
-    //         //Get rid of old writes to the same register
-    //         for i in (0..self.load_delays.len()).rev() {
-    //             if self.load_delays[i].register == register_number {
-    //                 self.load_delays.remove(i);
-    //             }
-    //         }
-    //         self.load_delays.push(LoadDelay {
-    //             register: register_number,
-    //             value: value,
-    //             cycle_loaded: self.cycle_count,
-    //         });
-    //     }
+    //self.write_reg(register_number, value);
+        if register_number != 0 {
+            //Get rid of old writes to the same register
+            for i in (0..self.load_delays.len()).rev() {
+                if self.load_delays[i].register == register_number {
+                    self.load_delays.remove(i);
+                }
+            }
+            self.load_delays.push(LoadDelay {
+                register: register_number,
+                value: value,
+                cycle_loaded: self.cycle_count,
+            });
+        }
     }
 }

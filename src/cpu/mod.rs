@@ -128,8 +128,8 @@ impl R3000 {
 
         if self.load_exe && self.pc == 0xbfc0700c {
             println!("Jumping to exe...");
-            //self.pc = 0x80010000;
-            self.pc = 0x8001F9AC;
+            self.pc = 0x80010000;
+            //self.pc = 0x8001F9AC;
             //self.log = true;
         }
      
@@ -162,7 +162,7 @@ impl R3000 {
         }
 
         if self.pc == 0xA0 {
-            //trace!("SYSCALL A({:#X}) pc: {:#X}", self.read_reg(9), self.current_pc);
+            //println!("SYSCALL A({:#X}) pc: {:#X}", self.read_reg(9), self.current_pc);
             if self.read_reg(9) == 0x40 {
                 panic!("UnhandledException hit!");
             }
@@ -172,69 +172,46 @@ impl R3000 {
             //trace!("SYSCALL C({:#X}) pc: {:#X}", self.read_reg(9), self.current_pc);
         }
 
-        //Check for vblank
-        if self.main_bus.gpu.consume_vblank() {
-            self.fire_external_interrupt(InterruptSource::VBLANK);
-        };
+        // if self.pc == 0x8006ed58 {
+        //     println!("malloc({0} [{0:#X}]) last_pc = {1:#X}", self.read_reg(RegisterNames::a0 as u8), self.current_pc);
+        // }
 
+        // if self.pc == 0x8008dd48 {
+        //     println!("malloc returned {:#X}", self.read_reg(RegisterNames::v0 as u8));
+        // }
+
+        // if self.pc == 0x80072db4{
+        //     println!("CD_getsector({:#X})", self.read_reg(RegisterNames::a0 as u8));
+        // }
+
+        // if self.pc == 0x8006ef18 {
+        //     println!("Malloc return route 1");
+        // }
+
+        // if self.pc == 0x8006ee08 {
+        //     println!("malloc return route 2");
+        // }
+
+        // if self.pc == 0x8008dcc4 {
+        //     println!("poll_drive(... , ... , {:#X}) called from {:#X}", self.read_reg(RegisterNames::a2 as u8),self.current_pc);
+        // }
+
+        
         // Handle interrupts
         let mut cause = self.cop0.read_reg(13);
         cause.set_bit(10, self.i_status & self.i_mask != 0);
         self.cop0.write_reg(13, cause);
-
-
+        
+        
         if self.cop0.interrupts_enabled() && cause & 0x700 != 0 {
+            //println!("Interrupt hit! i_status: {:#X}", self.i_status);
             self.fire_exception(Exception::Int);
         }
-
         
-
-        // if self.pc == 0x80015760 {
-        //     println!("a0 {:#X} a1 {:#X}", self.read_reg(4), self.read_reg(5));
-        //     println!("first {:#X} second{:#X}", self.read_bus_word(0x80121CD4, timers), self.read_bus_word(0x80121C90, timers))
-        // }
-
-        // if self.pc == 0x8008dd40  {
-        //     println!("\nstart");
-        //     //unsafe{LOGGING = true;}
-        //     self.log = true;
-        // }
-
-        // if self.pc == 0x8008dd4c {
-        //     //unsafe{LOGGING = false;}
-        //     self.log = false;
-        //     println!("end\n");
-        //     panic!("stop");
-        // }
-
-        // if self.current_pc == 0x80072898 {
-        //     println!("CD_readm  buf* {:#X} sectors {} mode {}", self.gen_registers[RegisterNames::a0 as usize], self.gen_registers[RegisterNames::a1 as usize], self.gen_registers[RegisterNames::a2 as usize]);
-        // }
-
-        // if self.pc == 0x800705c4 {
-        //     println!("cd_read called sectors {} i {} buf* {:#X} ra {:#X}",self.gen_registers[RegisterNames::a0 as usize], self.gen_registers[RegisterNames::a1 as usize], self.gen_registers[RegisterNames::a2 as usize], self.gen_registers[31]);
-        // }
-
-        // if self.current_pc == 0x80070d24 {
-        //     println!("CDRead called sectors {} buf* {:#X} mode {:#X} ra {:#X}", self.gen_registers[RegisterNames::a0 as usize], self.gen_registers[RegisterNames::a1 as usize], self.gen_registers[RegisterNames::a2 as usize], self.read_reg(RegisterNames::ra as u8));
-        // }
-
-        // if self.pc == 0x8008dd40 {
-        //     println!("malloc called size {} ra {:#X}", self.read_reg(RegisterNames::a0 as u8), self.read_reg(31));
-        // }
-
-        // if self.pc == 0x8008be98 {
-        //     println!("higher hit ra {:#X}", self.read_reg(31));
-        // }
-
-        // if self.current_pc == 0x8008dd80 {
-        //     println!("After read sync V0 {:#X}", self.read_reg(RegisterNames::v0 as u8))
-        // }
-
-        // if self.pc == 0x8008bef8 {
-        //     println!("Higher read returning {:#X}", self.read_reg(RegisterNames::v0 as u8));
-        // }
-        
+        //Check for vblank
+        if self.main_bus.gpu.consume_vblank() {
+            self.fire_external_interrupt(InterruptSource::VBLANK);
+        };
 
         let instruction = self.main_bus.read_word(self.pc);
         self.current_pc = self.pc;
@@ -253,8 +230,8 @@ impl R3000 {
         if self.log  {
             self.log_instruction(instruction);
         }
-        self.execute_instruction(instruction, timers);
         self.cycle_count = self.cycle_count.wrapping_add(1);
+        self.execute_instruction(instruction, timers);
 
 
         // if self.main_bus.last_touched_addr == 0x121CA8 {
@@ -278,8 +255,8 @@ impl R3000 {
                     self.load_delays.remove(i);
                 }
             }
-            self.execute_instruction(delay_instruction, timers);
             self.cycle_count = self.cycle_count.wrapping_add(1);
+            self.execute_instruction(delay_instruction, timers);
             self.exec_delay = false;
             self.delay_slot = 0;    
         }
@@ -832,6 +809,7 @@ impl R3000 {
                 reg_val = ld.value;
             }
         }
+        
 
         self.delay_write_reg(
             instruction.rt(),
@@ -983,7 +961,9 @@ impl R3000 {
             instruction.rt(),
             ((self.read_reg(instruction.rs())).wrapping_add(instruction.immediate_sign_extended())) as u32,
         );
-        //trace!("ADDIU result {:#X}", self.read_reg(instruction.rt()));
+        if self.current_pc == 0x8008dd38 {
+            println!("ADDIU rs {:#X} imm {:#X}", self.read_reg(instruction.rs()), instruction.immediate_sign_extended());
+        }
     }
 
     fn op_addi(&mut self, instruction: u32) {
@@ -1304,7 +1284,7 @@ impl R3000 {
     }
 
     pub fn fire_exception(&mut self, exception: Exception) {
-        println!("CPU EXCEPTION: Type: {:?} PC: {:#X}", exception, self.current_pc);
+        //println!("CPU EXCEPTION: Type: {:?} PC: {:#X}", exception, self.current_pc);
         self.cop0.set_cause_execode(&exception);
 
 
@@ -1335,6 +1315,7 @@ impl R3000 {
     }
 
     pub fn fire_external_interrupt(&mut self, source: InterruptSource) {
+        //println!("Recieved interrupt interrupt request from: {:?}", source);
         let mask_bit = source.clone() as usize;
         self.i_status.set_bit(mask_bit, true);
     }
@@ -1355,6 +1336,10 @@ impl R3000 {
     pub fn write_bus_word(&mut self, addr: u32, val: u32, timers: &mut TimerState) {
         self.last_touched_addr = addr & 0x1fffffff;
 
+        if addr == 0x800c1788 && val == 0x8011F9C8 {
+            println!("wrote bad madr {:#X}", self.current_pc);
+        }
+
         if self.last_touched_addr == 0x1F8010B0 && val == 0x8011F9E8 {
             println!("TOUCHED BAD PART pc {:#X} ra {:#X}", self.current_pc, self.read_reg(31));
         }
@@ -1366,7 +1351,8 @@ impl R3000 {
 
         match addr & 0x1fffffff {
             0x1F801070 => {
-                self.i_status &= val;
+
+                self.i_status &= val & 0x3FF;
             }
             0x1F801074 => {
                 //println!("Writing I_MASK val {:#X}", val);
@@ -1407,7 +1393,7 @@ impl R3000 {
         }
 
         match addr & 0x1fffffff {
-            0x1F801070 => self.i_status &= val as u32,
+            0x1F801070 => self.i_status &= (val & 0x3FF) as u32,
             0x1F801074 => self.i_mask = val as u32,
             0x1F801100..=0x1F801128 => timers.write_half_word(addr & 0x1fffffff, val),
             _ => self.main_bus.write_half_word(addr, val),
@@ -1421,7 +1407,7 @@ impl R3000 {
             return;
         }
         match addr & 0x1fffffff {
-            0x1F801070 => self.i_status &= val as u32,
+            0x1F801070 => self.i_status &= (val as u32) & 0x3FF,
             0x1F801074 => self.i_mask = val as u32,
             _ => self.main_bus.write_byte(addr, val),
         };
@@ -1449,18 +1435,18 @@ impl R3000 {
 
     fn delay_write_reg(&mut self, register_number: u8, value: u32) {
         self.write_reg(register_number, value);
-    //     if register_number != 0 {
-    //         //Get rid of old writes to the same register
-    //         for i in (0..self.load_delays.len()).rev() {
-    //             if self.load_delays[i].register == register_number {
-    //                 self.load_delays.remove(i);
-    //             }
-    //         }
-    //         self.load_delays.push(LoadDelay {
-    //             register: register_number,
-    //             value: value,
-    //             cycle_loaded: self.cycle_count,
-    //         });
-    //     }
+        // if register_number != 0 {
+        //     //Get rid of old writes to the same register
+        //     for i in (0..self.load_delays.len()).rev() {
+        //         if self.load_delays[i].register == register_number {
+        //             self.load_delays.remove(i);
+        //         }
+        //     }
+        //     self.load_delays.push(LoadDelay {
+        //         register: register_number,
+        //         value: value,
+        //         cycle_loaded: self.cycle_count,
+        //     });
+        // }
     }
 }

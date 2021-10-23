@@ -4,7 +4,7 @@ use bit_field::BitField;
 use log::{error, trace};
 
 const CYCLES_PER_SCANLINE: u32 = 3413;
-const TOTAL_SCANLINES: u32 = 263;
+const TOTAL_SCANLINES: u32 = 240;
 
 #[derive(Copy, Clone, Debug)]
 enum TextureColorMode {
@@ -236,10 +236,12 @@ impl Gpu {
                 self.blend_enabled = self.gp0_buffer[0].get_bit(24);
                 self.blend_color = fill;
                 if is_quad {
-                    if is_textured && is_gouraud {
-                        //Should be blending in colors. Do that later
-                        //trace!("Tried to try draw texture blended quad!");
-                    } else if is_textured {
+                    // if is_textured && is_gouraud {
+                    //    //Should be blending in colors. Do that later
+                    //    trace!("Tried to try draw texture blended quad!");
+                    //} else 
+                    //
+                   if is_textured {
                         trace!("GPU: Tex quad");
                         let points: Vec<Point> = vec![
                             Point::new_textured_point(
@@ -263,6 +265,8 @@ impl Gpu {
                                 (self.gp0_buffer[8] & 0xFF) as i16,
                             ),
                         ];
+
+                        trace!("points {:?}", points);
 
                         self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
                         self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
@@ -648,6 +652,7 @@ impl Gpu {
 
             _ => error!("unknown gp0 {:#X}!", command.gp0_header()),
         }
+        trace!("Command was {:#X}", command);
         //Made it to the end, so the command must have been executed
         self.gp0_clear();
     }

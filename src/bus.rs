@@ -77,10 +77,6 @@ impl MainBus {
         let addr = translate_address(og_addr);
         self.last_touched_addr = addr;
 
-        if addr == 0x7C7C8 {
-            println!("0x7c7c8 written with val {:#X}", word);
-        }
-
         match addr {
             0x1F802002 => info!("Serial: {}", word),
             0x1F802023 => info!("DUART A: {}", word),

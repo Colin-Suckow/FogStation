@@ -358,11 +358,9 @@ impl Controllers {
 pub(super) fn controller_execute_cycle(cpu: &mut R3000) {
     if cpu.main_bus.controllers.irq_cycle_timer > 0 {
         // We are waiting for the dumb ack delay to expire
-        //println!("{} irq {:?}", cpu.main_bus.controllers.irq_cycle_timer, cpu.main_bus.controllers.pending_irq);
         cpu.main_bus.controllers.irq_cycle_timer -= 1;
     } else if cpu.main_bus.controllers.pending_irq {
         // The dumb ack delay has expired, so now we can fire an INT7
-        //println!("Trying to fire ack interrupt");
         cpu.fire_external_interrupt(InterruptSource::Controller);
         cpu.main_bus.controllers.pending_irq = false;
     }

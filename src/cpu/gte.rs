@@ -25,6 +25,10 @@ impl Color {
         self.b = ((val >> 16) & 0xFF) as u8;
         self.c = ((val >> 24) & 0xFF) as u8;
     }
+
+    fn word(&self) -> u32 {
+        (self.r as u32) | ((self.g as u32) << 8) | ((self.b as u32) << 16)| ((self.c as u32) << 24)
+    }
 }
 
 pub(super) struct GTE {
@@ -263,7 +267,7 @@ impl GTE {
             28 => {self.DQB = val as i32},
             29 => {self.ZSF3 = val as i16},
             30 => {self.ZSF4 = val as i16},
-            _ => println!("Tried to write unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg)
+            _ => panic!("Tried to write unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg)
         }
     }
 
@@ -291,7 +295,7 @@ impl GTE {
             10 => {self.IR2 = val as i16},
             11 => {self.IR3 = val as i16},
             30 => self.LZCS = val as i32,
-            _ => println!("Tried to write unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
+            _ => panic!("Tried to write unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
         }
     }
 
@@ -311,18 +315,23 @@ impl GTE {
             7 => self.OTZ as u32,
             8 => self.IR0 as u32,
 
-            22 => 0xFFFF, //rgb2
+            22 => self.RGB.word(), //rgb2
             12 => (self.SX0 as u32) << 16 | self.SY0 as u32,
             13 => (self.SX1 as u32) << 16 | self.SY1 as u32,
             14 => (self.SX2 as u32) << 16 | self.SY2 as u32,
-            _ => {println!("Tried to read unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg); 10}
+            19 => self.SZ3 as u32,
+
+            25 => self.MAC1 as u32,
+            26 => self.MAC2 as u32,
+            27 => self.MAC3 as u32,
+            _ => panic!("Tried to read unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
         }
     }
 
     pub(super) fn control_register(&self, reg: usize) -> u32 {
         match reg {
             31 => self.FLAG,
-            _ => {println!("Tried to read unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg); 10}
+            _ => panic!("Tried to read unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg)
         }
     }
 
@@ -333,7 +342,7 @@ impl GTE {
             0x13 => self.ncds(),
             0x30 => self.rtpt(command),
             0x2d => self.avsz3(),
-            _ => println!("Unknown GTE command {:#X}!", command & 0x3F)
+            _ => panic!("Unknown GTE command {:#X}!", command & 0x3F)
         };
     }
 }
@@ -371,97 +380,18 @@ impl GTE {
 // Internal GTE commands
 impl GTE {
     fn rtpt(&mut self, command: u32) {
-        // wow this is a mess
-        //v0
-        self.MAC1 = (self.TRX * 0x1000 + (self.RT11*self.VX0 + self.RT12*self.VY0 + self.RT13*self.VZ0) as i32) >> ((command.get_bit(19) as usize) * 12);
-        self.MAC2 = (self.TRY * 0x1000 + (self.RT21*self.VX0 + self.RT22*self.VY0 + self.RT23*self.VZ0) as i32) >> ((command.get_bit(19) as usize) * 12);
-        self.MAC3 = (self.TRZ * 0x1000 + (self.RT31*self.VX0 + self.RT32*self.VY0 + self.RT33*self.VZ0) as i32) >> ((command.get_bit(19) as usize) * 12);
-        self.IR1 = self.MAC1 as i16;
-        self.IR2 = self.MAC2 as i16;
-        self.IR3 = self.MAC3 as i16;
-        self.push_sz((self.MAC3 >> ((!command.get_bit(19) as usize) * 12)) as u16);
-        
-        if self.SZ3 == 0 {
-            println!("sz3 tried to divide by 0 :(");
-            return;
-        }
-        
-        let mut div_val = ((self.H as u32*0x20000/self.SZ3 as u32)+1)/2;
-        if div_val > 0x1FFFF {
-            div_val = 0x1FFFF;
-            self.FLAG.set_bit(17, true);
-        }
-        self.push_sx(((div_val * self.IR1 as u32 + self.OFX as u32) / 0x10000) as u16);
-        self.push_sy(((div_val * self.IR2 as u32 + self.OFY as u32) / 0x10000) as u16);
-        self.IR0 = ((div_val * self.IR1 as u32 + self.OFX as u32) / 0x10000) as i16;
-        
-        self.MAC0 = (div_val * self.IR1 as u32 + self.OFX as u32) as i32;
-        self.SX0 = (self.MAC0 as i32 / 0x10000) as u16;
-        
-        self.MAC0 = (div_val * self.IR2 as u32 + self.OFY as u32) as i32;
-        self.SY0 = (self.MAC0 as i32 / 0x10000) as u16;
-        
-        self.MAC0 = (div_val * self.DQB as u32 + self.DQA as u32) as i32;
-        self.IR0 = (self.MAC0 as i32 / 0x1000) as i16;
-        
-        
-        //v1
-        
-        self.MAC1 = (self.TRX * 0x1000 + (self.RT11*self.VX1 + self.RT12*self.VY1 + self.RT13*self.VZ1) as i32) >> ((command.get_bit(19) as usize) * 12);
-        self.MAC2 = (self.TRY * 0x1000 + (self.RT21*self.VX1 + self.RT22*self.VY1 + self.RT23*self.VZ1) as i32) >> ((command.get_bit(19) as usize) * 12);
-        self.MAC3 = (self.TRZ * 0x1000 + (self.RT31*self.VX1 + self.RT32*self.VY1 + self.RT33*self.VZ1) as i32) >> ((command.get_bit(19) as usize) * 12);
-        self.IR1 = self.MAC1 as i16;
-        self.IR2 = self.MAC2 as i16;
-        self.IR3 = self.MAC3 as i16;
-        self.push_sz((self.MAC3 >> ((!command.get_bit(19) as usize) * 12)) as u16);
-        
-        let mut div_val = ((self.H as u32*0x20000/self.SZ3 as u32)+1)/2;
-        if div_val > 0x1FFFF {
-            div_val = 0x1FFFF;
-            self.FLAG.set_bit(17, true);
-        }
-        self.push_sx(((div_val * self.IR1 as u32 + self.OFX as u32) / 0x10000) as u16);
-        self.push_sy(((div_val * self.IR2 as u32 + self.OFY as u32) / 0x10000) as u16);
-        self.IR0 = ((div_val * self.IR1 as u32 + self.OFX as u32) / 0x10000) as i16;
-        
-        self.MAC0 = (div_val * self.IR1 as u32 + self.OFX as u32) as i32;
-        self.SX1 = (self.MAC0 as i32 / 0x10000) as u16;
-        
-        self.MAC0 = (div_val * self.IR2 as u32 + self.OFY as u32) as i32;
-        self.SY1 = (self.MAC0 as i32 / 0x10000) as u16;
-        
-        self.MAC0 = (div_val * self.DQB as u32 + self.DQA as u32) as i32;
-        self.IR0 = (self.MAC0 as i32 / 0x1000) as i16;
-        
-        
-        //v2
-        self.MAC1 = (self.TRX * 0x1000 + (self.RT11*self.VX2 + self.RT12*self.VY2 + self.RT13*self.VZ2) as i32) >> ((command.get_bit(19) as usize) * 12);
-        self.MAC2 = (self.TRY * 0x1000 + (self.RT21*self.VX2 + self.RT22*self.VY2 + self.RT23*self.VZ2) as i32) >> ((command.get_bit(19) as usize) * 12);
-        self.MAC3 = (self.TRZ * 0x1000 + (self.RT31*self.VX2 + self.RT32*self.VY2 + self.RT33*self.VZ2) as i32) >> ((command.get_bit(19) as usize) * 12);
-        self.IR1 = self.MAC1 as i16;
-        self.IR2 = self.MAC2 as i16;
-        self.IR3 = self.MAC3 as i16;
-        self.push_sz((self.MAC3 >> ((!command.get_bit(19) as usize) * 12)) as u16);
-        
-        let mut div_val = ((self.H as u32*0x20000/self.SZ3 as u32)+1)/2;
-        if div_val > 0x1FFFF {
-            div_val = 0x1FFFF;
-            self.FLAG.set_bit(17, true);
-        }
-        self.push_sx(((div_val * self.IR1 as u32 + self.OFX as u32) / 0x10000) as u16);
-        self.push_sy(((div_val * self.IR2 as u32 + self.OFY as u32) / 0x10000) as u16);
-        self.IR0 = ((div_val * self.IR1 as u32 + self.OFX as u32) / 0x10000) as i16;
-        
-        self.MAC0 = (div_val * self.IR1 as u32 + self.OFX as u32) as i32;
-        self.SX2 = (self.MAC0 as i32 / 0x10000) as u16;
-        
-        self.MAC0 = (div_val * self.IR2 as u32 + self.OFY as u32) as i32;
-        self.SY2 = (self.MAC0 as i32 / 0x10000) as u16;
-        
-        self.MAC0 = (div_val * self.DQB as u32 + self.DQA as u32) as i32;
-        self.IR0 = (self.MAC0 as i32 / 0x1000) as i16;
-        
-        
+        println!("\nRTPT\n");
+        println!("vx0 {} vy0 {} vz0 {}", self.VX0, self.VY0, self.VZ0);
+        println!("vx1 {} vy1 {} vz1 {}", self.VX1, self.VY1, self.VZ1);
+        println!("vx2 {} vy2 {} vz2 {}", self.VX2, self.VY2, self.VZ2);
+  
+        let shift = (command.get_bit(19) as usize) * 12;
+        println!("Shift is {}", shift);
+
+        self.do_rtps(self.VX0, self.VY0, self.VZ0, shift, false);
+        self.do_rtps(self.VX1, self.VY1, self.VZ1, shift, false);
+        self.do_rtps(self.VX2, self.VY2, self.VZ2, shift, true);
+
         println!("sx0 {} sy0 {} otz {}", self.SX0, self.SY0, self.OTZ);
         println!("sx1 {} sy1 {} otz {}", self.SX1, self.SY1, self.OTZ);
         println!("sx2 {} sy2 {} otz {}", self.SX2, self.SY2, self.OTZ);
@@ -469,7 +399,7 @@ impl GTE {
     }
 
     fn nclip(&mut self) {
-        self.MAC0 = (self.SX0 * self.SY1 + self.SX1 * self.SY2 + self.SX2 * self.SY0 - self.SX0 * self.SY2 - self.SX1 * self.SY0 - self.SX2 * self.SY1) as i32;
+        self.MAC0 = (((self.SX0 as i64) * (self.SY1 as i64)) + ((self.SX1 as i64) * (self.SY2 as i64)) + ((self.SX2 as i64) * (self.SY0 as i64)) - ((self.SX0 as i64) * (self.SY2 as i64)) - ((self.SX1 as i64) * (self.SY0 as i64)) - (self.SX2 as i64) * ((self.SY1 as i64))) as i32;
     }
 
     fn ncds(&mut self) {
@@ -477,11 +407,52 @@ impl GTE {
     }
 
     fn avsz3(&mut self) {
-        let avg = (self.SZ1 + self.SZ2 + self.SZ3) / 4;
-        self.MAC0 = (avg as i16 * self.ZSF3) as i32;
-        self.OTZ = (self.MAC0 / 0x1000) as u16;
+        let result = (self.ZSF3 as i64) * ((self.SZ1 as u32) + (self.SZ2 as u32) + (self.SZ3 as u32)) as i64;
+        println!("result : {}", result);
+        self.MAC0 = result as i32;
+        self.OTZ = (result >> 12) as u16;
+    }
+
+
+}
+
+
+// Command helper functions
+impl GTE {
+    fn do_rtps(&mut self,  VX: i16, VY: i16, VZ: i16, shift: usize, last: bool) {
+        let x = ((self.TRX as i64) * 0x1000 + ((self.RT11 as i64) * (VX as i64) + (self.RT12 as i64) * (VY as i64) + (self.RT13 as i64)* VZ as i64)) >> shift;
+        let y = ((self.TRY as i64) * 0x1000 + ((self.RT21 as i64) * (VX as i64) + (self.RT22 as i64) * (VY as i64) + (self.RT23 as i64)* VZ as i64)) >> shift;
+        let z = ((self.TRZ as i64) * 0x1000 + ((self.RT31 as i64) * (VX as i64) + (self.RT32 as i64) * (VY as i64) + (self.RT33 as i64)* VZ as i64)) >> shift;
+
+        self.MAC1 = x as i32;
+        self.MAC2 = y as i32;
+        self.MAC3 = z as i32;
+        
+        self.IR1 = self.MAC1 as i16;
+        self.IR2 = self.MAC2 as i16;
+        self.IR3 = self.MAC3 as i16;
+        
+        self.push_sz((z>> (12 - shift)) as u16);
+        
+        if self.SZ3 == 0 {
+            panic!("sz3 tried to divide by 0 :(");
+        }
+        
+        let mut div_val = ((self.H as u32*0x20000/self.SZ3 as u32)+1)/2;
+        if div_val > 0x1FFFF {
+            div_val = 0x1FFFF;
+            self.FLAG.set_bit(17, true);
+        }
+
+        self.push_sx(((div_val * self.IR1 as u32 + self.OFX as u32) / 0x10000) as u16);
+        self.push_sy(((div_val * self.IR2 as u32 + self.OFY as u32) / 0x10000) as u16);
+
+        if last {
+            self.IR0 = ((div_val * self.DQA as u32 + self.DQB as u32) / 0x10000) as i16;
+        }
     }
 }
+
 
 
 const data_reg_name: [&str; 32] = [

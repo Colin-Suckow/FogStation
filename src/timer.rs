@@ -213,7 +213,7 @@ impl TimerState {
     }
 
     pub fn write_half_word(&mut self, addr: u32, value: u16) {
-        println!("Tried to write timer half addr {:#X} val {:#X}", addr, value);
+        //println!("Tried to write timer half addr {:#X} val {:#X}", addr, value);
         match addr {
             0x1F801100 => self.timer_0.value &= (value as u32) & 0xFFFF0000,
             0x1F801102 => self.timer_0.value &= ((value as u32) << 16) & 0xFFFF,

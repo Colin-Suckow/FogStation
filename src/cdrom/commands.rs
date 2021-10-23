@@ -64,17 +64,20 @@ pub(super) fn init(state: &mut CDDrive) -> Packet {
     let mut first_response = stat(state, 0x0a);
     let mut second_response = stat(state, 0x0a);
     second_response.cause = IntCause::INT2;
+    first_response.execution_cycles = 0x13cce;
     first_response.extra_response = Some(Box::new(second_response));
     first_response
 }
 
 pub(super) fn set_loc(state: &mut CDDrive, minutes: u8, seconds: u8, frames: u8) -> Packet {
-    state.seek_target = DiscIndex::new(minutes as usize, seconds as usize, frames as usize);
+    state.next_seek_target = DiscIndex::new(minutes as usize, seconds as usize, frames as usize);
     state.seek_complete = false;
-    state.read_offset = 0;
     state.data_queue.clear();
+
     //println!("set_loc to {:?}, total sectors: {}", state.seek_target, state.seek_target.as_address() / BYTES_PER_SECTOR as u32);
-    stat(state, 0x2)
+    let main_response = stat(state, 0x2);
+
+    main_response
 }
 
 //Listed in psx-spx as SeekL
@@ -82,6 +85,10 @@ pub(super) fn seek_data(state: &mut CDDrive) -> Packet {
     state.drive_state = DriveState::Idle;
     let mut second_response = stat(state, 0x15);
     second_response.execution_cycles = AVG_FIRST_RESPONSE_TIME;
+
+    state.read_offset = 0;
+    state.current_seek_target = state.next_seek_target.clone();
+    state.seek_complete = true;
 
     state.drive_state = DriveState::Seek;
     let mut first_response = stat(state, 0x15);
@@ -113,6 +120,7 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
 
     if !state.seek_complete {
         state.read_offset = 0;
+        state.current_seek_target = state.next_seek_target.clone();
         state.seek_complete = true;
     }
 
@@ -145,8 +153,7 @@ pub(super) fn pause_read(state: &mut CDDrive) -> Packet {
     };
 
     state.drive_state = DriveState::Idle;
-    state.read_offset = 0;
-    state.read_enabled = false;
+    //state.read_offset = 0;
 
     let response_packet = Packet {
         cause: IntCause::INT2,
@@ -184,7 +191,7 @@ pub(super) fn get_tn(state: &mut CDDrive) -> Packet {
 // In practice this will probably send code instead of music to the SPU, and play some crazy audio
 // Future colin, you have been warned
 pub(super) fn get_td(state: &mut CDDrive, track: u8) -> Packet {
-    trace!("get_td track {}", track);
+    println!("get_td track {}", track);
     let mut initial_response = stat(state, 0x14);
     initial_response.response.push(0x0);
     initial_response.response.push(0x2);
@@ -193,5 +200,9 @@ pub(super) fn get_td(state: &mut CDDrive, track: u8) -> Packet {
 }
 
 pub(super) fn play(state: &mut CDDrive) -> Packet {
+    stat(state, 0x3)
+}
+
+pub(super) fn mute(state: &mut CDDrive) -> Packet {
     stat(state, 0x3)
 }

@@ -4,11 +4,13 @@ use disc::*;
 use log::{trace, warn};
 
 use crate::cpu::{InterruptSource, R3000};
-use std::{borrow::{Borrow, BorrowMut}, collections::VecDeque};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    collections::VecDeque,
+};
 
 mod commands;
 pub mod disc;
-
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub(super) enum DriveState {
@@ -29,14 +31,14 @@ pub(super) enum MotorState {
 #[derive(Debug, Copy, Clone)]
 pub enum SectorSize {
     DataOnly = 0x800,
-    WholeSector = 0x924
+    WholeSector = 0x924,
 }
 
 enum DriveSpeed {
     Single,
-    Double
+    Double,
 }
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub(super) enum IntCause {
     INT1,
     INT2,
@@ -65,7 +67,7 @@ impl IntCause {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(super) struct Packet {
     cause: IntCause,
     response: Vec<u8>,
@@ -76,14 +78,13 @@ pub(super) struct Packet {
 
 #[derive(Debug)]
 pub(super) struct Block {
-    data: Vec<u8>
+    data: Vec<u8>,
 }
-
 
 pub struct CDDrive {
     cycle_counter: u32,
     command_start_cycle: u32,
-    pending_response: Option<Packet>,
+    running_commands: Vec<Packet>,
 
     drive_state: DriveState,
     motor_state: MotorState,
@@ -99,7 +100,8 @@ pub struct CDDrive {
 
     status_index: u8,
 
-    seek_target: DiscIndex,
+    current_seek_target: DiscIndex,
+    next_seek_target: DiscIndex,
     seek_complete: bool,
     read_offset: usize,
 
@@ -118,7 +120,7 @@ impl CDDrive {
             cycle_counter: 0,
             command_start_cycle: 0,
 
-            pending_response: None,
+            running_commands: Vec::new(),
 
             parameter_queue: VecDeque::new(),
             data_queue: Vec::new(),
@@ -133,7 +135,8 @@ impl CDDrive {
             motor_state: MotorState::On,
             drive_mode: 0,
 
-            seek_target: DiscIndex::new(0, 0, 0),
+            next_seek_target: DiscIndex::new(0, 0, 0),
+            current_seek_target: DiscIndex::new(0, 0, 0),
             seek_complete: false,
             read_offset: 0,
 
@@ -168,8 +171,7 @@ impl CDDrive {
             0x1F801803 => match self.status_index {
                 0 => {
                     self.want_data = val.get_bit(7); //Only handle want_data. This will probably bite me later
-    
-                },
+                }
                 1 => self.write_interrupt_flag_register(val),
                 2 => trace!("CD: Wrote Left-CD-Out Left SPU volume"),
                 3 => (), // Apply audio changes
@@ -183,7 +185,11 @@ impl CDDrive {
     }
 
     pub fn read_byte(&mut self, addr: u32) -> u8 {
-        //println!("CDROM reading {:#X}.Index({})", addr, self.status_index & 0x3);
+        // println!(
+        //     "CDROM reading {:#X}.Index({})",
+        //     addr,
+        //     self.status_index & 0x3
+        // );
         match addr {
             0x1F801800 => self.get_status_register(),
             0x1F801801 => match self.status_index {
@@ -222,51 +228,44 @@ impl CDDrive {
     }
 
     fn execute_command(&mut self, command: u8) {
-        let is_readn = if let Some(res) = &self.pending_response {
-            res.cause == IntCause::INT1
-        } else {
-            false
-        };
-
-        // Make sure theres no pending command
-        // We can safely overwrite pending readn's though. Otherwise those will clog up the system
-        if self.pending_response.is_none() || is_readn {
-            //println!("CDROM Executing command: {:#X}", command);
-            //Execute
-            {
-                let parameters: Vec<u8> = self.parameter_queue.iter().map(|v| v.clone()).collect();
-                let response = match command {
-                    0x1 => get_stat(self),
-                    0x2 => set_loc(self, parameters[0], parameters[1], parameters[2]),
-                    0x3 => play(self),
-                    0x6 => read_with_retry(self),
-                    0x9 => pause_read(self),
-                    0xA => init(self),
-                    0xE => set_mode(self, parameters[0]),
-                    0x13 => get_tn(self),
-                    0x14 => get_td(self, parameters[0]),
-                    0x15 => seek_data(self),
-                    0x16 => seek_data(self), //This should actually be seek_p, but I'm never using audio discs so we can reuse the data seek function
-                    0x1A => get_id(self),
-                    0x1B => read_with_retry(self), // This is actually ReadS (read without retry), but it behaves the same as ReadN, so I'm just using that
-                    0xC => demute(self),
-                    0x19 => {
-                        //sub_function commands
-                        match parameters[0] {
-                            0x20 => commands::get_bios_date(),
-                            _ => panic!("CD: Unknown sub_function command {:#X}", parameters[0]),
-                        }
+        //println!("CDROM: Executing command {:#X}", command);
+        //Execute
+        {
+            let parameters: Vec<u8> = self.parameter_queue.iter().map(|v| v.clone()).collect();
+            let response = match command {
+                0x1 => get_stat(self),
+                0x2 => set_loc(self, parameters[0], parameters[1], parameters[2]),
+                0x3 => play(self),
+                0x6 => read_with_retry(self),
+                0x9 => pause_read(self),
+                0xA => init(self),
+                0xB => mute(self),
+                0xE => set_mode(self, parameters[0]),
+                0x13 => get_tn(self),
+                0x14 => get_td(self, parameters[0]),
+                0x15 => seek_data(self),
+                0x16 => seek_data(self), //This should actually be seek_p, but I'm never using audio discs so we can reuse the data seek function
+                0x1A => get_id(self),
+                0x1B => read_with_retry(self), // This is actually ReadS (read without retry), but it behaves the same as ReadN, so I'm just using that
+                0xC => demute(self),
+                0x19 => {
+                    //sub_function commands
+                    match parameters[0] {
+                        0x20 => commands::get_bios_date(),
+                        _ => panic!("CD: Unknown sub_function command {:#X}", parameters[0]),
                     }
-                    _ => panic!("CD: Unknown command {:#X}!", command),
-                };
-                self.pending_response = Some(response);
-            }
-        } else {
-            trace!("Execution failed");
+                }
+                _ => panic!("CD: Unknown command {:#X}!", command),
+            };
+            self.running_commands.push(response);
         }
 
         //Clear out old parameters
         self.parameter_queue.clear();
+    }
+
+    fn busy(&self) -> bool {
+        self.reg_interrupt_flag != 0 || (self.running_commands.iter().any(|p| p.cause != IntCause::INT1))
     }
 
     fn get_status_register(&self) -> u8 {
@@ -282,7 +281,7 @@ impl CDDrive {
         //6 DRQSTS
         status |= (!self.data_queue.is_empty() as u8) << 6;
         // 7 BUSYSTS
-        status |= (self.pending_response.is_some() as u8) << 7;
+        status |= (self.busy() as u8) << 7;
 
         status
     }
@@ -290,7 +289,7 @@ impl CDDrive {
     fn drive_speed(&self) -> DriveSpeed {
         match self.drive_mode.get_bit(7) {
             true => DriveSpeed::Double,
-            false => DriveSpeed::Single
+            false => DriveSpeed::Single,
         }
     }
 
@@ -313,7 +312,7 @@ impl CDDrive {
     fn sector_size(&self) -> &SectorSize {
         match self.drive_mode.get_bit(5) {
             true => &SectorSize::WholeSector,
-            false => &SectorSize::DataOnly
+            false => &SectorSize::DataOnly,
         }
     }
 
@@ -339,7 +338,7 @@ impl CDDrive {
         //                 self.seek_target.plus_sector_offset(self.read_offset),
         //                 self.sector_size()
         //             );
-        
+
         //     self.read_offset += 1;
         //     self.data_queue.extend(data.iter());
         //     //println!("Fetched {} bytes!", self.data_queue.len())
@@ -354,22 +353,28 @@ impl CDDrive {
     }
 
     pub fn sector_data_take(&mut self) -> &[u8] {
-        
         //println!("Fetching more data!");
-        let data = self.disc.as_ref().expect("Tried to read nonexistant disc!").read_sector(
-                    self.seek_target.plus_sector_offset(self.read_offset),
-                    self.sector_size()
-                );
-    
-        self.read_offset += 1;
+        let data = self
+            .disc
+            .as_ref()
+            .expect("Tried to read nonexistant disc!")
+            .read_sector(
+                self.current_seek_target
+                    .plus_sector_offset(self.read_offset),
+                self.sector_size(),
+            );
+
+        //self.read_offset += 1;
         data
-        
     }
 
     fn write_interrupt_flag_register(&mut self, val: u8) {
-        self.reg_interrupt_flag &= !val;
+        //println!("Writing flag with val {:#X}   pre flag val {:#X}", val, self.reg_interrupt_flag);
+        self.reg_interrupt_flag &= !(val & 0x1F);
+        //println!("Post flag {:#X}", self.reg_interrupt_flag);
         self.response_queue = VecDeque::new(); //Reset queue
-        if self.reg_interrupt_flag.get_bit(6) {
+        if val.get_bit(6) {
+            //println!("Clearing parameters");
             self.parameter_queue = VecDeque::new();
         }
     }
@@ -379,118 +384,175 @@ impl CDDrive {
     }
 }
 
-pub fn step_cycle(cpu: &mut R3000) {
+fn take_next_ready_packet(running_commands: &mut Vec<Packet>) -> Option<Packet> {
+    if running_commands.iter().any(|c| (c.cause == IntCause::INT3 || c.cause == IntCause::INT2)) {
+        //println!("CDROM taking int3");
+        for i in 0..running_commands.len() {
+            if running_commands[i].execution_cycles == 0 && (running_commands[i].cause == IntCause::INT3 || running_commands[i].cause == IntCause::INT2) {
+                let packet = running_commands[i].clone();
+                running_commands.remove(i);
+                return Some(packet);
+            }
+        }
+    }
+    //println!("taking an int1 since there is not int3");
+    for i in 0..running_commands.len() {
+        if running_commands[i].execution_cycles == 0 {
+            let packet = running_commands[i].clone();
+            running_commands.remove(i);
+            return Some(packet);
+        }
+    }
+    None
+}
 
-    if cpu.main_bus.cd_drive.reg_interrupt_flag != 0 {
+pub fn step_cycle(cpu: &mut R3000) {
+    let cd = &mut cpu.main_bus.cd_drive;
+
+    
+    // If the current interrupt hasn't been acknowledged yet, abort
+    if cd.reg_interrupt_flag != 0 {
         return;
     }
 
-    if let Some(pending_response) = &mut cpu.main_bus.cd_drive.pending_response {
-        pending_response.execution_cycles -= 1;
-        //println!("{}", pending_response.execution_cycles);
-        if pending_response.execution_cycles == 0 {
+    //println!("Full cd response queue {:?}", cd.running_commands);
     
-            let mut packet = cpu.main_bus.cd_drive.pending_response.take().unwrap();
-
-            // If this is a read packet and reading has already been disabled, abort the entire command sequence
-            if packet.command == 0x6 && !cpu.main_bus.cd_drive.read_enabled {    
-                trace!("Reading disabled. Aborting ReadN");
-                return;
-            }
-            trace!("flag before {:#X}", cpu.main_bus.cd_drive.reg_interrupt_flag);
-           
-            cpu.main_bus.cd_drive.response_queue = VecDeque::with_capacity(packet.response.len()); //Clear queue
-            cpu.main_bus.cd_drive.response_queue.extend(packet.response.iter());
-            cpu.main_bus.cd_drive.reg_interrupt_flag = packet.cause.bitflag();
-
-            trace!("flag after {:#X}", cpu.main_bus.cd_drive.reg_interrupt_flag);
-
-
-            trace!("CDROM command {:#X} completed", packet.command);
-        
-    
-            
-            //Check if interrupt enabled. If so, fire interrupt
-            //println!("Interrupts {:#X} cause {:#X} command {:#X}", cpu.main_bus.cd_drive.reg_interrupt_enable, packet.cause.bitflag(), packet.command);
-            if cpu.main_bus.cd_drive.reg_interrupt_enable & packet.cause.bitflag()
-            == packet.cause.bitflag()
-            {
-                    trace!("Firing interrupt");
-                    trace!("INT_E {:#X} CAUSE {:?}", cpu.main_bus.cd_drive.reg_interrupt_enable, packet.cause);
-                    cpu.fire_external_interrupt(InterruptSource::CDROM);
-            } else {
-                trace!("Interrupt disabled, not firing");
-            }
-    
-            //If the response has an extra response, push that to the front of the line
-            if let Some(ext_response) = packet.extra_response.take() {
-                //println!("Extra response, filling. {:?}", ext_response);
-                cpu.main_bus
-                .cd_drive
-                .pending_response = Some(*ext_response);
-            };
-          
-    
-            
-            match packet.command {
-                0x15 => {
-                    //Make sure this is the second response
-                    if packet.extra_response.is_some() {
-                        //End seek and return drive to idle state
-                        cpu.main_bus.cd_drive.read_offset = 0;
-                        cpu.main_bus.cd_drive.drive_state = DriveState::Idle;
-                    }
-                }
-    
-                0x6 => {
-                    //ReadN
-
-                    //if cpu.main_bus.cd_drive.data_queue.is_empty() {
-                    //println!("Fetching more data!");
-                    // let data = cpu.main_bus.cd_drive.disc.as_ref().expect("Tried to read nonexistant disc!").read_sector(
-                    //     cpu.main_bus.cd_drive.seek_target.plus_sector_offset(cpu.main_bus.cd_drive.read_offset),
-                    //     cpu.main_bus.cd_drive.sector_size()
-                    //         );
-                
-                    // cpu.main_bus.cd_drive.read_offset += 1;
-                    // cpu.main_bus.cd_drive.data_queue.clear();
-                    // cpu.main_bus.cd_drive.data_queue.extend(data.iter());
-                    //println!("Fetched {} bytes!", self.data_queue.len())
-                    //}
-
-                    if cpu.main_bus.cd_drive.read_enabled && packet.cause == IntCause::INT1 {
-
-                        trace!("Filling CD buffer with new data");
-
-                        let data = cpu.main_bus.cd_drive.disc.as_ref().expect("Tried to read nonexistant disc!").read_sector(
-                            cpu.main_bus.cd_drive.seek_target.plus_sector_offset(cpu.main_bus.cd_drive.read_offset),
-                            cpu.main_bus.cd_drive.sector_size()
-                                );
-                    
-                        cpu.main_bus.cd_drive.read_offset += 1;
-                        cpu.main_bus.cd_drive.data_queue.clear();
-                        cpu.main_bus.cd_drive.data_queue.extend(data.iter());
-
-                        trace!("buf len {} data len {}", data.len(), cpu.main_bus.cd_drive.data_queue.len());
-
-                        trace!("Inserting next ReadN");
-                        let cycles = match cpu.main_bus.cd_drive.drive_speed() {
-                            DriveSpeed::Single => 0x6e1cd,
-                            DriveSpeed::Double => 0x36cd2,
-                        };
-                        let response_packet = Packet {
-                            cause: IntCause::INT1,
-                            response: vec![cpu.main_bus.cd_drive.get_stat()],
-                            execution_cycles: cycles,
-                            extra_response: None,
-                            command: 0x6,
-                        };
-    
-                        cpu.main_bus.cd_drive.pending_response = Some(response_packet);
-                    }
-                }
-                _ => () //No actions for this command
-            };
+    //Update cycles on all inflight commands
+    for packet in &mut cd.running_commands {
+        if packet.execution_cycles > 0 {
+            packet.execution_cycles -= 1;
         }
     }
+    let packet = match take_next_ready_packet(&mut cd.running_commands) {
+        Some(p) => p,
+        None => {
+            //No response ready right now
+            return;
+        },
+    };
+
+
+    // If this is a read packet and reading has already been disabled, abort the entire command sequence
+    if packet.cause == IntCause::INT1 && !cpu.main_bus.cd_drive.read_enabled {
+        //println!("Reading disabled. Aborting ReadN");
+        return;
+    }
+    trace!(
+        "flag before {:#X}",
+        cpu.main_bus.cd_drive.reg_interrupt_flag
+    );
+
+    cpu.main_bus.cd_drive.response_queue = VecDeque::with_capacity(packet.response.len()); //Clear queue
+    cpu.main_bus
+        .cd_drive
+        .response_queue
+        .extend(packet.response.iter());
+
+    cpu.main_bus.cd_drive.reg_interrupt_flag = packet.cause.bitflag();
+
+    trace!("flag after {:#X}", cpu.main_bus.cd_drive.reg_interrupt_flag);
+
+    //println!("CDROM command {:#X} completed", packet.command);
+    //println!("{:?}", cpu.main_bus.cd_drive.running_commands);
+
+    //Check if interrupt enabled. If so, fire interrupt
+    //println!("Interrupts {:#X} cause {:#X} command {:#X}", cpu.main_bus.cd_drive.reg_interrupt_enable, packet.cause.bitflag(), packet.command);
+    if cpu.main_bus.cd_drive.reg_interrupt_enable & packet.cause.bitflag() == packet.cause.bitflag()
+    {
+        trace!("Firing interrupt");
+        trace!(
+            "INT_E {:#X} CAUSE {:?}",
+            cpu.main_bus.cd_drive.reg_interrupt_enable,
+            packet.cause
+        );
+        cpu.fire_external_interrupt(InterruptSource::CDROM);
+    } else {
+        trace!("Interrupt disabled, not firing");
+    }
+
+    //If the response has an extra response, push that to the front of the line
+    if let Some(ext_response) = packet.extra_response.clone() {
+        //println!("Extra response, filling. {:?}", ext_response);
+        cpu.main_bus.cd_drive.running_commands.push(*ext_response);
+    };
+
+    match packet.command {
+        0x15 => {
+            //Make sure this is the second response
+            if packet.extra_response.is_none() {
+                //End seek and return drive to idle state
+                cpu.main_bus.cd_drive.read_offset = 0;
+                cpu.main_bus.cd_drive.drive_state = DriveState::Idle;
+            }
+        }
+
+        0x9 => {
+            //pause
+            if packet.extra_response.is_none() {
+                cpu.main_bus.cd_drive.read_enabled = false;
+            }
+        }
+
+        0x6 => {
+            //ReadN
+
+            //if cpu.main_bus.cd_drive.data_queue.is_empty() {
+            //println!("Fetching more data!");
+            // let data = cpu.main_bus.cd_drive.disc.as_ref().expect("Tried to read nonexistant disc!").read_sector(
+            //     cpu.main_bus.cd_drive.seek_target.plus_sector_offset(cpu.main_bus.cd_drive.read_offset),
+            //     cpu.main_bus.cd_drive.sector_size()
+            //         );
+
+            // cpu.main_bus.cd_drive.read_offset += 1;
+            // cpu.main_bus.cd_drive.data_queue.clear();
+            // cpu.main_bus.cd_drive.data_queue.extend(data.iter());
+            //println!("Fetched {} bytes!", self.data_queue.len())
+            //}
+
+            if cpu.main_bus.cd_drive.read_enabled && packet.cause == IntCause::INT1 {
+                trace!("Filling CD buffer with new data");
+
+                let data = cpu
+                    .main_bus
+                    .cd_drive
+                    .disc
+                    .as_ref()
+                    .expect("Tried to read nonexistant disc!")
+                    .read_sector(
+                        cpu.main_bus
+                            .cd_drive
+                            .next_seek_target
+                            .plus_sector_offset(cpu.main_bus.cd_drive.read_offset),
+                        cpu.main_bus.cd_drive.sector_size(),
+                    );
+
+                cpu.main_bus.cd_drive.read_offset += 1;
+                cpu.main_bus.cd_drive.data_queue.clear();
+                cpu.main_bus.cd_drive.data_queue.extend(data.iter());
+
+                trace!(
+                    "buf len {} data len {}",
+                    data.len(),
+                    cpu.main_bus.cd_drive.data_queue.len()
+                );
+
+                trace!("Inserting next ReadN");
+                let cycles = match cpu.main_bus.cd_drive.drive_speed() {
+                    DriveSpeed::Single => 0x6e1cd,
+                    DriveSpeed::Double => 0x36cd2,
+                };
+                let response_packet = Packet {
+                    cause: IntCause::INT1,
+                    response: vec![cpu.main_bus.cd_drive.get_stat()],
+                    execution_cycles: cycles,
+                    extra_response: None,
+                    command: 0x6,
+                };
+
+                cpu.main_bus.cd_drive.running_commands.push(response_packet);
+            }
+        }
+        _ => (), //No actions for this command
+    };
+    //println!("All done!");
 }

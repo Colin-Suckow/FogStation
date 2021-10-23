@@ -42,7 +42,7 @@ impl SPU {
             0x1F801DAC => 0x4, //SPU transfer control
             0x1F801C00 => (self.voice0_volume & 0xFFFF) as u16,
             0x1F801DA6 => self.transfer_address,
-            _ => {println!("Read unknown SPU address {:#X}", addr); 0}
+            _ => 0xffff, //{println!("Read unknown SPU address {:#X}", addr); 0}
         }
     }
 

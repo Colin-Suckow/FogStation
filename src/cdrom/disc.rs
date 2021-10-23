@@ -4,7 +4,7 @@ pub(super) const SECTORS_PER_SECOND: usize = 75;
 pub(super) const BYTES_PER_SECTOR: usize = 2352;
 // Sector format is Mode2/Form1 CD-XA
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct DiscIndex {
     minutes: usize,
     seconds: usize,

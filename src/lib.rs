@@ -123,7 +123,7 @@ impl PSXEmu {
                 .write_byte((index + start_addr as usize) as u32, val.clone());
         }
         self.r3000.load_exe = true;
-        //self.r3000.pc = entrypoint;
+        self.r3000.entrypoint = entrypoint;
         // self.r3000.gen_registers[29] = sp;
         // self.r3000.gen_registers[30] = sp;
     }

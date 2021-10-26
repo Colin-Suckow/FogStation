@@ -4,7 +4,7 @@ use bit_field::BitField;
 use log::{error, trace};
 
 const CYCLES_PER_SCANLINE: u32 = 3413;
-const TOTAL_SCANLINES: u32 = 240;
+const TOTAL_SCANLINES: u32 = 245;
 
 #[derive(Copy, Clone, Debug)]
 enum TextureColorMode {
@@ -1203,17 +1203,17 @@ impl Gpu {
     }
 
     fn draw_solid_quad(&mut self, points: &[Point], fill: u16, transparent: bool) {
-        self.draw_solid_triangle(&points[0..3], fill, transparent);
-        self.draw_solid_triangle(&points[1..4], fill, transparent);
+        self.draw_solid_triangle(&[points[0], points[2], points[1]], fill, transparent);
+        self.draw_solid_triangle(&[points[1], points[2], points[3]], fill, transparent);
     }
 
     fn draw_shaded_quad(&mut self, points: &[Point], transparent: bool) {
-        self.draw_shaded_triangle(&points[0..3], transparent);
-        self.draw_shaded_triangle(&points[1..4], transparent);
+        self.draw_shaded_triangle(&[points[0], points[2], points[1]], transparent);
+        self.draw_shaded_triangle(&[points[1], points[3], points[2]], transparent);
     }
 
     fn draw_textured_quad(&mut self, points: &[Point], transparent: bool) {
-        self.draw_textured_triangle(&points[0..3], transparent);
+        self.draw_textured_triangle(&[points[0], points[2], points[1]], transparent);
         self.draw_textured_triangle(&[points[1], points[3], points[2]], transparent);
     }
 
@@ -1258,6 +1258,8 @@ impl Gpu {
         }
     }
 }
+
+
 
 fn point_to_address(x: u32, y: u32) -> u32 {
     ((1024) as u32 * y).wrapping_add(x)

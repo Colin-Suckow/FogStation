@@ -73,6 +73,7 @@ pub struct R3000 {
     last_was_branch: bool,
     gte: GTE,
     pub last_touched_addr: u32,
+    pub entrypoint: u32,
 }
 
 impl R3000 {
@@ -96,6 +97,7 @@ impl R3000 {
             last_was_branch: false,
             gte: GTE::new(),
             last_touched_addr: 0,
+            entrypoint: 0,
         }
     }
     /// Resets cpu registers to zero and sets program counter to reset vector (0xBFC00000)
@@ -128,9 +130,7 @@ impl R3000 {
 
         if self.load_exe && self.pc == 0xbfc0700c {
             println!("Jumping to exe...");
-            self.pc = 0x80010000;
-            //self.pc = 0x8001F9AC;
-            //self.log = true;
+            self.pc = self.entrypoint;
         }
      
         if self.pc == 0xB0 {
@@ -194,6 +194,11 @@ impl R3000 {
 
         // if self.pc == 0x8008dcc4 {
         //     println!("poll_drive(... , ... , {:#X}) called from {:#X}", self.read_reg(RegisterNames::a2 as u8),self.current_pc);
+        // }
+
+        // if self.current_pc == 0x800102a4 {
+        //     let failed_tests = self.read_reg(RegisterNames::v0 as u8);
+        //     println!("Failed tests: {}", failed_tests);
         // }
 
         
@@ -959,7 +964,7 @@ impl R3000 {
     fn op_addiu(&mut self, instruction: u32) {
         self.write_reg(
             instruction.rt(),
-            ((self.read_reg(instruction.rs())).wrapping_add(instruction.immediate_sign_extended())) as u32,
+            (self.read_reg(instruction.rs())).wrapping_add(instruction.immediate_sign_extended()),
         );
         if self.current_pc == 0x8008dd38 {
             println!("ADDIU rs {:#X} imm {:#X}", self.read_reg(instruction.rs()), instruction.immediate_sign_extended());

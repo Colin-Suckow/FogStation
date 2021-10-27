@@ -2,6 +2,8 @@ use bit_field::BitField;
 use fixed::types::{I16F16, I20F12, I28F4, I4F12, I8F24, I8F8};
 use log::{error, trace, warn};
 
+use super::instruction::NumberHelpers;
+
 struct Color {
     pub r: u8,
     pub g: u8,
@@ -221,7 +223,7 @@ impl GTE {
                 self.RT31 = val as i16;
                 self.RT32 = (val >> 16) as i16;
             }
-            4 => self.RT33 = val as i16,
+            4 => self.RT33 = (val & 0xFFFF) as i16,
             5 => self.TRX = val as i32,
             6 => self.TRY = val as i32,
             7 => self.TRZ = val as i32,
@@ -286,23 +288,23 @@ impl GTE {
         // );
         match reg {
             0 => {
-                self.VY0 = val as i16;
-                self.VX0 = (val >> 16) as i16;
+                self.VX0 = val as i16;
+                self.VY0 = (val >> 16) as i16;
             }
             1 => self.VZ0 = val as i16,
             2 => {
-                self.VY1 = val as i16;
-                self.VX1 = (val >> 16) as i16;
+                self.VX1 = val as i16;
+                self.VY1 = (val >> 16) as i16;
             }
             3 => self.VZ1 = val as i16,
             4 => {
-                self.VY2 = val as i16;
-                self.VX2 = (val >> 16) as i16;
+                self.VX2 = val as i16;
+                self.VY2 = (val >> 16) as i16;
             }
             5 => self.VZ2 = val as i16,
             6 => self.RGB.set_word(val),
             8 => self.IR0 = val as i16,
-            9 => self.IR1 = val as i16,
+            9 => self.IR1 = val as u16 as i16,
             10 => self.IR2 = val as i16,
             11 => self.IR3 = val as i16,
             30 => self.LZCS = val as i32,
@@ -312,12 +314,13 @@ impl GTE {
 
     pub(super) fn data_register(&self, reg: usize) -> u32 {
         let val = match reg {
-            0 => (((self.VX0 as u32) << 16) | (self.VY0 as u32 & 0xFFFF)),
+            0 => (((self.VY0 as u32) << 16) | (self.VX0 as u32 & 0xFFFF)),
             1 => self.VZ0 as u32,
-            2 => ((self.VX1 as u32) << 16 | (self.VY1 as u32 & 0xFFFF)),
+            2 => ((self.VY1 as u32) << 16 | (self.VX1 as u32 & 0xFFFF)),
             3 => self.VZ1 as u32,
-            4 => ((self.VX2 as u32) << 16 | (self.VY2 as u32 & 0xFFFF)),
+            4 => ((self.VY2 as u32) << 16 | (self.VX2 as u32 & 0xFFFF)),
             5 => self.VZ2 as u32,
+            6 => self.RGB.word(),
             9 => self.IR1 as u32,
             10 => self.IR2 as u32,
             11 => self.IR3 as u32,
@@ -359,7 +362,7 @@ impl GTE {
             0x13 => self.ncds(),
             0x30 => self.rtpt(command),
             0x2d => self.avsz3(),
-            _ => ()//panic!("Unknown GTE command {:#X}!", command & 0x3F)
+            _ => panic!("Unknown GTE command {:#X}!", command & 0x3F)
         };
     }
 }
@@ -501,8 +504,6 @@ impl GTE {
             self.FLAG.set_bit(17, true);
             self.FLAG.set_bit(31, true);
         }
-
-        println!("div val {}", div_val);
 
         let sx = div_val * self.IR1 as i64 + self.OFX as i64;
         self.truncate_write_mac0(sx, 0);

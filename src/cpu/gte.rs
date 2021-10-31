@@ -110,8 +110,13 @@ pub(super) struct GTE {
     SY0: i16,
     SY1: i16,
     SY2: i16,
-    RGB: Color,
+    RGBC: Color,
+    RGB0: Color,
+    RGB1: Color,
+    RGB2: Color,
+    RES1: u32,
     OTZ: u16,
+    IRGB: u32,
 }
 
 // Interface
@@ -194,8 +199,13 @@ impl GTE {
             SY0: 0,
             SY1: 0,
             SY2: 0,
-            RGB: Color::new(),
+            RGBC: Color::new(),
+            RGB0: Color::new(),
+            RGB1: Color::new(),
+            RGB2: Color::new(),
+            RES1: 0,
             OTZ: 0,
+            IRGB: 0,
         }
     }
 
@@ -209,7 +219,7 @@ impl GTE {
         match reg {
             0 => {
                 self.RT11 = val as i16;
-                self.RT12 = (val >> 16) as i16;
+                self.RT12 = (val >> 16) as u16 as i16;
             }
             1 => {
                 self.RT13 = val as i16;
@@ -223,7 +233,7 @@ impl GTE {
                 self.RT31 = val as i16;
                 self.RT32 = (val >> 16) as i16;
             }
-            4 => self.RT33 = (val & 0xFFFF) as i16,
+            4 => self.RT33 = val as i16,
             5 => self.TRX = val as i32,
             6 => self.TRY = val as i32,
             7 => self.TRZ = val as i32,
@@ -302,13 +312,57 @@ impl GTE {
                 self.VY2 = (val >> 16) as i16;
             }
             5 => self.VZ2 = val as i16,
-            6 => self.RGB.set_word(val),
+            6 => self.RGBC.set_word(val),
+            7 => self.OTZ = val as u16,
             8 => self.IR0 = val as i16,
             9 => self.IR1 = val as u16 as i16,
             10 => self.IR2 = val as i16,
             11 => self.IR3 = val as i16,
+
+            12 => {
+                self.SY0 = val as i16;
+                self.SX0 = (val >> 16) as i16;
+            }
+
+            13 => {
+                self.SY1 = val as i16;
+                self.SX1 = (val >> 16) as i16;
+            }
+
+            14 => {
+                self.SY2 = val as i16;
+                self.SX2 = (val >> 16) as i16;
+            }
+
+            15 => {
+                self.push_sy(val as i16);
+                self.push_sx((val >> 16) as i16);
+            }
+
+            16 => self.SZ0 = val as u16,
+            17 => self.SZ1 = val as u16,
+            18 => self.SZ2 = val as u16,
+            19 => self.SZ3 = val as u16,
+
+            20 => self.RGB0.set_word(val),
+            21 => self.RGB1.set_word(val),
+            22 => self.RGB2.set_word(val),
+            23 => self.RES1 = val,
+            24 => self.MAC0 = val as i32,
+            25 => self.MAC1 = val as i32,
+            26 => self.MAC2 = val as i32,
+            27 => self.MAC3 = val as i32,
+            28 => {
+                self.irgb(val);
+                self.IRGB = val & 0x7FFF;
+            }
+
+            29 => (), // Can't write to ORGB
+
+
             30 => self.LZCS = val as i32,
-            _ => (), //_ => panic!("Tried to write unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
+            _ => (),
+            //_ => panic!("Tried to write unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
         }
     }
 
@@ -320,24 +374,40 @@ impl GTE {
             3 => self.VZ1 as u32,
             4 => ((self.VY2 as u32) << 16 | (self.VX2 as u32 & 0xFFFF)),
             5 => self.VZ2 as u32,
-            6 => self.RGB.word(),
+            6 => self.RGBC.word(),
+            
             9 => self.IR1 as u32,
             10 => self.IR2 as u32,
             11 => self.IR3 as u32,
-            24 => self.MAC0 as u32,
-            31 => self.lzcr(),
+
+            
+           
             7 => self.OTZ as u32,
             8 => self.IR0 as u32,
 
-            22 => self.RGB.word(), //rgb2
+            
+            
             12 => (self.SX0 as u32) << 16 | self.SY0 as u32,
             13 => (self.SX1 as u32) << 16 | self.SY1 as u32,
             14 => (self.SX2 as u32) << 16 | self.SY2 as u32,
+            15 => (self.SX2 as u32) << 16 | self.SY2 as u32,
+            16 => self.SZ0 as u32,
+            17 => self.SZ1 as u32,
+            18 => self.SZ2 as u32,
             19 => self.SZ3 as u32,
-
+            20 => self.RGB0.word(),
+            21 => self.RGB1.word(),
+            22 => self.RGB2.word(),
+            23 => self.RES1,
+            24 => self.MAC0 as u32,
             25 => self.MAC1 as u32,
             26 => self.MAC2 as u32,
             27 => self.MAC3 as u32,
+            28..=29 => self.IRGB, //IRGB and ORGB
+            30 => self.LZCS as u32,
+            31 => self.lzcr(),
+   
+
             _ => 0,
             //_ => panic!("Tried to read unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
         };
@@ -347,6 +417,44 @@ impl GTE {
 
     pub(super) fn control_register(&self, reg: usize) -> u32 {
         let val = match reg {
+            0 => (((self.RT12 as u32) << 16) | (self.RT11 as u32 & 0xFFFF)),
+            1 => (((self.RT21 as u32) << 16) | (self.RT13 as u32 & 0xFFFF)),
+            2 => (((self.RT23 as u32) << 16) | (self.RT22 as u32 & 0xFFFF)),
+            3 => (((self.RT32 as u32) << 16) | (self.RT31 as u32 & 0xFFFF)),
+            4 => self.RT33 as u32,
+            5 => self.TRX as u32,
+            6 => self.TRY as u32,
+            7 => self.TRZ as u32,
+
+            8 => (self.L11 as u32) | ((self.L12 as u32) << 16),
+            9 => (self.L13 as u32) | ((self.L21 as u32) << 16),
+            10 => (self.L22 as u32) | ((self.L23 as u32) << 16),
+            11 => (self.L31 as u32) | ((self.L32 as u32) << 16),
+
+            12 => self.L33 as u32,
+            13 => self.RBK as u32,
+            14 => self.GBK as u32,
+            15 => self.BBK as u32,
+            
+            16 => (self.LR1 as u32) | ((self.LR2 as u32) << 16),
+            17 => (self.LR3 as u32) | ((self.LG1 as u32) << 16),
+            18 => (self.LG2 as u32) | ((self.LG3 as u32) << 16),
+            19 => (self.LB1 as u32) | ((self.LB2 as u32) << 16),
+
+          
+
+
+            20 => self.LB3 as u32,
+            21 => self.RFC as u32,
+            22 => self.GFC as u32,
+            23 => self.BFC as u32,
+            24 => self.OFX as u32,
+            25 => self.OFY as u32,
+            26 => self.H as i16 as i32 as u32, // This replicates a sign extension bug in hardware
+            27 => self.DQA as u32,
+            28 => self.DQB as u32,
+            29 => self.ZSF3 as u32,
+            30 => self.ZSF4 as u32,
             31 => self.FLAG,
             _ => 0,
             //_ => panic!("Tried to read unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg)
@@ -358,6 +466,7 @@ impl GTE {
     pub(super) fn execute_command(&mut self, command: u32) {
         self.FLAG = 0; // Reset calculation error flags
         match command & 0x3F {
+            0x1 => self.rtps(command),
             0x6 => self.nclip(),
             0x13 => self.ncds(),
             0x30 => self.rtpt(command),
@@ -395,10 +504,29 @@ impl GTE {
             self.LZCS.leading_ones()
         }
     }
+
+    fn irgb(&mut self, val: u32) {
+        let red = val & 0x1F;
+        let green = (val >> 5) & 0x1F;
+        let blue = (val >> 10) & 0x1F;
+        self.truncate_write_ir1((red * 0x80) as i32, false);
+        self.truncate_write_ir2((green * 0x80) as i32, false);
+        self.truncate_write_ir3((blue * 0x80) as i64, false);
+    }
+
+    
 }
 
 // Internal GTE commands
 impl GTE {
+
+    fn rtps(&mut self, command: u32) {
+        let shift = (command.get_bit(19) as usize) * 12;
+        let lm = command.get_bit(10);
+
+        self.do_rtps(self.VX0, self.VY0, self.VZ0, shift, true, lm);
+    }
+
     fn rtpt(&mut self, command: u32) {
         trace!("\nRTPT\n");
         trace!("vx0 {} vy0 {} vz0 {}", self.VX0, self.VY0, self.VZ0);
@@ -687,9 +815,6 @@ impl GTE {
         }
     }
 
-    /// Truncate i64 value to only keep the low 43 bits + sign and
-    /// update the flags if an overflow occurs
-    // borrowed from rustation (https://github.com/simias/rustation/blob/6b6e8e6cbb294a8475e325850179e896246be4cd/src/cpu/gte/mod.rs#L1359-L1369)
     fn i64_to_i44(&mut self, val: i64) -> i64 {
         match val {
             x if x > (0x7ffffffffff) => {

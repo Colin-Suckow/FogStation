@@ -284,7 +284,7 @@ impl GTE {
             28 => self.DQB = val as i32,
             29 => self.ZSF3 = val as i16,
             30 => self.ZSF4 = val as i16,
-            31 => (), // FLAG register is not writeable
+            31 => self.FLAG = *self.FLAG.set_bits(12..=30, (val >> 12) & 0x7FFFF ),
             _ => panic!("Tried to write unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg)
         }
     }
@@ -314,11 +314,11 @@ impl GTE {
             5 => self.VZ2 = val as i16,
             6 => self.RGBC.set_word(val),
             7 => self.OTZ = val as u16,
+            
             8 => self.IR0 = val as i16,
-            9 => self.IR1 = val as u16 as i16,
-            10 => self.IR2 = val as i16,
-            11 => self.IR3 = val as i16,
-
+            9 => self.truncate_write_ir1(val as i32, false),
+            10 => self.truncate_write_ir2(val as i32, false),
+            11 => self.truncate_write_ir3(val as i64, false),
             12 => {
                 self.SY0 = val as i16;
                 self.SX0 = (val >> 16) as i16;
@@ -348,10 +348,10 @@ impl GTE {
             21 => self.RGB1.set_word(val),
             22 => self.RGB2.set_word(val),
             23 => self.RES1 = val,
-            24 => self.MAC0 = val as i32,
-            25 => self.MAC1 = val as i32,
-            26 => self.MAC2 = val as i32,
-            27 => self.MAC3 = val as i32,
+            24 => self.truncate_write_mac0(val as i64, 0),
+            25 => self.truncate_write_mac1(val as i64, 0),
+            26 => self.truncate_write_mac2(val as i64, 0),
+            27 => self.truncate_write_mac3(val as i64, 0),
             28 => {
                 self.irgb(val);
                 self.IRGB = val & 0x7FFF;
@@ -387,10 +387,10 @@ impl GTE {
 
             
             
-            12 => (self.SX0 as u32) << 16 | self.SY0 as u32,
-            13 => (self.SX1 as u32) << 16 | self.SY1 as u32,
-            14 => (self.SX2 as u32) << 16 | self.SY2 as u32,
-            15 => (self.SX2 as u32) << 16 | self.SY2 as u32,
+            12 => (self.SX0 as u32) << 16 | self.SY0 as u32 & 0xFFFF,
+            13 => (self.SX1 as u32) << 16 | self.SY1 as u32 & 0xFFFF,
+            14 => (self.SX2 as u32) << 16 | self.SY2 as u32 & 0xFFFF,
+            15 => (self.SX2 as u32) << 16 | self.SY2 as u32 & 0xFFFF,
             16 => self.SZ0 as u32,
             17 => self.SZ1 as u32,
             18 => self.SZ2 as u32,
@@ -421,30 +421,30 @@ impl GTE {
             1 => (((self.RT21 as u32) << 16) | (self.RT13 as u32 & 0xFFFF)),
             2 => (((self.RT23 as u32) << 16) | (self.RT22 as u32 & 0xFFFF)),
             3 => (((self.RT32 as u32) << 16) | (self.RT31 as u32 & 0xFFFF)),
-            4 => self.RT33 as u32,
+            4 => self.RT33 as i32 as u32,
             5 => self.TRX as u32,
             6 => self.TRY as u32,
             7 => self.TRZ as u32,
 
-            8 => (self.L11 as u32) | ((self.L12 as u32) << 16),
-            9 => (self.L13 as u32) | ((self.L21 as u32) << 16),
-            10 => (self.L22 as u32) | ((self.L23 as u32) << 16),
-            11 => (self.L31 as u32) | ((self.L32 as u32) << 16),
+            8 => (self.L11 as u32) & 0xFFFF | ((self.L12 as u32) << 16),
+            9 => (self.L13 as u32) & 0xFFFF | ((self.L21 as u32) << 16),
+            10 => (self.L22 as u32) & 0xFFFF | ((self.L23 as u32) << 16),
+            11 => (self.L31 as u32) & 0xFFFF | ((self.L32 as u32) << 16),
 
-            12 => self.L33 as u32,
+            12 => self.L33 as i32 as u32,
             13 => self.RBK as u32,
             14 => self.GBK as u32,
             15 => self.BBK as u32,
             
-            16 => (self.LR1 as u32) | ((self.LR2 as u32) << 16),
-            17 => (self.LR3 as u32) | ((self.LG1 as u32) << 16),
-            18 => (self.LG2 as u32) | ((self.LG3 as u32) << 16),
-            19 => (self.LB1 as u32) | ((self.LB2 as u32) << 16),
+            16 => (self.LR1 as u32) & 0xFFFF | ((self.LR2 as u32) << 16),
+            17 => (self.LR3 as u32) & 0xFFFF | ((self.LG1 as u32) << 16),
+            18 => (self.LG2 as u32) & 0xFFFF | ((self.LG3 as u32) << 16),
+            19 => (self.LB1 as u32) & 0xFFFF | ((self.LB2 as u32) << 16),
 
           
 
 
-            20 => self.LB3 as u32,
+            20 => self.LB3 as i32 as u32,
             21 => self.RFC as u32,
             22 => self.GFC as u32,
             23 => self.BFC as u32,
@@ -455,7 +455,12 @@ impl GTE {
             28 => self.DQB as u32,
             29 => self.ZSF3 as u32,
             30 => self.ZSF4 as u32,
-            31 => self.FLAG,
+            31 => 
+            {
+                // Handle bit 31 error flag
+                let error = (self.FLAG & 0x7F87E000) != 0;
+                self.FLAG | ((error as u32) << 31)
+            },
             _ => 0,
             //_ => panic!("Tried to read unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg)
         };

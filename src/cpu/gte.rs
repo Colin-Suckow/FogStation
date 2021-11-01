@@ -6,6 +6,7 @@ use log::{error, trace, warn};
 
 use super::instruction::NumberHelpers;
 
+#[derive(Clone, Copy)]
 struct Color {
     pub r: u8,
     pub g: u8,
@@ -478,8 +479,8 @@ impl GTE {
             0x13 => self.ncds(),
             0x30 => self.rtpt(command),
             0x2d => self.avsz3(),
-            _ => (),
-            //_ => panic!("Unknown GTE command {:#X}!", command & 0x3F)
+            //_ => (),
+            _ => panic!("Unknown GTE command {:#X}!", command & 0x3F)
         };
     }
 }
@@ -568,6 +569,7 @@ impl GTE {
 
     fn ncds(&mut self) {
         warn!("Stubbing colors for now");
+        self.RGB2 = self.RGBC.clone();
     }
 
     fn avsz3(&mut self) {

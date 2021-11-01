@@ -397,9 +397,11 @@ impl GTE {
             17 => self.SZ1 as u32,
             18 => self.SZ2 as u32,
             19 => self.SZ3 as u32,
+
             20 => self.RGB0.word(),
             21 => self.RGB1.word(),
             22 => self.RGB2.word(),
+            
             23 => self.RES1,
             24 => self.MAC0 as u32,
             25 => self.MAC1 as u32,
@@ -545,15 +547,6 @@ impl GTE {
     }
 
     fn rtpt(&mut self, command: u32) {
-        trace!("\nRTPT\n");
-        trace!("vx0 {} vy0 {} vz0 {}", self.VX0, self.VY0, self.VZ0);
-        trace!("vx1 {} vy1 {} vz1 {}", self.VX1, self.VY1, self.VZ1);
-        trace!("vx2 {} vy2 {} vz2 {}", self.VX2, self.VY2, self.VZ2);
-        trace!("Rotation matrix");
-        trace!("[ {}, {}, {} ]", self.RT11, self.RT12, self.RT13);
-        trace!("[ {}, {}, {} ]", self.RT21, self.RT22, self.RT23);
-        trace!("[ {}, {}, {} ]", self.RT31, self.RT32, self.RT33);
-
         let shift = (command.get_bit(19) as usize) * 12;
         let lm = command.get_bit(10);
 
@@ -561,10 +554,6 @@ impl GTE {
         self.do_rtps(self.VX1, self.VY1, self.VZ1, shift, false, lm);
         self.do_rtps(self.VX2, self.VY2, self.VZ2, shift, true, lm);
 
-        trace!("sx0 {} sy0 {} otz {}", self.SX0, self.SY0, self.OTZ);
-        trace!("sx1 {} sy1 {} otz {}", self.SX1, self.SY1, self.OTZ);
-        trace!("sx2 {} sy2 {} otz {}", self.SX2, self.SY2, self.OTZ);
-        trace!("");
     }
 
     fn nclip(&mut self) {
@@ -616,14 +605,12 @@ impl GTE {
                     + ((self.RT33 as i64) * VZ as i64),
             );
 
-        //println!("x {} y {} z {}", x, y, z);
-
         self.truncate_write_mac1(x, shift);
         self.truncate_write_mac2(y, shift);
         self.truncate_write_mac3(z, shift);
 
-        self.truncate_write_ir1(x as i32, lm);
-        self.truncate_write_ir2(y as i32, lm);
+        self.truncate_write_ir1(self.MAC1, lm);
+        self.truncate_write_ir2(self.MAC2, lm);
 
         // This is just to lazily set the error flags
         self.truncate_write_ir3(z >> 12, false);
@@ -638,32 +625,19 @@ impl GTE {
 
         self.truncate_push_sz3(z >> 12);
 
-        let div_val = self.do_unr_divide() as i64;
-
-        println!("H {}  SZ3 {}", self.H, self.SZ3);
-
-     
-
-        println!("div_val {}", div_val);
-
-     
-
-        println!("OFX {:#X} OFY {:#X}", self.OFX, self.OFY);
-
+        let div_val = unr_divide(self.H as u32, self.SZ3 as u32, &mut self.FLAG) as i64;
+ 
         let sx = div_val * self.IR1 as i64 + self.OFX as i64;
-        let sy = div_val * self.IR2 as i64 + self.OFY as i64;
-
-        println!("sx {} sy {}", sx >> 16, sy >> 16);
-        
-        self.set_mac_flags(sy);
-        self.set_mac_flags(sx);
-
+        self.truncate_write_mac0(sx, 0);
         self.saturate_push_sx(sx >> 16);
+
+        let sy = div_val * self.IR2 as i64 + self.OFY as i64;
+        self.truncate_write_mac0(sy, 0);
         self.saturate_push_sy(sy >> 16);
 
         if last {
             let depth = div_val * self.DQA as i64 + self.DQB as i64;
-            self.truncate_write_mac0(depth, shift);
+            self.truncate_write_mac0(depth, 0);
             let mut ir0_result = depth >> 12;
             if ir0_result < 0 {
                 ir0_result = 0;
@@ -700,7 +674,6 @@ impl GTE {
             _ => (),
         };
         self.MAC0 = (val >> shift) as i32;
-        //println!("val {} mac0 {}", val, val as i32);
     }
 
     fn set_mac_flags(&mut self, val: i64) {
@@ -850,34 +823,7 @@ impl GTE {
         }
     }
 
-    /*
-    https://psx-spx.consoledev.net/geometrytransformationenginegte/#gte-division-inaccuracy-for-rtpsrtpt-commands
-
-    if (H < SZ3*2) then                            ;check if overflow
-    z = count_leading_zeroes(SZ3)                ;z=0..0Fh (for 16bit SZ3)
-    n = (H SHL z)                                ;n=0..7FFF8000h
-    d = (SZ3 SHL z)                              ;d=8000h..FFFFh
-    u = unr_table[(d-7FC0h) SHR 7] + 101h        ;u=200h..101h
-    d = ((2000080h - (d * u)) SHR 8)             ;d=10000h..0FF01h
-    d = ((0000080h + (d * u)) SHR 8)             ;d=20000h..10000h
-    n = min(1FFFFh, (((n*d) + 8000h) SHR 16))    ;n=0..1FFFFh
-    else n = 1FFFFh, FLAG.Bit17=1, FLAG.Bit31=1    ;n=1FFFFh plus overflow flag
-    */
-    fn do_unr_divide(&mut self) -> u64 {
-        if self.H < self.SZ3 * 2 {
-            let z = self.SZ3.leading_zeros();
-            let n = (self.H as u64) << z;
-            let d = (self.SZ3 as u64) << z;
-            let u = UNR_TABLE[((d - 0x7FC0) >> 7) as usize] + 0x101;
-            let mut d = (0x2000080 - (d * u)) >> 8;
-            d = (0x0000080 - (d * u)) >> 8;
-
-            return min(0x1FFFF, ((n*d) + 0x8000) >> 16);
-        } else {
-            self.FLAG.set_bit(17, true);
-            return 0x1FFFF;
-        }
-    }
+   
 
     fn i64_to_i44(&mut self, val: i64) -> i64 {
         match val {
@@ -895,8 +841,26 @@ impl GTE {
     }
 }
 
+// Copy of duckstation's implementation
+fn unr_divide(lhs: u32, rhs: u32, flag: &mut u32) -> u32 {
+    if lhs < rhs * 2 {
+        let shift = (rhs as u16).leading_zeros();
+        let lhs_shift = lhs << shift;
+        let rhs_shift = rhs << shift;
+        let divisor = rhs_shift | 0x8000;
+        let x: i32 = 0x101 + UNR_TABLE[(((divisor & 0x7FFF) + 0x40) >> 7) as usize] as i32;
+        let d: i32 = ((divisor as i32 * -x) + 0x80) >> 8;
+        let recip = ((x * (0x20000 + d) + 0x80) >> 8) as u32;
+        let result = ((lhs_shift as u64 * recip as u64) + 0x8000) >> 16;
+        return min(0x1FFFF, result as u32);
+    } else {
+        flag.set_bit(17, true);
+        return 0x1FFFF;
+    }
+}
 
-const UNR_TABLE: [u64; 0x101] = [
+
+const UNR_TABLE: [u32; 0x101] = [
     0xFF,0xFD,0xFB,0xF9,0xF7,0xF5,0xF3,0xF1,0xEF,0xEE,0xEC,0xEA,0xE8,0xE6,0xE4,0xE3,
     0xE1,0xDF,0xDD,0xDC,0xDA,0xD8,0xD6,0xD5,0xD3,0xD1,0xD0,0xCE,0xCD,0xCB,0xC9,0xC8,
     0xC6,0xC5,0xC3,0xC1,0xC0,0xBE,0xBD,0xBB,0xBA,0xB8,0xB7,0xB5,0xB4,0xB2,0xB1,0xB0,

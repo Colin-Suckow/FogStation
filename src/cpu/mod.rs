@@ -588,8 +588,8 @@ impl R3000 {
                     match instruction.rs() {
                         0x0 => {
                             //MFC2
-                            //This one will just return 0 for now
-                            self.write_reg(instruction.rt(), self.gte.data_register(instruction.rd() as usize));
+                            let val = self.gte.data_register(instruction.rd() as usize);
+                            self.write_reg(instruction.rt(), val);
                         }
     
                         0x6 => {

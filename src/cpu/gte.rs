@@ -1,3 +1,5 @@
+use std::cmp::min;
+
 use bit_field::BitField;
 use fixed::types::{I16F16, I20F12, I28F4, I4F12, I8F24, I8F8};
 use log::{error, trace, warn};
@@ -320,23 +322,23 @@ impl GTE {
             10 => self.truncate_write_ir2(val as i32, false),
             11 => self.truncate_write_ir3(val as i64, false),
             12 => {
-                self.SY0 = val as i16;
-                self.SX0 = (val >> 16) as i16;
+                self.SX0 = val as i16;
+                self.SY0 = (val >> 16) as i16;
             }
 
             13 => {
-                self.SY1 = val as i16;
-                self.SX1 = (val >> 16) as i16;
+                self.SX1 = val as i16;
+                self.SY1 = (val >> 16) as i16;
             }
 
             14 => {
-                self.SY2 = val as i16;
-                self.SX2 = (val >> 16) as i16;
+                self.SX2 = val as i16;
+                self.SY2 = (val >> 16) as i16;
             }
 
             15 => {
-                self.push_sy(val as i16);
-                self.push_sx((val >> 16) as i16);
+                self.push_sx(val as i16);
+                self.push_sy((val >> 16) as i16);
             }
 
             16 => self.SZ0 = val as u16,
@@ -366,7 +368,7 @@ impl GTE {
         }
     }
 
-    pub(super) fn data_register(&self, reg: usize) -> u32 {
+    pub(super) fn data_register(&mut self, reg: usize) -> u32 {
         let val = match reg {
             0 => (((self.VY0 as u32) << 16) | (self.VX0 as u32 & 0xFFFF)),
             1 => self.VZ0 as u32,
@@ -387,10 +389,10 @@ impl GTE {
 
             
             
-            12 => (self.SX0 as u32) << 16 | self.SY0 as u32 & 0xFFFF,
-            13 => (self.SX1 as u32) << 16 | self.SY1 as u32 & 0xFFFF,
-            14 => (self.SX2 as u32) << 16 | self.SY2 as u32 & 0xFFFF,
-            15 => (self.SX2 as u32) << 16 | self.SY2 as u32 & 0xFFFF,
+            12 => (self.SY0 as u32) << 16 | self.SX0 as u32 & 0xFFFF,
+            13 => (self.SY1 as u32) << 16 | self.SX1 as u32 & 0xFFFF,
+            14 => (self.SY2 as u32) << 16 | self.SX2 as u32 & 0xFFFF,
+            15 => (self.SY2 as u32) << 16 | self.SX2 as u32 & 0xFFFF,
             16 => self.SZ0 as u32,
             17 => self.SZ1 as u32,
             18 => self.SZ2 as u32,
@@ -403,7 +405,7 @@ impl GTE {
             25 => self.MAC1 as u32,
             26 => self.MAC2 as u32,
             27 => self.MAC3 as u32,
-            28..=29 => self.IRGB, //IRGB and ORGB
+            28..=29 => self.orgb(),
             30 => self.LZCS as u32,
             31 => self.lzcr(),
    
@@ -415,6 +417,7 @@ impl GTE {
         val
     }
 
+    // Control register numbers are shifted down by 32
     pub(super) fn control_register(&self, reg: usize) -> u32 {
         let val = match reg {
             0 => (((self.RT12 as u32) << 16) | (self.RT11 as u32 & 0xFFFF)),
@@ -519,6 +522,15 @@ impl GTE {
         self.truncate_write_ir3((blue * 0x80) as i64, false);
     }
 
+    fn orgb(&mut self) -> u32 {
+        let red = (self.IR1 / 0x80) as u32;
+        let green = (self.IR2 / 0x80) as u32;
+        let blue = (self.IR3 / 0x80) as u32;
+        
+        ((blue & 0x1F) << 10) | ((green & 0x1F) << 5) | (red & 0x1F)
+
+    }
+
     
 }
 
@@ -610,8 +622,8 @@ impl GTE {
         self.truncate_write_mac2(y, shift);
         self.truncate_write_mac3(z, shift);
 
-        self.truncate_write_ir1(self.MAC1, lm);
-        self.truncate_write_ir2(self.MAC2, lm);
+        self.truncate_write_ir1(x as i32, lm);
+        self.truncate_write_ir2(y as i32, lm);
 
         // This is just to lazily set the error flags
         self.truncate_write_ir3(z >> 12, false);
@@ -626,29 +638,33 @@ impl GTE {
 
         self.truncate_push_sz3(z >> 12);
 
-        let mut div_val = 0;
+        let div_val = self.do_unr_divide() as i64;
 
-        if self.SZ3 != 0 {
-            div_val = (self.H as i64 * 0x10000 ) / self.SZ3 as i64;
-        }
+        println!("H {}  SZ3 {}", self.H, self.SZ3);
 
-        if div_val > 0x1FFFF || self.SZ3 == 0 {
-            div_val = 0x1FFFF;
-            self.FLAG.set_bit(17, true);
-            self.FLAG.set_bit(31, true);
-        }
+     
+
+        println!("div_val {}", div_val);
+
+     
+
+        println!("OFX {:#X} OFY {:#X}", self.OFX, self.OFY);
 
         let sx = div_val * self.IR1 as i64 + self.OFX as i64;
-        self.truncate_write_mac0(sx, 0);
-        self.saturate_push_sx(sx >> 16);
-
         let sy = div_val * self.IR2 as i64 + self.OFY as i64;
-        self.truncate_write_mac0(sy, 0);
+
+        println!("sx {} sy {}", sx >> 16, sy >> 16);
+        
+        self.set_mac_flags(sy);
+        self.set_mac_flags(sx);
+
+        self.saturate_push_sx(sx >> 16);
         self.saturate_push_sy(sy >> 16);
 
         if last {
-            self.truncate_write_mac0(div_val * self.DQA as i64 + self.DQB as i64, 0);
-            let mut ir0_result = self.MAC0;
+            let depth = div_val * self.DQA as i64 + self.DQB as i64;
+            self.truncate_write_mac0(depth, shift);
+            let mut ir0_result = depth >> 12;
             if ir0_result < 0 {
                 ir0_result = 0;
                 self.FLAG.set_bit(12, true);
@@ -678,12 +694,25 @@ impl GTE {
             x if x > (i32::MAX as i64) => {
                 self.FLAG.set_bit(16, true);
             }
-            x if x < (i32::MAX as i64) => {
+            x if x < (i32::MIN as i64) => {
                 self.FLAG.set_bit(15, true);
             }
             _ => (),
         };
         self.MAC0 = (val >> shift) as i32;
+        //println!("val {} mac0 {}", val, val as i32);
+    }
+
+    fn set_mac_flags(&mut self, val: i64) {
+        match val {
+            x if x > (i32::MAX as i64) => {
+                self.FLAG.set_bit(16, true);
+            }
+            x if x < (i32::MIN as i64) => {
+                self.FLAG.set_bit(15, true);
+            }
+            _ => (),
+        };
     }
 
     fn saturate_push_sx(&mut self, val: i64) {
@@ -698,6 +727,7 @@ impl GTE {
             }
             v => v,
         };
+        
         self.push_sx(new_val as i16);
     }
 
@@ -820,6 +850,35 @@ impl GTE {
         }
     }
 
+    /*
+    https://psx-spx.consoledev.net/geometrytransformationenginegte/#gte-division-inaccuracy-for-rtpsrtpt-commands
+
+    if (H < SZ3*2) then                            ;check if overflow
+    z = count_leading_zeroes(SZ3)                ;z=0..0Fh (for 16bit SZ3)
+    n = (H SHL z)                                ;n=0..7FFF8000h
+    d = (SZ3 SHL z)                              ;d=8000h..FFFFh
+    u = unr_table[(d-7FC0h) SHR 7] + 101h        ;u=200h..101h
+    d = ((2000080h - (d * u)) SHR 8)             ;d=10000h..0FF01h
+    d = ((0000080h + (d * u)) SHR 8)             ;d=20000h..10000h
+    n = min(1FFFFh, (((n*d) + 8000h) SHR 16))    ;n=0..1FFFFh
+    else n = 1FFFFh, FLAG.Bit17=1, FLAG.Bit31=1    ;n=1FFFFh plus overflow flag
+    */
+    fn do_unr_divide(&mut self) -> u64 {
+        if self.H < self.SZ3 * 2 {
+            let z = self.SZ3.leading_zeros();
+            let n = (self.H as u64) << z;
+            let d = (self.SZ3 as u64) << z;
+            let u = UNR_TABLE[((d - 0x7FC0) >> 7) as usize] + 0x101;
+            let mut d = (0x2000080 - (d * u)) >> 8;
+            d = (0x0000080 - (d * u)) >> 8;
+
+            return min(0x1FFFF, ((n*d) + 0x8000) >> 16);
+        } else {
+            self.FLAG.set_bit(17, true);
+            return 0x1FFFF;
+        }
+    }
+
     fn i64_to_i44(&mut self, val: i64) -> i64 {
         match val {
             x if x > (0x7ffffffffff) => {
@@ -832,8 +891,31 @@ impl GTE {
             }
             _ => val,
         }
+        //val
     }
 }
+
+
+const UNR_TABLE: [u64; 0x101] = [
+    0xFF,0xFD,0xFB,0xF9,0xF7,0xF5,0xF3,0xF1,0xEF,0xEE,0xEC,0xEA,0xE8,0xE6,0xE4,0xE3,
+    0xE1,0xDF,0xDD,0xDC,0xDA,0xD8,0xD6,0xD5,0xD3,0xD1,0xD0,0xCE,0xCD,0xCB,0xC9,0xC8,
+    0xC6,0xC5,0xC3,0xC1,0xC0,0xBE,0xBD,0xBB,0xBA,0xB8,0xB7,0xB5,0xB4,0xB2,0xB1,0xB0,
+    0xAE,0xAD,0xAB,0xAA,0xA9,0xA7,0xA6,0xA4,0xA3,0xA2,0xA0,0x9F,0x9E,0x9C,0x9B,0x9A, 
+    0x99,0x97,0x96,0x95,0x94,0x92,0x91,0x90,0x8F,0x8D,0x8C,0x8B,0x8A,0x89,0x87,0x86, 
+    0x85,0x84,0x83,0x82,0x81,0x7F,0x7E,0x7D,0x7C,0x7B,0x7A,0x79,0x78,0x77,0x75,0x74,
+    0x73,0x72,0x71,0x70,0x6F,0x6E,0x6D,0x6C,0x6B,0x6A,0x69,0x68,0x67,0x66,0x65,0x64,
+    0x63,0x62,0x61,0x60,0x5F,0x5E,0x5D,0x5D,0x5C,0x5B,0x5A,0x59,0x58,0x57,0x56,0x55, 
+    0x54,0x53,0x53,0x52,0x51,0x50,0x4F,0x4E,0x4D,0x4D,0x4C,0x4B,0x4A,0x49,0x48,0x48, 
+    0x47,0x46,0x45,0x44,0x43,0x43,0x42,0x41,0x40,0x3F,0x3F,0x3E,0x3D,0x3C,0x3C,0x3B,
+    0x3A,0x39,0x39,0x38,0x37,0x36,0x36,0x35,0x34,0x33,0x33,0x32,0x31,0x31,0x30,0x2F,
+    0x2E,0x2E,0x2D,0x2C,0x2C,0x2B,0x2A,0x2A,0x29,0x28,0x28,0x27,0x26,0x26,0x25,0x24, 
+    0x24,0x23,0x22,0x22,0x21,0x20,0x20,0x1F,0x1E,0x1E,0x1D,0x1D,0x1C,0x1B,0x1B,0x1A, 
+    0x19,0x19,0x18,0x18,0x17,0x16,0x16,0x15,0x15,0x14,0x14,0x13,0x12,0x12,0x11,0x11,
+    0x10,0x0F,0x0F,0x0E,0x0E,0x0D,0x0D,0x0C,0x0C,0x0B,0x0A,0x0A,0x09,0x09,0x08,0x08,
+    0x07,0x07,0x06,0x06,0x05,0x05,0x04,0x04,0x03,0x03,0x02,0x02,0x01,0x01,0x00,0x00, 
+    0x00   // one extra table entry (for "(d-7FC0h)/80h"=100h)
+];
+
 
 const data_reg_name: [&str; 32] = [
     "vxy0", "vz0", "vxy1", "vz1", "vxy2", "vz2", "rgb", "otz", // 00

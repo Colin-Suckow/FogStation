@@ -318,9 +318,9 @@ impl GTE {
             7 => self.OTZ = val as u16,
             
             8 => self.IR0 = val as i16,
-            9 => self.truncate_write_ir1(val as i32, false),
-            10 => self.truncate_write_ir2(val as i32, false),
-            11 => self.truncate_write_ir3(val as i64, false),
+            9 => self.IR1 = val as i16,
+            10 => self.IR2 = val as i16,
+            11 => self.IR3 = val as i16,
             12 => {
                 self.SX0 = val as i16;
                 self.SY0 = (val >> 16) as i16;
@@ -350,10 +350,11 @@ impl GTE {
             21 => self.RGB1.set_word(val),
             22 => self.RGB2.set_word(val),
             23 => self.RES1 = val,
-            24 => self.truncate_write_mac0(val as i64, 0),
-            25 => self.truncate_write_mac1(val as i64, 0),
-            26 => self.truncate_write_mac2(val as i64, 0),
-            27 => self.truncate_write_mac3(val as i64, 0),
+
+            24 => self.MAC0 = val as i32,
+            25 => self.MAC1 = val as i32,
+            26 => self.MAC2 = val as i32,
+            27 => self.MAC3 = val as i32,
             28 => {
                 self.irgb(val);
                 self.IRGB = val & 0x7FFF;
@@ -363,8 +364,8 @@ impl GTE {
 
 
             30 => self.LZCS = val as i32,
-            _ => (),
-            //_ => panic!("Tried to write unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
+            31 => (), //Can't write lzcr
+            _ => panic!("Tried to write unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
         }
     }
 
@@ -410,10 +411,7 @@ impl GTE {
             28..=29 => self.orgb(),
             30 => self.LZCS as u32,
             31 => self.lzcr(),
-   
-
-            _ => 0,
-            //_ => panic!("Tried to read unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
+            _ => panic!("Tried to read unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
         };
         //println!("Reading data reg {} value {:#X}", data_reg_name[reg], val);
         val
@@ -466,8 +464,7 @@ impl GTE {
                 let error = (self.FLAG & 0x7F87E000) != 0;
                 self.FLAG | ((error as u32) << 31)
             },
-            _ => 0,
-            //_ => panic!("Tried to read unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg)
+            _ => panic!("Tried to read unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg)
         };
         //println!("Reading control reg {} value {:#X}", ctrl_reg_name[reg], val);
         val
@@ -481,7 +478,8 @@ impl GTE {
             0x13 => self.ncds(),
             0x30 => self.rtpt(command),
             0x2d => self.avsz3(),
-            _ => panic!("Unknown GTE command {:#X}!", command & 0x3F)
+            _ => (),
+            //_ => panic!("Unknown GTE command {:#X}!", command & 0x3F)
         };
     }
 }
@@ -525,11 +523,11 @@ impl GTE {
     }
 
     fn orgb(&mut self) -> u32 {
-        let red = (self.IR1 / 0x80) as u32;
-        let green = (self.IR2 / 0x80) as u32;
-        let blue = (self.IR3 / 0x80) as u32;
+        let red = self.IR1 / 0x80;
+        let green = self.IR2 / 0x80;
+        let blue = self.IR3 / 0x80;
         
-        ((blue & 0x1F) << 10) | ((green & 0x1F) << 5) | (red & 0x1F)
+        (blue.clamp(0, 0x1F) << 10) as u32 | (green.clamp(0, 0x1F) << 5) as u32 | red.clamp(0, 0x1F) as u32
 
     }
 

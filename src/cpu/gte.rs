@@ -476,11 +476,16 @@ impl GTE {
         match command & 0x3F {
             0x1 => self.rtps(command),
             0x6 => self.nclip(),
+            0x12 => self.mvmva(command),
             0x13 => self.ncds(),
+            0x1E => self.ncs(),
+            0x20 => self.nct(),
             0x30 => self.rtpt(command),
             0x2d => self.avsz3(),
-            //_ => (),
-            _ => panic!("Unknown GTE command {:#X}!", command & 0x3F)
+            0x2e => self.avsz4(),
+            //0x3f => self.ncct(),
+            _ => (),
+            //_ => panic!("Unknown GTE command {:#X}!", command & 0x3F)
         };
     }
 }
@@ -538,6 +543,45 @@ impl GTE {
 // Internal GTE commands
 impl GTE {
 
+    fn mvmva(&mut self, command: u32) {
+        let (M11, M12, M13, M21, M22, M23, M31, M32, M33) = match command.get_bits(17..=18) {
+            0 => (self.RT11, self.RT12, self.RT13, self.RT21, self.RT22, self.RT23, self.RT31, self.RT32, self.RT33),
+            1 => (self.L11, self.L12, self.L13, self.L21, self.L22, self.L23, self.L31, self.L32, self.L33),
+            2 => (self.LR1, self.LR2, self.LR3, self.LG1, self.LG2, self.LG3, self.LB1, self.LB2, self.LB3),
+            _ => panic!("Unimplemented/Unknown MVMVA matrix!")
+        };
+
+        let (mvx, mvy, mvz) = match command.get_bits(15..=16) {
+            0 => (self.VX0, self.VY0, self.VZ0),
+            1 => (self.VX1, self.VY1, self.VZ1),
+            2 => (self.VX2, self.VY2, self.VZ2),
+            3 => (self.IR1, self.IR2, self.IR3),
+            _ => panic!("Unimplemented/Unknown MVMVA Multiply Vector!")
+        };
+
+        let (tvx, tvy, tvz) = match command.get_bits(13..=14) {
+            0 => (self.TRX, self.TRY, self.TRZ),
+            1 => (self.RBK, self.GBK, self.BBK),
+            2 => panic!("MVMVA broken FC translation vector not implemented!"),
+            3 => (0,0,0),
+            n => panic!("Unimplemented/Unknown MVMVA translation vector {}!", n)
+        };
+        let shift = (command.get_bit(19) as usize) * 12;
+        let lm = command.get_bit(10);
+
+        let x = (tvx as i64 * 0x1000) + (M11 as i64*mvx as i64) + (M12 as i64*mvy as i64) + (M13 as i64 * mvz as i64);
+        let y = (tvy as i64 * 0x1000) + (M21 as i64*mvx as i64) + (M22 as i64*mvy as i64) + (M23 as i64 * mvz as i64);
+        let z = (tvz as i64 * 0x1000) + (M31 as i64*mvx as i64) + (M32 as i64*mvy as i64) + (M33 as i64 * mvz as i64);
+
+        self.truncate_write_mac1(x, shift);
+        self.truncate_write_mac2(y, shift);
+        self.truncate_write_mac3(z, shift);
+
+        self.truncate_write_ir1(self.MAC1, lm);
+        self.truncate_write_ir2(self.MAC2, lm);
+        self.truncate_write_ir3(self.MAC3 as i64, lm);
+    } 
+
     fn rtps(&mut self, command: u32) {
         let shift = (command.get_bit(19) as usize) * 12;
         let lm = command.get_bit(10);
@@ -572,9 +616,28 @@ impl GTE {
         self.RGB2 = self.RGBC.clone();
     }
 
+    fn nct(&mut self) {
+        warn!("Stubbing colors for now");
+        self.RGB2 = self.RGBC.clone();
+    }
+
+    fn ncs(&mut self) {
+        warn!("Stubbing colors for now");
+        self.RGB2 = self.RGBC.clone();
+    }
+
     fn avsz3(&mut self) {
         let result =
             (self.ZSF3 as i64) * ((self.SZ1 as u32) + (self.SZ2 as u32) + (self.SZ3 as u32)) as i64;
+
+        self.truncate_write_mac0(result, 0);
+
+        self.truncate_write_otz(result >> 12);
+    }
+
+    fn avsz4(&mut self) {
+        let result =
+            (self.ZSF3 as i64) * ((self.SZ0 as u32) + (self.SZ1 as u32) + (self.SZ2 as u32) + (self.SZ3 as u32)) as i64;
 
         self.truncate_write_mac0(result, 0);
 

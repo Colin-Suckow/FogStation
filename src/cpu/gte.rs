@@ -478,8 +478,8 @@ impl GTE {
             0x6 => self.nclip(),
             0x12 => self.mvmva(command),
             0x13 => self.ncds(),
-            0x1E => self.ncs(),
-            0x20 => self.nct(),
+            // 0x1E => self.ncs(),
+            // 0x20 => self.nct(),
             0x30 => self.rtpt(command),
             0x2d => self.avsz3(),
             0x2e => self.avsz4(),
@@ -616,15 +616,15 @@ impl GTE {
         self.RGB2 = self.RGBC.clone();
     }
 
-    fn nct(&mut self) {
-        warn!("Stubbing colors for now");
-        self.RGB2 = self.RGBC.clone();
-    }
+    // fn nct(&mut self) {
+    //     warn!("Stubbing colors for now");
+    //     self.RGB2 = self.RGBC.clone();
+    // }
 
-    fn ncs(&mut self) {
-        warn!("Stubbing colors for now");
-        self.RGB2 = self.RGBC.clone();
-    }
+    // fn ncs(&mut self) {
+    //     warn!("Stubbing colors for now");
+    //     self.RGB2 = self.RGBC.clone();
+    // }
 
     fn avsz3(&mut self) {
         let result =
@@ -686,9 +686,8 @@ impl GTE {
             (val, _) => val as i16,
         };
 
-        //println!("z {} z_shift {}", z, z >> 12);
-        //println!("MAC3 {}", self.MAC3);
-        self.truncate_push_sz3((z >> shift) as i64);
+       
+        self.truncate_push_sz3((z >> 12) as i32);
 
         //println!("sz3 {}", self.SZ3);
 
@@ -788,7 +787,7 @@ impl GTE {
         self.push_sy(new_val as i16);
     }
 
-    fn truncate_push_sz3(&mut self, val: i64) {
+    fn truncate_push_sz3(&mut self, val: i32) {
         let (new_val, error) = match val {
             x if x > 0xFFFF => (0xFFFF, true),
             x if x < 0 => (0, true),

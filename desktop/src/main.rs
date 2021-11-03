@@ -12,11 +12,9 @@ use std::path::Path;
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
-use std::sync::Mutex;
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::SystemTime;
-use std::time::Duration;
 use simple_logger::SimpleLogger;
 
 mod disc;
@@ -28,6 +26,7 @@ const DEFAULT_GDB_PORT: u16 = 4444;
 const DEFAULT_BIOS_PATH: &str = "SCPH1001.BIN";
 const START_HALTED: bool = false;
 
+#[allow(dead_code)]
 struct ClientState {
     comm: ClientComms,
     emu_thread: JoinHandle<()>,
@@ -60,7 +59,7 @@ fn main() {
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
-            panic!(f.to_string())
+            panic!("{}", f.to_string())
         }
     };
 
@@ -142,7 +141,7 @@ fn main() {
 
     let emu_thread = start_emu_thread(emu_state);
 
-    let mut state = ClientState {
+    let state = ClientState {
         emu_thread,
         comm: client_comm,
         halted: START_HALTED,
@@ -157,8 +156,14 @@ fn main() {
     
 }
 
-fn run_headless(mut state: ClientState) {
-    state.comm.tx.send(EmuMessage::Continue);
+fn run_headless(state: ClientState) {
+    state.comm.tx.send(EmuMessage::Continue).unwrap();
+    loop {
+        match state.comm.rx.try_recv() {
+            Ok(ClientMessage::FrameReady(_, _)) => {state.comm.tx.send(EmuMessage::StartFrame).unwrap();}, // Drop the frame, but tell the emu to keep going
+            _ => ()
+        };
+    }
 }
 
 fn wait_for_gdb_connection(port: u16) -> std::io::Result<TcpStream> {
@@ -174,6 +179,7 @@ fn wait_for_gdb_connection(port: u16) -> std::io::Result<TcpStream> {
     Ok(stream)
 }
 
+#[allow(dead_code)]
 enum EmuMessage {
     Halt,
     Continue,
@@ -209,9 +215,9 @@ fn start_emu_thread(
     thread::spawn(move || {
 
         let mut debugger = if state.debugging {
-            state.comm.tx.send(ClientMessage::AwaitingGDBClient);
+            state.comm.tx.send(ClientMessage::AwaitingGDBClient).unwrap();
             let gdb_conn = wait_for_gdb_connection(DEFAULT_GDB_PORT).unwrap();
-            state.comm.tx.send(ClientMessage::GDBClientConnected);
+            state.comm.tx.send(ClientMessage::GDBClientConnected).unwrap();
             state.halted = false;
             Some(GdbStub::<EmuState, TcpStream>::new(gdb_conn))
         } else {
@@ -281,7 +287,7 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
                 state.current_resolution = state.emu.display_resolution();
                 state.comm.tx.send(ClientMessage::ResolutionChanged(
                     state.current_resolution.clone(),
-                ));
+                )).unwrap();
             };
 
             //Calculate frame time delta

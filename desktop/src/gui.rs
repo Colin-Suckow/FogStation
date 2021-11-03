@@ -1,9 +1,7 @@
-use std::{borrow::Cow, rc::Rc, time::{SystemTime, UNIX_EPOCH}};
-use __core::ops::AddAssign;
+use std::{borrow::Cow, rc::Rc};
 use glium::{Texture2d, backend::Facade, texture::{ClientFormat, RawImage2d}, uniforms::{MagnifySamplerFilter, MinifySamplerFilter, SamplerBehavior}};
 use imgui::*;
 use imgui_glium_renderer::Texture;
-use num::{Integer, Unsigned};
 use winit::event::VirtualKeyCode;
 use crate::{ClientMessage, EmuMessage, ClientState, support};
 use psx_emu::controller::{ButtonState, ControllerType};
@@ -11,7 +9,6 @@ use psx_emu::gpu::Resolution;
 
 pub(crate) fn run_gui(mut state: ClientState) {
     let system = support::init("VaporStation");
-    let mut start = SystemTime::now();
     let mut latest_frame: Vec<u16> = vec![0; 524_288];
     let mut latest_resolution = Resolution {
         width: 640,
@@ -22,7 +19,7 @@ pub(crate) fn run_gui(mut state: ClientState) {
     let mut awaiting_gdb = false;
 
     system.main_loop(move |_, ui, gl_ctx, textures| {
-        state.comm.tx.send(EmuMessage::UpdateControllers(get_button_state(ui)));
+        state.comm.tx.send(EmuMessage::UpdateControllers(get_button_state(ui))).unwrap();
 
         loop {
             match state.comm.rx.try_recv() {
@@ -31,7 +28,7 @@ pub(crate) fn run_gui(mut state: ClientState) {
                         ClientMessage::FrameReady(frame, frame_time) => {
                             latest_frame = frame;
                             times.push(frame_time as usize);
-                            state.comm.tx.send(EmuMessage::StartFrame);
+                            state.comm.tx.send(EmuMessage::StartFrame).unwrap();
                         },
                         ClientMessage::ResolutionChanged(res) => latest_resolution = res,
                         ClientMessage::AwaitingGDBClient => {
@@ -83,7 +80,7 @@ pub(crate) fn run_gui(mut state: ClientState) {
             .content_size([250.0, 100.0])
             .build(ui, || {
                 if ui.button(im_str!("Reset"), [80.0, 20.0]) {
-                    state.comm.tx.send(EmuMessage::Reset);
+                    state.comm.tx.send(EmuMessage::Reset).unwrap();
                 }
 
                 if ui.button(
@@ -96,9 +93,9 @@ pub(crate) fn run_gui(mut state: ClientState) {
                 ) {
                     state.halted = !state.halted;
                     if state.halted {
-                        state.comm.tx.send(EmuMessage::Halt);
+                        state.comm.tx.send(EmuMessage::Halt).unwrap();
                     } else {
-                        state.comm.tx.send(EmuMessage::Continue);
+                        state.comm.tx.send(EmuMessage::Continue).unwrap();
                     }
                 }
                 if !state.halted {
@@ -106,7 +103,7 @@ pub(crate) fn run_gui(mut state: ClientState) {
                 } else {
                     ui.text("Halted");
                     if ui.button(im_str!("Step Instruction"), [120.0, 20.0]) {
-                        state.comm.tx.send(EmuMessage::StepCPU);
+                        state.comm.tx.send(EmuMessage::StepCPU).unwrap();
                     }
                 }
 

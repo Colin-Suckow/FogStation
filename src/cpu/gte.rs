@@ -1,10 +1,8 @@
 use std::cmp::min;
 
 use bit_field::BitField;
-use fixed::types::{I16F16, I20F12, I28F4, I4F12, I8F24, I8F8};
-use log::{error, trace, warn};
+use log::warn;
 
-use super::instruction::NumberHelpers;
 
 #[derive(Clone, Copy)]
 struct Color {
@@ -36,6 +34,7 @@ impl Color {
     }
 }
 
+#[allow(non_snake_case)]
 pub(super) struct GTE {
     // Control Registers
     ZSF3: i16,
@@ -83,7 +82,6 @@ pub(super) struct GTE {
     TRZ: i32,
     FLAG: u32,
     LZCS: i32,
-    LZCR: i32,
 
     // Data registers
     VX0: i16,
@@ -172,7 +170,6 @@ impl GTE {
             TRZ: 0,
             FLAG: 0,
             LZCS: 0,
-            LZCR: 0,
 
             // Data Registers
             VX0: 0,
@@ -288,7 +285,7 @@ impl GTE {
             29 => self.ZSF3 = val as i16,
             30 => self.ZSF4 = val as i16,
             31 => self.FLAG = *self.FLAG.set_bits(12..=30, (val >> 12) & 0x7FFFF ),
-            _ => panic!("Tried to write unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg)
+            _ => panic!("Tried to write unknown GTE control register {} ({} RAW)", CTRL_REG_NAME[reg], reg)
         }
     }
 
@@ -366,7 +363,7 @@ impl GTE {
 
             30 => self.LZCS = val as i32,
             31 => (), //Can't write lzcr
-            _ => panic!("Tried to write unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
+            _ => panic!("Tried to write unknown GTE data register {} ({} RAW)", DATA_REG_NAME[reg], reg)
         }
     }
 
@@ -412,7 +409,7 @@ impl GTE {
             28..=29 => self.orgb(),
             30 => self.LZCS as u32,
             31 => self.lzcr(),
-            _ => panic!("Tried to read unknown GTE data register {} ({} RAW)", data_reg_name[reg], reg)
+            _ => panic!("Tried to read unknown GTE data register {} ({} RAW)", DATA_REG_NAME[reg], reg)
         };
         //println!("Reading data reg {} value {:#X}", data_reg_name[reg], val);
         val
@@ -465,7 +462,7 @@ impl GTE {
                 let error = (self.FLAG & 0x7F87E000) != 0;
                 self.FLAG | ((error as u32) << 31)
             },
-            _ => panic!("Tried to read unknown GTE control register {} ({} RAW)", ctrl_reg_name[reg], reg)
+            _ => panic!("Tried to read unknown GTE control register {} ({} RAW)", CTRL_REG_NAME[reg], reg)
         };
         //println!("Reading control reg {} value {:#X}", ctrl_reg_name[reg], val);
         val
@@ -544,7 +541,7 @@ impl GTE {
 impl GTE {
 
     fn mvmva(&mut self, command: u32) {
-        let (M11, M12, M13, M21, M22, M23, M31, M32, M33) = match command.get_bits(17..=18) {
+        let (m11, m12, m13, m21, m22, m23, m31, m32, m33) = match command.get_bits(17..=18) {
             0 => (self.RT11, self.RT12, self.RT13, self.RT21, self.RT22, self.RT23, self.RT31, self.RT32, self.RT33),
             1 => (self.L11, self.L12, self.L13, self.L21, self.L22, self.L23, self.L31, self.L32, self.L33),
             2 => (self.LR1, self.LR2, self.LR3, self.LG1, self.LG2, self.LG3, self.LB1, self.LB2, self.LB3),
@@ -569,9 +566,9 @@ impl GTE {
         let shift = (command.get_bit(19) as usize) * 12;
         let lm = command.get_bit(10);
 
-        let x = (tvx as i64 * 0x1000) + (M11 as i64*mvx as i64) + (M12 as i64*mvy as i64) + (M13 as i64 * mvz as i64);
-        let y = (tvy as i64 * 0x1000) + (M21 as i64*mvx as i64) + (M22 as i64*mvy as i64) + (M23 as i64 * mvz as i64);
-        let z = (tvz as i64 * 0x1000) + (M31 as i64*mvx as i64) + (M32 as i64*mvy as i64) + (M33 as i64 * mvz as i64);
+        let x = (tvx as i64 * 0x1000) + (m11 as i64*mvx as i64) + (m12 as i64*mvy as i64) + (m13 as i64 * mvz as i64);
+        let y = (tvy as i64 * 0x1000) + (m21 as i64*mvx as i64) + (m22 as i64*mvy as i64) + (m23 as i64 * mvz as i64);
+        let z = (tvz as i64 * 0x1000) + (m31 as i64*mvx as i64) + (m32 as i64*mvy as i64) + (m33 as i64 * mvz as i64);
 
         self.truncate_write_mac1(x, shift);
         self.truncate_write_mac2(y, shift);
@@ -647,25 +644,25 @@ impl GTE {
 
 // Command helper functions
 impl GTE {
-    fn do_rtps(&mut self, VX: i16, VY: i16, VZ: i16, shift: usize, last: bool, lm: bool) {
+    fn do_rtps(&mut self, vx: i16, vy: i16, vz: i16, shift: usize, last: bool, lm: bool) {
         
         let x = self.i64_to_i44((self.TRX as i64) << 12)
             + self.i64_to_i44(
-                ((self.RT11 as i64) * (VX as i64))
-                    + ((self.RT12 as i64) * (VY as i64))
-                    + ((self.RT13 as i64) * VZ as i64),
+                ((self.RT11 as i64) * (vx as i64))
+                    + ((self.RT12 as i64) * (vy as i64))
+                    + ((self.RT13 as i64) * vz as i64),
             );
         let y = self.i64_to_i44((self.TRY as i64) << 12)
             + self.i64_to_i44(
-                ((self.RT21 as i64) * (VX as i64))
-                    + ((self.RT22 as i64) * (VY as i64))
-                    + ((self.RT23 as i64) * VZ as i64),
+                ((self.RT21 as i64) * (vx as i64))
+                    + ((self.RT22 as i64) * (vy as i64))
+                    + ((self.RT23 as i64) * vz as i64),
             );
         let z = self.i64_to_i44((self.TRZ as i64) << 12)
             + self.i64_to_i44(
-                ((self.RT31 as i64) * (VX as i64))
-                    + ((self.RT32 as i64) * (VY as i64))
-                    + ((self.RT33 as i64) * VZ as i64),
+                ((self.RT31 as i64) * (vx as i64))
+                    + ((self.RT32 as i64) * (vy as i64))
+                    + ((self.RT33 as i64) * vz as i64),
             );
 
         self.truncate_write_mac1(x, shift);
@@ -742,18 +739,6 @@ impl GTE {
             _ => (),
         };
         self.MAC0 = (val >> shift) as i32;
-    }
-
-    fn set_mac_flags(&mut self, val: i64) {
-        match val {
-            x if x > (i32::MAX as i64) => {
-                self.FLAG.set_bit(16, true);
-            }
-            x if x < (i32::MIN as i64) => {
-                self.FLAG.set_bit(15, true);
-            }
-            _ => (),
-        };
     }
 
     fn saturate_push_sx(&mut self, val: i64) {
@@ -949,14 +934,14 @@ const UNR_TABLE: [u32; 0x101] = [
 ];
 
 
-const data_reg_name: [&str; 32] = [
+const DATA_REG_NAME: [&str; 32] = [
     "vxy0", "vz0", "vxy1", "vz1", "vxy2", "vz2", "rgb", "otz", // 00
     "ir0", "ir1", "ir2", "ir3", "sxy0", "sxy1", "sxy2", "sxyp", // 08
     "sz0", "sz1", "sz2", "sz3", "rgb0", "rgb1", "rgb2", "res1", // 10
     "mac0", "mac1", "mac2", "mac3", "irgb", "orgb", "lzcs", "lzcr", // 18
 ];
 
-const ctrl_reg_name: [&str; 32] = [
+const CTRL_REG_NAME: [&str; 32] = [
     "r11r12", "r13r21", "r22r23", "r31r32", "r33", "trx", "try", "trz", // 00
     "l11l12", "l13l21", "l22l23", "l31l32", "l33", "rbk", "gbk", "bbk", // 08
     "lr1lr2", "lr3lg1", "lg2lg3", "lb1lb2", "lb3", "rfc", "gfc", "bfc", // 10

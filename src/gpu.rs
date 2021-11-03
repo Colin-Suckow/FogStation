@@ -1,5 +1,3 @@
-use std::ops::Shr;
-
 use bit_field::BitField;
 use log::{error, trace};
 
@@ -74,6 +72,8 @@ impl Point {
         }
     }
 }
+
+#[allow(dead_code)]
 
 pub struct Gpu {
     vram: Vec<u16>,
@@ -194,8 +194,8 @@ impl Gpu {
 
                         let x1 = self.gp0_buffer[1] & 0xFFFF;
                         let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
-                        let x2 = ((self.gp0_buffer[2] & 0xFFFF) + x1);
-                        let y2 = (((self.gp0_buffer[2] >> 16) & 0xFFFF) + y1);
+                        let x2 = (self.gp0_buffer[2] & 0xFFFF) + x1;
+                        let y2 = ((self.gp0_buffer[2] >> 16) & 0xFFFF) + y1;
                         self.draw_solid_box(
                             x1,
                             y1,
@@ -551,8 +551,8 @@ impl Gpu {
                     //Not enough for the header
                     return;
                 }
-                let mut width = ((self.gp0_buffer[2] & 0xFFFF) as u32);
-                let mut height = (((self.gp0_buffer[2] >> 16) & 0xFFFF) as u32);
+                let mut width = (self.gp0_buffer[2] & 0xFFFF) as u32;
+                let mut height = ((self.gp0_buffer[2] >> 16) & 0xFFFF) as u32;
                 if width == 0 {width = 1024};
                 if height == 0 {height = 512};
                 let length = ((width * height) / 2) + if width % 2 != 0 {1} else {0} + 3;
@@ -562,7 +562,7 @@ impl Gpu {
                 }
                 trace!("GPU: CPU to VRAM length: {} ({} x {})", length, width, height);
 
-                let base_x = ((self.gp0_buffer[1] & 0xFFFF) as i16);
+                let base_x = (self.gp0_buffer[1] & 0xFFFF) as i16;
                 let base_y = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as i16;
 
 
@@ -1246,7 +1246,7 @@ impl Gpu {
                     (page_x * 64) as u32 + (x / 4) as u32,
                     (page_y * 256) as u32 + y as u32,
                 ) as usize) % 524288];
-                let (clut_index, _) = (value.overflowing_shr(((x % 4) * 4) as u32));
+                let (clut_index, _) = value.overflowing_shr(((x % 4) * 4) as u32);
                 self.vram
                     [point_to_address((clut_x * 16 + (clut_index & 0xF)) as u32, clut_y as u32) as usize]
             }

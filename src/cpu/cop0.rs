@@ -2,8 +2,6 @@ use bit_field::BitField;
 
 use crate::cpu::Exception;
 
-use super::InterruptSource;
-
 #[derive(Debug)]
 pub struct Cop0 {
     gen_registers: [u32; 32],

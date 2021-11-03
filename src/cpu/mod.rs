@@ -1,13 +1,12 @@
 use bit_field::BitField;
 
 use cop0::Cop0;
-use instruction::{InstructionArgs, NumberHelpers, Instruction, decode_opcode};
+use instruction::{InstructionArgs, NumberHelpers, decode_opcode};
 use log::{trace, warn};
 
-use crate::LOGGING;
 use crate::cpu::instruction::RegisterNames;
 use crate::timer::TimerState;
-use crate::{bus::MainBus, cdrom};
+use crate::bus::MainBus;
 
 use self::gte::GTE;
 
@@ -114,6 +113,7 @@ impl R3000 {
         self.load_delays = Vec::new();
     }
 
+    #[allow(dead_code)]
     fn print_string(&mut self, addr: u32) {
         let val = self.main_bus.read_byte(addr);
         if val == 0 {

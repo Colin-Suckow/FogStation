@@ -4,15 +4,13 @@ use disc::*;
 use log::{trace, warn};
 
 use crate::cpu::{InterruptSource, R3000};
-use std::{
-    borrow::{Borrow, BorrowMut},
-    collections::VecDeque,
-};
+use std::collections::VecDeque;
 
 mod commands;
 pub mod disc;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
+#[allow(dead_code)]
 pub(super) enum DriveState {
     Play,
     Seek,
@@ -22,6 +20,7 @@ pub(super) enum DriveState {
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
+#[allow(dead_code)]
 pub(super) enum MotorState {
     Off,
     SpinUp,
@@ -39,6 +38,7 @@ enum DriveSpeed {
     Double,
 }
 #[derive(Debug, PartialEq, Clone, Copy)]
+#[allow(dead_code)]
 pub(super) enum IntCause {
     INT1,
     INT2,
@@ -80,6 +80,7 @@ pub(super) struct Packet {
 pub(super) struct Block {
     data: Vec<u8>,
 }
+#[allow(dead_code)]
 
 pub struct CDDrive {
     cycle_counter: u32,

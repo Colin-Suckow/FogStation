@@ -200,7 +200,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
 
     //Populate list of running and enabled dma channels
     let mut channels_to_run: Vec<usize> = Vec::new();
-    for i in (0..NUM_CHANNELS) {
+    for i in 0..NUM_CHANNELS {
         let channel = &cpu.main_bus.dma.channels[i];
         if cpu.main_bus.dma.channel_enabled(i) && channel.enabled() {
             channels_to_run.push(i);

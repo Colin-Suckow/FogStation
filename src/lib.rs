@@ -1,10 +1,8 @@
 use bios::Bios;
 use bus::MainBus;
-use controller::{ButtonState, controller_execute_cycle, ControllerType};
+use controller::{ButtonState, controller_execute_cycle};
 use cpu::R3000;
 use gpu::Resolution;
-use log::trace;
-use std::panic;
 use timer::TimerState;
 
 use crate::cdrom::disc::Disc;

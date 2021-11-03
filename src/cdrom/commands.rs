@@ -1,6 +1,3 @@
-use bit_field::BitField;
-use log::trace;
-
 use super::{CDDrive, DriveState, IntCause, MotorState, Packet, disc::dec_to_bcd};
 use crate::cdrom::{DriveSpeed, disc::DiscIndex};
 

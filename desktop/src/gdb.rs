@@ -1,7 +1,5 @@
-use std::error::Error;
-
-use gdbstub::{arch, target::{Target, TargetResult, ext::{base::{ResumeAction, singlethread::{SingleThreadOps, StopReason}}, breakpoints::{HwBreakpoint, HwWatchpoint, SwBreakpoint, SwBreakpointOps}}}};
-use crate::{EmuMessage, EmuState, emu_loop_step};
+use gdbstub::{arch, target::{Target, TargetResult, ext::{base::{ResumeAction, singlethread::{SingleThreadOps, StopReason}}, breakpoints::{HwBreakpoint, HwWatchpoint, SwBreakpoint}}}};
+use crate::{EmuState, emu_loop_step};
 
 impl Target for EmuState {
     type Arch = arch::mips::Mips;
@@ -172,7 +170,7 @@ impl HwWatchpoint for EmuState {
     fn add_hw_watchpoint(
         &mut self,
         addr: u32,
-        kind: gdbstub::target::ext::breakpoints::WatchKind,
+        _kind: gdbstub::target::ext::breakpoints::WatchKind,
     ) -> TargetResult<bool, Self> {
         println!("Trying to add watchpoint...");
         self.emu.add_watchpoint(addr);
@@ -182,7 +180,7 @@ impl HwWatchpoint for EmuState {
     fn remove_hw_watchpoint(
         &mut self,
         addr: u32,
-        kind: gdbstub::target::ext::breakpoints::WatchKind,
+        _kind: gdbstub::target::ext::breakpoints::WatchKind,
     ) -> TargetResult<bool, Self> {
         self.emu.remove_watchpoint(addr);
         TargetResult::<bool, Self>::Ok(true)

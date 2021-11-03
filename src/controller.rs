@@ -13,6 +13,7 @@ pub(super) const JOY_BAUD: u32 = 0x1F80104E;
 
 const DEFAULT_JOY_BAUD: u16 = 0x88;
 
+#[allow(dead_code)]
 const MEMORY_CARD_SELECT_BYTE: u8 = 0x81;
 const CONTROLER_SELECT_BYTE: u8 = 0x1;
 

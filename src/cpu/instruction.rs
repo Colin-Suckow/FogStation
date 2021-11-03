@@ -166,6 +166,8 @@ pub(super) enum Instruction {
 }
 
 impl Instruction {
+
+    #[allow(unused_variables)] // I should replace all these unused variables with underscores, but thats a lot of work
     pub fn mnemonic(&self) -> &str {
         match self {
             Instruction::SLL { rt, rd, sa } => "sll",
@@ -239,6 +241,7 @@ impl Instruction {
         }
     }
 
+    #[allow(unused_variables)]
     pub fn arguments(&self, cpu: &R3000) -> String {
         match self {
             Instruction::SLL { rt, rd, sa } |
@@ -439,6 +442,7 @@ pub(super) fn decode_opcode(inst: u32) -> Option<Instruction> {
 }
 
 #[derive(FromPrimitive)]
+#[allow(non_camel_case_types)]
 pub enum RegisterNames {
     zero = 0,
     at = 1,

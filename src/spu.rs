@@ -12,6 +12,7 @@ pub struct SPU {
     main_volume: u32,
     reverb_volume: u32,
     spu_control: u16,
+    #[allow(dead_code)]
     spu_status: u16,
     voice0_volume: u32,
     current_mode: SpuMode,

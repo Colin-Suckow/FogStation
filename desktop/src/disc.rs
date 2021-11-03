@@ -1,7 +1,7 @@
 use psx_emu::cdrom::disc::{Disc, DiscTrack};
 use std::path::{Path, PathBuf};
 use std::fs::File;
-use std::io::{Read, Error};
+use std::io::Read;
 use cue::cd::CD;
 
 
@@ -22,7 +22,7 @@ pub fn load_disc_from_cuesheet(cuesheet_path: PathBuf) -> Disc {
         track_path.push(Path::new(&track_name));
         let mut file = File::open(track_path).unwrap();
         let mut data = Vec::new();
-        file.read_to_end(&mut data);
+        file.read_to_end(&mut data).unwrap();
         disc.add_track(DiscTrack::new(data));
     }
     disc

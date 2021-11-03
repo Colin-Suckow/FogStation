@@ -686,9 +686,15 @@ impl GTE {
             (val, _) => val as i16,
         };
 
-        self.truncate_push_sz3(z >> 12);
+        //println!("z {} z_shift {}", z, z >> 12);
+        //println!("MAC3 {}", self.MAC3);
+        self.truncate_push_sz3((z >> shift) as i64);
+
+        //println!("sz3 {}", self.SZ3);
 
         let div_val = unr_divide(self.H as u32, self.SZ3 as u32, &mut self.FLAG) as i64;
+
+       
  
         let sx = div_val * self.IR1 as i64 + self.OFX as i64;
         self.truncate_write_mac0(sx, 0);

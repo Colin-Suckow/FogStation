@@ -13,3 +13,7 @@ Cargo.lock
 *.elf
 .gdb_history
 /desktop/build.out
+/desktop/*.data
+/desktop/*.old
+/desktop/*.svg
+/desktop/*.gz

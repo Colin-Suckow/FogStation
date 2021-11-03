@@ -93,6 +93,7 @@ fn main() {
 
    
 
+    //Loads entire disc into memory (Don't worry about it)
     if let Some(disc_path) = matches.opt_str("c") {
         println!("Loading CUE: {}", disc_path);
         let disc = load_disc_from_cuesheet(Path::new(&disc_path).to_path_buf());

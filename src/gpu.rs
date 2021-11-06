@@ -1,7 +1,10 @@
+use std::cmp::{Ordering, max, min};
+
 use bit_field::BitField;
 use log::{error, trace};
+use nalgebra::Vector2;
 
-const CYCLES_PER_SCANLINE: u32 = 3413;
+const CYCLES_PER_SCANLINE: u32 = 2500;
 const TOTAL_SCANLINES: u32 = 245;
 
 #[derive(Copy, Clone, Debug)]
@@ -19,11 +22,11 @@ pub struct Resolution {
 
 #[derive(Copy, Clone, Debug)]
 struct Point {
-    x: i16,
-    y: i16,
+    x: i32,
+    y: i32,
     color: u16,
-    tex_x: i16,
-    tex_y: i16,
+    tex_x: i32,
+    tex_y: i32,
 }
 
 enum ColorDepth {
@@ -34,8 +37,8 @@ enum ColorDepth {
 impl Point {
     fn from_word(word: u32, color: u16) -> Self {
         Self {
-            x: (word & 0xFFFF) as i16,
-            y: ((word >> 16) & 0xFFFF) as i16,
+            x: (word & 0xFFFF) as i32,
+            y: ((word >> 16) & 0xFFFF) as i32,
             color,
             tex_x: 0,
             tex_y: 0,
@@ -44,15 +47,15 @@ impl Point {
 
     fn from_word_with_offset(word: u32, color: u16, offset: Point) -> Self {
         Self {
-            x: ((word & 0xFFFF) as i32 + offset.x as i32) as i16,
-            y: (((word >> 16) & 0xFFFF) as i32 + offset.y as i32) as i16,
+            x: ((word & 0xFFFF) as i32 + offset.x as i32) as i32,
+            y: (((word >> 16) & 0xFFFF) as i32 + offset.y as i32) as i32,
             color,
             tex_x: 0,
             tex_y: 0,
         }
     }
 
-    fn from_components(x: i16, y: i16, color: u16) -> Self {
+    fn from_components(x: i32, y: i32, color: u16) -> Self {
         Self {
             x,
             y,
@@ -62,10 +65,10 @@ impl Point {
         }
     }
 
-    fn new_textured_point(word: u32, tex_y: i16, tex_x: i16) -> Self {
+    fn new_textured_point(word: u32, tex_y: i32, tex_x: i32) -> Self {
         Self {
-            x: (word & 0xFFFF) as i16,
-            y: ((word >> 16) & 0xFFFF) as i16,
+            x: (word & 0xFFFF) as i32,
+            y: ((word >> 16) & 0xFFFF) as i32,
             color: 0,
             tex_x,
             tex_y,
@@ -246,23 +249,23 @@ impl Gpu {
                         let points: Vec<Point> = vec![
                             Point::new_textured_point(
                                 self.gp0_buffer[1],
-                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[2] & 0xFF) as i16,
+                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i32,
+                                (self.gp0_buffer[2] & 0xFF) as i32,
                             ),
                             Point::new_textured_point(
                                 self.gp0_buffer[3],
-                                ((self.gp0_buffer[4] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[4] & 0xFF) as i16,
+                                ((self.gp0_buffer[4] >> 8) & 0xFF) as i32,
+                                (self.gp0_buffer[4] & 0xFF) as i32,
                             ),
                             Point::new_textured_point(
                                 self.gp0_buffer[5],
-                                ((self.gp0_buffer[6] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[6] & 0xFF) as i16,
+                                ((self.gp0_buffer[6] >> 8) & 0xFF) as i32,
+                                (self.gp0_buffer[6] & 0xFF) as i32,
                             ),
                             Point::new_textured_point(
                                 self.gp0_buffer[7],
-                                ((self.gp0_buffer[8] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[8] & 0xFF) as i16,
+                                ((self.gp0_buffer[8] >> 8) & 0xFF) as i32,
+                                (self.gp0_buffer[8] & 0xFF) as i32,
                             ),
                         ];
 
@@ -294,12 +297,17 @@ impl Gpu {
                         ];
                         self.draw_shaded_quad(&points, command.get_bit(25));
                     } else {
-                        let points: Vec<Point> = vec![
+                        let mut points: Vec<Point> = vec![
                             Point::from_word(self.gp0_buffer[1], 0),
                             Point::from_word(self.gp0_buffer[2], 0),
                             Point::from_word(self.gp0_buffer[3], 0),
                             Point::from_word(self.gp0_buffer[4], 0),
                         ];
+
+                        // let center = center_of_points(&points);
+
+                        // points.sort_unstable_by(|a, b| sort_clockwise_big_match(*a, *b, center));
+
                         self.draw_solid_quad(&points, fill, command.get_bit(25));
                     };
                 } else {
@@ -310,18 +318,18 @@ impl Gpu {
                         let points: Vec<Point> = vec![
                             Point::new_textured_point(
                                 self.gp0_buffer[1],
-                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[2] & 0xFF) as i16,
+                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i32,
+                                (self.gp0_buffer[2] & 0xFF) as i32,
                             ),
                             Point::new_textured_point(
                                 self.gp0_buffer[3],
-                                ((self.gp0_buffer[4] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[4] & 0xFF) as i16,
+                                ((self.gp0_buffer[4] >> 8) & 0xFF) as i32,
+                                (self.gp0_buffer[4] & 0xFF) as i32,
                             ),
                             Point::new_textured_point(
                                 self.gp0_buffer[5],
-                                ((self.gp0_buffer[6] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[6] & 0xFF) as i16,
+                                ((self.gp0_buffer[6] >> 8) & 0xFF) as i32,
+                                (self.gp0_buffer[6] & 0xFF) as i32,
                             ),
                         ];
                         ////trace!("{:?}", points);
@@ -356,8 +364,8 @@ impl Gpu {
                         trace!("GPU: Solid tri");
                         let points: Vec<Point> = vec![
                             Point::from_word(self.gp0_buffer[1], 0),
-                            Point::from_word(self.gp0_buffer[2], 0),
                             Point::from_word(self.gp0_buffer[3], 0),
+                            Point::from_word(self.gp0_buffer[2], 0),
                         ];
                         self.draw_solid_triangle(&points, fill, command.get_bit(25));
                     }
@@ -424,8 +432,8 @@ impl Gpu {
                             trace!("GPU: Tex box");
                             let tl_point = Point::new_textured_point(
                                 self.gp0_buffer[1],
-                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[2] & 0xFF) as i16,
+                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i32,
+                                (self.gp0_buffer[2] & 0xFF) as i32,
                             );
 
                             let size = Point::from_word(self.gp0_buffer[3], 0);
@@ -459,8 +467,8 @@ impl Gpu {
                         if command.get_bit(26) {
                             let tl_point = Point::new_textured_point(
                                 self.gp0_buffer[1],
-                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[2] & 0xFF) as i16,
+                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i32,
+                                (self.gp0_buffer[2] & 0xFF) as i32,
                             );
 
                             let size = Point::from_components(8, 8, 0);
@@ -489,8 +497,8 @@ impl Gpu {
                         if command.get_bit(26) {
                             let tl_point = Point::new_textured_point(
                                 self.gp0_buffer[1],
-                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i16,
-                                (self.gp0_buffer[2] & 0xFF) as i16,
+                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i32,
+                                (self.gp0_buffer[2] & 0xFF) as i32,
                             );
 
                             let size = Point::from_components(16, 16, 0);
@@ -611,8 +619,8 @@ impl Gpu {
                     0xE3 => {
                         //Set Drawing Area Top Left
                         self.draw_area_tl_point = Point::from_components(
-                            ((command & 0x3FF) as u16) as i16,
-                            (((command >> 10) & 0x1FF) as u16) as i16,
+                            ((command & 0x3FF) as u16) as i32,
+                            (((command >> 10) & 0x1FF) as u16) as i32,
                             0,
                         );
                     }
@@ -620,8 +628,8 @@ impl Gpu {
                     0xE4 => {
                         //Set Drawing Area Bottom Right
                         self.draw_area_br_point = Point::from_components(
-                            ((command & 0x3FF) as u16) as i16,
-                            (((command >> 10) & 0x1FF) as u16) as i16,
+                            ((command & 0x3FF) as u16) as i32,
+                            (((command >> 10) & 0x1FF) as u16) as i32,
                             0,
                         );
                     }
@@ -630,8 +638,8 @@ impl Gpu {
 
                     0xE5 => {
                         //Set Drawing Offset
-                        let x = (command & 0x7FF) as i16;
-                        let y = ((command >> 11) & 0x7FF) as i16;
+                        let x = (command & 0x7FF) as i32;
+                        let y = ((command >> 11) & 0x7FF) as i32;
                         self.draw_offset = Point::from_components(x, y, 0);
                     }
 
@@ -851,7 +859,7 @@ impl Gpu {
     fn draw_horizontal_line(&mut self, x1: u32, x2: u32, y: u32, fill: u16, transparent: bool) {
         
         for x in x1..x2 {
-            if self.out_of_draw_area(&Point::from_components(x as i16, y as i16, 0)) {
+            if self.out_of_draw_area(&Point::from_components(x as i32, y as i32, 0)) {
                 continue;
             }
             let address = point_to_address(x, y) as usize;
@@ -868,9 +876,9 @@ impl Gpu {
 
     fn draw_horizontal_line_shaded(
         &mut self,
-        x1: i16,
-        x2: i16,
-        y: i16,
+        x1: i32,
+        x2: i32,
+        y: i32,
         x1_color: u16,
         x2_color: u16,
         transparent: bool,
@@ -906,13 +914,13 @@ impl Gpu {
 
     fn draw_horizontal_line_textured(
         &mut self,
-        x1: i16,
-        x2: i16,
-        y: i16,
-        y1_tex: i16,
-        y2_tex: i16,
-        x1_tex: i16,
-        x2_tex: i16,
+        x1: i32,
+        x2: i32,
+        y: i32,
+        y1_tex: i32,
+        y2_tex: i32,
+        x1_tex: i32,
+        x2_tex: i32,
         transparent: bool,
     ) {
         let (start, end) = if x1 > x2 { (x2, x1) } else { (x1, x2) };
@@ -948,7 +956,7 @@ impl Gpu {
         }
     }
 
-    fn draw_textured_box(&mut self, tl_point: &Point, width: i16, height: i16, transparent: bool) {
+    fn draw_textured_box(&mut self, tl_point: &Point, width: i32, height: i32, transparent: bool) {
         for offset in 0..height {
             self.draw_horizontal_line_textured(
                 tl_point.x,
@@ -977,7 +985,7 @@ impl Gpu {
         let mut curx1 = p1.x as f32;
         let mut curx2 = p1.x as f32;
 
-        for scanline in p1.y..p2.y {
+        for scanline in min(p1.y, p2.y)..max(p1.y, p2.y) {
             self.draw_horizontal_line(
                 curx1 as u32,
                 curx2 as u32,
@@ -1004,7 +1012,7 @@ impl Gpu {
         let mut curx1 = p3.x as f32;
         let mut curx2 = p3.x as f32;
 
-        for scanline in (p1.y..=p3.y).rev() {
+        for scanline in ( min(p1.y, p2.y)..=max(p1.y, p2.y)).rev() {
             self.draw_horizontal_line(
                 (curx1 + 0.5) as u32,
                 (curx2 + 0.5) as u32,
@@ -1034,8 +1042,8 @@ impl Gpu {
             let curx1_color = lerp_color(p1.color, p2.color, p1.y, p3.y, scanline);
             let curx2_color = lerp_color(p1.color, p3.color, p1.y, p3.y, scanline);
             self.draw_horizontal_line_shaded(
-                curx1 as i16,
-                curx2 as i16,
+                curx1 as i32,
+                curx2 as i32,
                 scanline,
                 curx1_color,
                 curx2_color,
@@ -1063,8 +1071,8 @@ impl Gpu {
             let curx1_color = lerp_color(p1.color, p3.color, p1.y, p3.y, scanline);
             let curx2_color = lerp_color(p2.color, p3.color, p1.y, p3.y, scanline);
             self.draw_horizontal_line_shaded(
-                (curx1 + 0.5) as i16,
-                (curx2 + 0.5) as i16,
+                (curx1 + 0.5) as i32,
+                (curx2 + 0.5) as i32,
                 scanline,
                 curx1_color,
                 curx2_color,
@@ -1094,8 +1102,8 @@ impl Gpu {
             let x1 = lerp_coords(p1.tex_x, p3.tex_x, p1.y, p3.y, scanline);
             let x2 = lerp_coords(p1.tex_x, p2.tex_x, p1.y, p3.y, scanline);
             self.draw_horizontal_line_textured(
-                curx1 as i16,
-                curx2 as i16,
+                curx1 as i32,
+                curx2 as i32,
                 scanline,
                 y1,
                 y2,
@@ -1127,8 +1135,8 @@ impl Gpu {
             let x1 = lerp_coords(p1.tex_x, p3.tex_x, p1.y, p3.y, scanline);
             let x2 = lerp_coords(p2.tex_x, p3.tex_x, p1.y, p3.y, scanline);
             self.draw_horizontal_line_textured(
-                (curx1 + 0.5) as i16,
-                (curx2 + 0.5) as i16,
+                (curx1 + 0.5) as i32,
+                (curx2 + 0.5) as i32,
                 scanline,
                 y1,
                 y2,
@@ -1142,21 +1150,58 @@ impl Gpu {
     }
 
     fn draw_solid_triangle(&mut self, points: &[Point], fill: u16, transparent: bool) {
-        let mut sp = points.to_vec();
-        sp.sort_by_key(|p| p.y);
 
-        if sp[1].y == sp[2].y {
-            self.draw_solid_flat_bottom_triangle(sp[0], sp[1], sp[2], fill, transparent);
-        } else if sp[0].y == sp[1].y {
-            self.draw_solid_flat_top_triangle(sp[0], sp[1], sp[2], fill, transparent);
-        } else {
-            let bound_x = (sp[0].x
-                + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as i16
-                    * (sp[2].x - sp[0].x)) as i16;
-            let bound_point = Point::from_components(bound_x, sp[1].y, 0);
-            self.draw_solid_flat_bottom_triangle(sp[0], sp[1], bound_point, fill, transparent);
-            self.draw_solid_flat_top_triangle(sp[1], bound_point, sp[2], fill, transparent);
+        fn edge_function(a: &Point, b: &Point, c: &Vector2<i32>) -> bool {
+            (c.x as isize - a.x as isize) * (b.y as isize - a.y as isize) - (c.y as isize - a.y as isize) * (b.x as isize - a.x as isize) >= 0
         }
+    
+        let min_x = points.iter().min_by_key(|v| v.x).unwrap().x;
+        let max_x = points.iter().max_by_key(|v| v.x).unwrap().x;
+    
+        let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
+        let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
+    
+        for x in min_x..=max_x {
+            for y in min_y..=max_y {
+                let point = Vector2::new(x, y);
+                let inside = edge_function(&points[0], &points[1], &point) && edge_function(&points[1], &points[2], &point) && edge_function(&points[2], &points[0], &point);
+                let addr = ((y as u32) * 1024) + x as u32;
+                if inside {
+                    self.vram[addr as usize] = fill;
+                }
+            }
+        }
+
+
+        // let mut sp = points.to_vec();
+        // //sp.sort_by_key(|p| p.y);
+
+        // // if sp[0].y > sp[1].y {
+        // //     sp.swap(0, 1);
+        // // }
+
+       
+
+        // let center = center_of_points(&sp);
+
+        // sp.sort_unstable_by(|a, b| sort_clockwise_big_match(*a, *b, center));
+
+        // for p in points {
+        //     self.vram[point_to_address(p.x as u32, p.y as u32) as usize] = fill;
+        // }
+   
+        // if sp[1].y == sp[2].y {
+        //     self.draw_solid_flat_bottom_triangle(sp[0], sp[2], sp[1], fill, transparent);
+        // } else if sp[0].y == sp[1].y {
+        //     self.draw_solid_flat_top_triangle(sp[0], sp[1], sp[2], fill, transparent);
+        // } else {
+        //     let bound_x = (sp[0].x
+        //         + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as i16
+        //             * (sp[2].x - sp[0].x)) as i16;
+        //     let bound_point = Point::from_components(bound_x, sp[2].y, 0);
+        //     self.draw_solid_flat_bottom_triangle(sp[0], sp[1], bound_point, fill, transparent);
+        //     self.draw_solid_flat_top_triangle(bound_point, sp[2], sp[1], fill, transparent);
+        // }
     }
 
     fn draw_shaded_triangle(&mut self, points: &[Point], transparent: bool) {
@@ -1169,8 +1214,8 @@ impl Gpu {
             self.draw_shaded_flat_top_triangle(sp[0], sp[1], sp[2], transparent);
         } else {
             let bound_x = (sp[0].x
-                + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as i16
-                    * (sp[2].x - sp[0].x)) as i16;
+                + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as i32
+                    * (sp[2].x - sp[0].x)) as i32;
             let bound_point = Point::from_components(bound_x, sp[1].y, sp[2].color);
             self.draw_shaded_flat_bottom_triangle(sp[0], bound_point, sp[1], transparent);
             self.draw_shaded_flat_top_triangle(sp[1], bound_point, sp[2], transparent);
@@ -1187,8 +1232,8 @@ impl Gpu {
             self.draw_textured_flat_top_triangle(sp[0], sp[1], sp[2], transparent);
         } else {
             let progress =
-                sp[0].x + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as i16;
-            let bound_x = progress * ((sp[2].x - sp[0].x) as i16);
+                sp[0].x + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as i32;
+            let bound_x = progress * ((sp[2].x - sp[0].x) as i32);
             let bound_point = Point {
                 x: bound_x,
                 y: sp[1].y,
@@ -1203,8 +1248,8 @@ impl Gpu {
     }
 
     fn draw_solid_quad(&mut self, points: &[Point], fill: u16, transparent: bool) {
-        self.draw_solid_triangle(&[points[0], points[2], points[1]], fill, transparent);
-        self.draw_solid_triangle(&[points[1], points[2], points[3]], fill, transparent);
+        self.draw_solid_triangle(&[points[0], points[3], points[1]], fill, transparent);
+        self.draw_solid_triangle(&[points[0], points[2], points[3]], fill, transparent);
     }
 
     fn draw_shaded_quad(&mut self, points: &[Point], transparent: bool) {
@@ -1217,7 +1262,7 @@ impl Gpu {
         self.draw_textured_triangle(&[points[1], points[3], points[2]], transparent);
     }
 
-    fn get_texel(&self, x: i16, y: i16) -> u16 {
+    fn get_texel(&self, x: i32, y: i32) -> u16 {
         //TODO inline variables. Just did this because I'm lazy
         let page_x = self.texpage_x_base;
         let page_y = self.texpage_y_base;
@@ -1284,7 +1329,7 @@ fn rgb_to_b15(r: u8, g: u8, b: u8) -> u16 {
     ((r as u16) << 10) | ((g as u16) << 5) | (b as u16)
 }
 
-fn lerp_color(y0: u16, y1: u16, x0: i16, x1: i16, x: i16) -> u16 {
+fn lerp_color(y0: u16, y1: u16, x0: i32, x1: i32, x: i32) -> u16 {
     let (sr, sg, sb) = b15_to_rgb(y0);
     let (er, eg, eb) = b15_to_rgb(y1);
 
@@ -1300,8 +1345,8 @@ fn lerp_color(y0: u16, y1: u16, x0: i16, x1: i16, x: i16) -> u16 {
     //(y0 as f32 + ((y1 - y0) as f32 * ((x - x0) as f32 / (x1 - x0) as f32))) as u16
 }
 
-fn lerp_coords(y0: i16, y1: i16, x0: i16, x1: i16, x: i16) -> i16 {
-    (y0 as f32 + ((y1 as i32 - y0 as i32) as f32 * ((x - x0) as f32 / (x1 - x0) as f32))) as i16
+fn lerp_coords(y0: i32, y1: i32, x0: i32, x1: i32, x: i32) -> i32 {
+    (y0 as f32 + ((y1 as i32 - y0 as i32) as f32 * ((x - x0) as f32 / (x1 - x0) as f32))) as i32
 }
 
 //TODO Make colors more accurate
@@ -1310,6 +1355,66 @@ fn alpha_composite(background_color: u16, alpha_color: u16) -> u16 {
     let (a_r, a_g, a_b) = b15_to_rgb(alpha_color);
     rgb_to_b15(a_r + b_r, a_g + b_g, a_b + b_b)
 }
+
+fn center_of_points(points: &Vec<Point>) -> Point {
+    let min_x = points.iter().min_by_key(|p| p.x).unwrap().x;
+    let max_x = points.iter().max_by_key(|p| p.x).unwrap().x;
+
+    let min_y = points.iter().min_by_key(|p| p.y).unwrap().y;
+    let max_y = points.iter().max_by_key(|p| p.y).unwrap().y;
+
+    Point::from_components(((max_x - min_x) / 2) + min_x, ((max_y - min_y) / 2) + min_y, 0)
+}
+
+// Taken from https://wapl.es/rust/2020/07/25/optimising-with-cmp-and-ordering.html
+fn sort_clockwise_big_match(ao: Point, bo: Point, center: Point) -> Ordering {
+
+    let mut a = ao.clone();
+    let mut b = bo.clone();
+
+    a.y = 240 - a.y;
+    b.y = 240 - b.y;
+
+    let d_ax = a.x - center.x;
+    let d_bx = b.x - center.x;
+
+
+    let cmp_ax = d_ax.cmp(&0);
+    let cmp_bx = d_bx.cmp(&0);
+
+    match (cmp_ax, cmp_bx) {
+        // d_ax >= 0 && d_bx < 0
+        (Ordering::Greater, Ordering::Less) | (Ordering::Equal, Ordering::Less) => {
+            Ordering::Greater
+        }
+        // d_ax < 0 && d_bx >= 0
+        (Ordering::Less, Ordering::Greater) | (Ordering::Less, Ordering::Equal) => Ordering::Less,
+        // d_ax == 0 && d_bx == 0
+        (Ordering::Equal, Ordering::Equal) if a.y - center.y >= 0 || b.y - center.y >= 0 => {
+            a.y.cmp(&b.y)
+        }
+        (Ordering::Equal, Ordering::Equal) => b.y.cmp(&a.y),
+        _ => {
+            // Compute the cross product of vectors (center -> a) x (center -> b)
+            let det = (d_ax) * (b.y - center.y) - (d_bx) * (a.y - center.y);
+
+            match det.cmp(&0) {
+                Ordering::Less => Ordering::Greater,
+                Ordering::Greater => Ordering::Less,
+                Ordering::Equal => {
+                    // Points a and b are on the same line from the center. Check which point is closer to
+                    // the center.
+                    let d1 = (d_ax) * (d_ax) + (a.y - center.y) * (a.y - center.y);
+                    let d2 = (d_bx) * (d_bx) + (b.y - center.y) * (b.y - center.y);
+
+                    d1.cmp(&d2)
+                }
+            }
+        }
+    }
+}
+
+
 
 //Helper trait + impl
 trait Command {

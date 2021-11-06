@@ -12,11 +12,14 @@ pub struct SPU {
     main_volume: u32,
     reverb_volume: u32,
     spu_control: u16,
-    #[allow(dead_code)]
-    spu_status: u16,
     voice0_volume: u32,
     current_mode: SpuMode,
     transfer_address: u16,
+
+    voice_registers: [u16; 192],
+
+    memory: [u8; 0x7FFFF],
+
 }
 
 impl SPU {
@@ -25,16 +28,22 @@ impl SPU {
             main_volume: 0,
             reverb_volume: 0,
             spu_control: 0x8000, //Start with spu enabled
-            spu_status: 0,
             voice0_volume: 0,
             current_mode: SpuMode::Stop,
             transfer_address: 0,
+            voice_registers: [0; 192],
+
+            memory: [0; 0x7FFFF]
         }
     }
 
     pub fn read_half_word(&mut self, addr: u32) -> u16 {
-        //println!("Reading spu {:#X}", addr);
+        println!("Reading spu {:#X}", addr);
         match addr {
+            0x1F801C00 ..= 0x1F801D7F => {
+                let addr = (addr - 0x1F801C00) / 2;
+                self.voice_registers[addr as usize]
+            },
             0x1F801DAE => self.status_register(),
             0x1F801DAA => {
                 println!("{:#X}", self.spu_control);
@@ -50,6 +59,10 @@ impl SPU {
     pub fn write_half_word(&mut self, addr: u32, value: u16) {
         //println!("Writing spu {:#X} v {:#X}", addr, value);
         match addr {
+            0x1F801C00 ..= 0x1F801D7F => {
+                let offset = (addr - 0x1F801C00) / 2;
+                self.voice_registers[offset as usize] = value;
+            },
             0x1F801D80 => self.main_volume = (value as u32) | (self.main_volume & 0xFFFF0000),
             0x1F801D82 => self.main_volume = ((value as u32) << 4) | (self.main_volume & 0xFFFF),
             0x1F801D84 => self.reverb_volume = (value as u32) | (self.reverb_volume & 0xFFFF0000),
@@ -73,6 +86,7 @@ impl SPU {
             _ => (), //println!("Wrote unknown SPU address {:#X} with {:#X}", addr, value)
         }
     }
+
 
     fn status_register(&self) -> u16 {
         //println!("Reading spu stat. mode is {:?}", self.current_mode);

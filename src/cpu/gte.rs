@@ -473,6 +473,7 @@ impl GTE {
         match command & 0x3F {
             0x1 => self.rtps(command),
             0x6 => self.nclip(),
+            0xc => self.op(command),
             0x12 => self.mvmva(command),
             0x13 => self.ncds(),
             // 0x1E => self.ncs(),
@@ -539,6 +540,25 @@ impl GTE {
 
 // Internal GTE commands
 impl GTE {
+
+    fn op(&mut self, command: u32) {
+
+        let shift = (command.get_bit(19) as usize) * 12;
+        let lm = command.get_bit(10);
+
+        let x = (self.IR3 as i32 * self.RT22 as i32) - (self.IR2 as i32 * self.RT33 as i32);
+        let y = (self.IR1 as i32 * self.RT33 as i32) - (self.IR3 as i32 * self.RT11 as i32);
+        let z = (self.IR2 as i32 * self.RT11 as i32) - (self.IR1 as i32 * self.RT22 as i32);
+
+        self.truncate_write_mac1(x as i64, shift);
+        self.truncate_write_mac2(y as i64, shift);
+        self.truncate_write_mac3(z as i64, shift);
+
+        self.truncate_write_ir1(self.MAC1, lm);
+        self.truncate_write_ir2(self.MAC2, lm);
+        self.truncate_write_ir3(self.MAC3 as i64, lm);
+
+    }
 
     fn mvmva(&mut self, command: u32) {
         let (m11, m12, m13, m21, m22, m23, m31, m32, m33) = match command.get_bits(17..=18) {
@@ -609,7 +629,7 @@ impl GTE {
     }
 
     fn ncds(&mut self) {
-        warn!("Stubbing colors for now");
+        
         self.RGB2 = self.RGBC.clone();
     }
 

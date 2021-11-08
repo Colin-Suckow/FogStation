@@ -203,3 +203,16 @@ pub(super) fn play(state: &mut CDDrive) -> Packet {
 pub(super) fn mute(state: &mut CDDrive) -> Packet {
     stat(state, 0x3)
 }
+
+
+// Slams the brakes on the drive completely
+pub(super) fn stop(state: &mut CDDrive) -> Packet {
+    let mut pre_stop_packet = stat(state, 0x8);
+    state.drive_state = DriveState::Idle;
+    state.motor_state = MotorState::Off;
+    let mut second_packet = stat(state, 0x8);
+
+    second_packet.cause = IntCause::INT2;
+    pre_stop_packet.extra_response = Some(Box::new(second_packet));
+    pre_stop_packet
+}

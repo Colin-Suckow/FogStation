@@ -172,10 +172,6 @@ impl R3000 {
             
         }
 
-        if self.pc == 0x8006a950 {
-            println!("0x8006a950 hit");
-            self.print_registers();
-        }
 
         if self.pc == 0xA0 {
             //println!("SYSCALL A({:#X}) pc: {:#X}", self.read_reg(9), self.current_pc);
@@ -956,9 +952,6 @@ impl R3000 {
             instruction.rt(),
             (self.read_reg(instruction.rs()) as i32).wrapping_add(instruction.immediate_sign_extended() as i32) as u32,
         );
-        if self.current_pc == 0x8008dd38 {
-            println!("ADDIU rs {:#X} imm {:#X}", self.read_reg(instruction.rs()), instruction.immediate_sign_extended());
-        }
     }
 
     fn op_addi(&mut self, instruction: u32) {

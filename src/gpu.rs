@@ -67,8 +67,8 @@ impl Point {
 
     fn new_textured_point(word: u32, tex_y: i32, tex_x: i32) -> Self {
         Self {
-            x: (word & 0xFFFF) as i32,
-            y: ((word >> 16) & 0xFFFF) as i32,
+            x: (word & 0xFFFF) as i16 as i32,
+            y: ((word >> 16) & 0xFFFF) as i16 as i32,
             color: 0,
             tex_x,
             tex_y,
@@ -239,11 +239,11 @@ impl Gpu {
                 self.blend_enabled = self.gp0_buffer[0].get_bit(24);
                 self.blend_color = fill;
                 if is_quad {
-                    // if is_textured && is_gouraud {
-                    //    //Should be blending in colors. Do that later
-                    //    trace!("Tried to try draw texture blended quad!");
-                    //} else 
-                    //
+                    if is_textured && is_gouraud {
+                       //Should be blending in colors. Do that later
+                       trace!("Tried to try draw texture blended quad!");
+                    } else 
+                    
                    if is_textured {
                         trace!("GPU: Tex quad");
                         let points: Vec<Point> = vec![

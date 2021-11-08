@@ -238,6 +238,7 @@ impl CDDrive {
                 0x2 => set_loc(self, parameters[0], parameters[1], parameters[2]),
                 0x3 => play(self),
                 0x6 => read_with_retry(self),
+                0x8 => stop(self),
                 0x9 => pause_read(self),
                 0xA => init(self),
                 0xB => mute(self),

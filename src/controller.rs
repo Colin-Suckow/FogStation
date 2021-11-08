@@ -250,6 +250,7 @@ impl Controllers {
                     return;
                 }
 
+                
                
 
                 self.push_rx_buf(0);
@@ -261,6 +262,12 @@ impl Controllers {
             }
             TXstate::Transfering { slot, step } => {
                 if slot == Slot::Controller {
+
+                    if !self.joy_ctrl.get_bit(13) && self.joy_ctrl.get_bit(1) || self.joy_ctrl.get_bit(13) && !self.joy_ctrl.get_bit(1) {
+                    // Controller 2
+                    self.push_rx_buf(0);
+                    return;
+                    }
                      
                     let response = match step {
                         0 => 0x41, // Digital pad idlo

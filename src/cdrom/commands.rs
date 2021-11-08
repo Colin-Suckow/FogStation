@@ -196,6 +196,7 @@ pub(super) fn get_td(state: &mut CDDrive, track: u8) -> Packet {
 }
 
 pub(super) fn play(state: &mut CDDrive) -> Packet {
+    state.drive_state = DriveState::Play;
     stat(state, 0x3)
 }
 

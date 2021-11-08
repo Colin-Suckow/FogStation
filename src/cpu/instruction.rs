@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{convert::TryFrom, fmt::Display};
 
 use bit_field::BitField;
 use num_derive::FromPrimitive;    
@@ -87,7 +87,7 @@ impl InstructionArgs for u32 {
     }
 
     fn immediate_sign_extended(&self) -> u32 {
-        let val = (self.clone() & 0xFFFF) as i16 as u32;
+        let val = (self.clone() & 0xFFFF) as i16 as i32 as u32;
         //println!("immse {:#X}", val);
         val
     }
@@ -516,6 +516,50 @@ impl Display for RegisterNames {
             RegisterNames::ra => write!(f,"ra"),
         }
     }
+}
+
+impl TryFrom<usize> for RegisterNames {
+    type Error = ();
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            x if x == 0 => Ok(RegisterNames::zero),
+            x if x == 1 => Ok(RegisterNames::at),
+            x if x == 2 => Ok(RegisterNames::v0),
+            x if x == 3 => Ok(RegisterNames::v1),
+            x if x == 4 => Ok(RegisterNames::a0),
+            x if x == 5 => Ok(RegisterNames::a1),
+            x if x == 6 => Ok(RegisterNames::a2),
+            x if x == 7 => Ok(RegisterNames::a3),
+            x if x == 8 => Ok(RegisterNames::t0),
+            x if x == 9 => Ok(RegisterNames::t1),
+            x if x == 10 => Ok(RegisterNames::t2),
+            x if x == 11 => Ok(RegisterNames::t3),
+            x if x == 12 => Ok(RegisterNames::t4),
+            x if x == 13 => Ok(RegisterNames::t5),
+            x if x == 14 => Ok(RegisterNames::t6),
+            x if x == 15 => Ok(RegisterNames::t7),
+            x if x == 16 => Ok(RegisterNames::s0),
+            x if x == 17 => Ok(RegisterNames::s1),
+            x if x == 18 => Ok(RegisterNames::s2),
+            x if x == 19 => Ok(RegisterNames::s3),
+            x if x == 20 => Ok(RegisterNames::s4),
+            x if x == 21 => Ok(RegisterNames::s5),
+            x if x == 22 => Ok(RegisterNames::s6),
+            x if x == 23 => Ok(RegisterNames::s7),
+            x if x == 24 => Ok(RegisterNames::t8),
+            x if x == 25 => Ok(RegisterNames::t9),
+            x if x == 26 => Ok(RegisterNames::k0),
+            x if x == 27 => Ok(RegisterNames::k1),
+            x if x == 28 => Ok(RegisterNames::gp),
+            x if x == 29 => Ok(RegisterNames::sp),
+            x if x == 30 => Ok(RegisterNames::fp),
+            x if x == 31 => Ok(RegisterNames::ra),
+            _ => Err(()),
+        }
+    }
+
+    
 }
 
 

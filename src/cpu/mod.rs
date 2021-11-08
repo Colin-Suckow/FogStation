@@ -1,3 +1,5 @@
+use std::convert::TryFrom;
+
 use bit_field::BitField;
 
 use cop0::Cop0;
@@ -124,6 +126,15 @@ impl R3000 {
         self.print_string(addr + 1);
     }
 
+    fn print_registers(&self) {
+        for r in 0..32 {
+            print!("{:#4} : {:#10X}, ", RegisterNames::try_from(r as usize).unwrap(), self.read_reg(r));
+            if r % 8 == 0 && r != 0 {
+                println!("");
+            }
+        }
+        println!("");
+    }
 
     pub fn step_instruction(&mut self, timers: &mut TimerState) {
         //Fast load exe
@@ -161,45 +172,26 @@ impl R3000 {
             
         }
 
+        if self.pc == 0x8006a950 {
+            println!("0x8006a950 hit");
+            self.print_registers();
+        }
+
         if self.pc == 0xA0 {
             //println!("SYSCALL A({:#X}) pc: {:#X}", self.read_reg(9), self.current_pc);
             if self.read_reg(9) == 0x40 {
-                panic!("UnhandledException hit!");
+                println!("Unhandled exception hit!");
+                println!("PC was {:#X}", self.current_pc);
+                println!("Registers were:");
+                self.print_registers();
+                println!("");
+                panic!();
             }
         }
 
         if self.pc == 0xC0 {
             //trace!("SYSCALL C({:#X}) pc: {:#X}", self.read_reg(9), self.current_pc);
         }
-
-        // if self.pc == 0x8006ed58 {
-        //     println!("malloc({0} [{0:#X}]) last_pc = {1:#X}", self.read_reg(RegisterNames::a0 as u8), self.current_pc);
-        // }
-
-        // if self.pc == 0x8008dd48 {
-        //     println!("malloc returned {:#X}", self.read_reg(RegisterNames::v0 as u8));
-        // }
-
-        // if self.pc == 0x80072db4{
-        //     println!("CD_getsector({:#X})", self.read_reg(RegisterNames::a0 as u8));
-        // }
-
-        // if self.pc == 0x8006ef18 {
-        //     println!("Malloc return route 1");
-        // }
-
-        // if self.pc == 0x8006ee08 {
-        //     println!("malloc return route 2");
-        // }
-
-        // if self.pc == 0x8008dcc4 {
-        //     println!("poll_drive(... , ... , {:#X}) called from {:#X}", self.read_reg(RegisterNames::a2 as u8),self.current_pc);
-        // }
-
-        // if self.current_pc == 0x800102a4 {
-        //     let failed_tests = self.read_reg(RegisterNames::v0 as u8);
-        //     println!("Failed tests: {}", failed_tests);
-        // }
 
         
         // Handle interrupts
@@ -829,20 +821,15 @@ impl R3000 {
     }
 
     fn op_sh(&mut self, instruction: u32, timers: &mut TimerState) {
-        let addr = instruction
-            .immediate_sign_extended()
-            .wrapping_add(self.read_reg(instruction.rs()));
+        let base = instruction.immediate_sign_extended();
+        let offset = self.read_reg(instruction.rs());
+        let addr = base.wrapping_add(offset);
         if addr % 2 != 0 {
             //unaligned address
-            trace!("AdES fired by op_sh");
+            trace!("AdES fired by op_sh pc {:#X}  addr {:#X}   s_reg  {}   s_reg_val  {:#X}   offset   {:#X}", self.current_pc, addr, instruction.rs(), offset , base);
             self.fire_exception(Exception::AdES);
         } else {
             let val = (self.read_reg(instruction.rt()) & 0xFFFF) as u16;
-            if addr == 0xD030028 {
-                println!("imm {:#X} rs {:#X} reg {}", instruction.immediate_sign_extended(), self.read_reg(instruction.rs()), instruction.rs());
-                let r = self.read_bus_word(self.read_reg(16), timers);
-                println!("PC {:#X} S0 {:#X} ra {:#X} s0_val {:#X}", self.current_pc, self.read_reg(16), self.read_reg(31), r);
-            };
             self.write_bus_half_word(addr, val, timers);
         };
     }
@@ -875,14 +862,17 @@ impl R3000 {
     }
 
     fn op_lw(&mut self, instruction: u32, timers: &mut TimerState) {
-        let addr =
-            (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
+        let base = instruction.immediate_sign_extended();
+        let offset = self.read_reg(instruction.rs());
+        let addr = base.wrapping_add(offset);
         if addr % 4 != 0 {
-            trace!("AdEl fired by op_lw");
+            trace!("AdEl fired by op_lw   addr {:#X}   s_reg  {}   s_reg_val  {:#X}   offset   {:#X}", addr, instruction.rs(), offset , base);
             self.fire_exception(Exception::AdEL);
         } else {
             let val = self.read_bus_word(addr as u32, timers);
-            //println!("lw addr {:08x} val {:08x}", addr, val);
+           
+            //println!("lw addr {:08x} val {:08x} reg {}", addr, val, instruction.rt());
+            
             self.delay_write_reg(instruction.rt(), val);
         };
     }
@@ -964,7 +954,7 @@ impl R3000 {
     fn op_addiu(&mut self, instruction: u32) {
         self.write_reg(
             instruction.rt(),
-            (self.read_reg(instruction.rs())).wrapping_add(instruction.immediate_sign_extended()),
+            (self.read_reg(instruction.rs()) as i32).wrapping_add(instruction.immediate_sign_extended() as i32) as u32,
         );
         if self.current_pc == 0x8008dd38 {
             println!("ADDIU rs {:#X} imm {:#X}", self.read_reg(instruction.rs()), instruction.immediate_sign_extended());
@@ -1429,9 +1419,6 @@ impl R3000 {
 
     /// Sets register to given value. Prevents setting R0, which should always be zero. Will panic if register_number > 31
     fn write_reg(&mut self, register_number: u8, value: u32) {
-        if register_number == RegisterNames::sp as u8 {
-            //println!("Writing sp {:#X}", value);
-        }
         match register_number {
             0 => (), //Prevent writing to the zero register
             _ => self.gen_registers[register_number as usize] = value,

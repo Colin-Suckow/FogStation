@@ -971,60 +971,6 @@ impl Gpu {
         }
     }
 
-    fn draw_solid_flat_bottom_triangle(
-        &mut self,
-        p1: Point,
-        p2: Point,
-        p3: Point,
-        fill: u16,
-        transparent: bool,
-    ) {
-        let invslope1 = (p2.x - p1.x) as f32 / (p2.y - p1.y) as f32;
-        let invslope2 = (p3.x - p1.x) as f32 / (p3.y - p1.y) as f32;
-
-        let mut curx1 = p1.x as f32;
-        let mut curx2 = p1.x as f32;
-
-        for scanline in min(p1.y, p2.y)..max(p1.y, p2.y) {
-            self.draw_horizontal_line(
-                curx1 as u32,
-                curx2 as u32,
-                scanline as u32,
-                fill,
-                transparent,
-            );
-            curx1 = curx1 + invslope1;
-            curx2 = curx2 + invslope2;
-        }
-    }
-
-    fn draw_solid_flat_top_triangle(
-        &mut self,
-        p1: Point,
-        p2: Point,
-        p3: Point,
-        fill: u16,
-        transparent: bool,
-    ) {
-        let invslope1 = (p3.x - p1.x) as f32 / (p3.y - p1.y) as f32;
-        let invslope2 = (p3.x - p2.x) as f32 / (p3.y - p2.y) as f32;
-
-        let mut curx1 = p3.x as f32;
-        let mut curx2 = p3.x as f32;
-
-        for scanline in ( min(p1.y, p2.y)..=max(p1.y, p2.y)).rev() {
-            self.draw_horizontal_line(
-                (curx1 + 0.5) as u32,
-                (curx2 + 0.5) as u32,
-                scanline as u32,
-                fill,
-                transparent,
-            );
-            curx1 = curx1 - invslope1;
-            curx2 = curx2 - invslope2;
-        }
-    }
-
     fn draw_shaded_flat_bottom_triangle(
         &mut self,
         p1: Point,
@@ -1167,7 +1113,7 @@ impl Gpu {
                 let inside = edge_function(&points[0], &points[1], &point) && edge_function(&points[1], &points[2], &point) && edge_function(&points[2], &points[0], &point);
                 let addr = ((y as u32) * 1024) + x as u32;
                 if inside {
-                    self.vram[addr as usize] = fill;
+                    self.vram[min(addr as usize, 524287)] = fill;
                 }
             }
         }

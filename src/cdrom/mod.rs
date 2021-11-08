@@ -353,21 +353,21 @@ impl CDDrive {
         self.data_queue().remove(0) // This is slow, but whatever for now. Using a proper deque is a bit difficult here
     }
 
-    pub fn sector_data_take(&mut self) -> &[u8] {
-        //println!("Fetching more data!");
-        let data = self
-            .disc
-            .as_ref()
-            .expect("Tried to read nonexistant disc!")
-            .read_sector(
-                self.current_seek_target
-                    .plus_sector_offset(self.read_offset),
-                self.sector_size(),
-            );
+    // pub fn sector_data_take(&mut self) -> &[u8] {
+    //     //println!("Fetching more data!");
+    //     let data = self
+    //         .disc
+    //         .as_ref()
+    //         .expect("Tried to read nonexistant disc!")
+    //         .read_sector(
+    //             self.current_seek_target
+    //                 .plus_sector_offset(self.read_offset),
+    //             self.sector_size(),
+    //         );
 
-        //self.read_offset += 1;
-        data
-    }
+    //     //self.read_offset += 1;
+    //     data
+    // }
 
     fn write_interrupt_flag_register(&mut self, val: u8) {
         //println!("Writing flag with val {:#X}   pre flag val {:#X}", val, self.reg_interrupt_flag);
@@ -511,7 +511,6 @@ pub fn step_cycle(cpu: &mut R3000) {
             //}
 
             if cpu.main_bus.cd_drive.read_enabled && packet.cause == IntCause::INT1 {
-                trace!("Filling CD buffer with new data");
 
                 let data = cpu
                     .main_bus
@@ -528,7 +527,12 @@ pub fn step_cycle(cpu: &mut R3000) {
                     );
 
                 cpu.main_bus.cd_drive.read_offset += 1;
-                cpu.main_bus.cd_drive.data_queue.clear();
+
+                // if !cpu.main_bus.cd_drive.data_queue.is_empty() {
+                //     panic!("DROPPED SECTOR");
+                // }
+
+                // cpu.main_bus.cd_drive.data_queue.clear();
                 cpu.main_bus.cd_drive.data_queue.extend(data.iter());
 
                 trace!(

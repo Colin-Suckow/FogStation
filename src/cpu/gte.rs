@@ -2,6 +2,7 @@ use std::cmp::min;
 
 use bit_field::BitField;
 use log::warn;
+use nalgebra::clamp;
 
 
 #[derive(Clone, Copy)]
@@ -13,7 +14,17 @@ struct Color {
 }
 
 impl Color {
-    fn new() -> Self {
+
+    fn new(r: u8, g: u8, b: u8, c: u8) -> Self {
+        Self {
+            r: r,
+            g: g,
+            b: b,
+            c: c,
+        }
+    }
+
+    fn new_empty() -> Self {
         Self {
             r: 0,
             g: 0,
@@ -199,10 +210,10 @@ impl GTE {
             SY0: 0,
             SY1: 0,
             SY2: 0,
-            RGBC: Color::new(),
-            RGB0: Color::new(),
-            RGB1: Color::new(),
-            RGB2: Color::new(),
+            RGBC: Color::new_empty(),
+            RGB0: Color::new_empty(),
+            RGB1: Color::new_empty(),
+            RGB2: Color::new_empty(),
             RES1: 0,
             OTZ: 0,
             IRGB: 0,
@@ -474,8 +485,9 @@ impl GTE {
             0x1 => self.rtps(command),
             0x6 => self.nclip(),
             0xc => self.op(command),
+            0x10 => self.dpcs(command),
             0x12 => self.mvmva(command),
-            0x13 => self.ncds(),
+            0x13 => self.ncds(command),
             // 0x1E => self.ncs(),
             // 0x20 => self.nct(),
             0x30 => self.rtpt(command),
@@ -507,6 +519,12 @@ impl GTE {
         self.SY0 = self.SY1;
         self.SY1 = self.SY2;
         self.SY2 = val;
+    }
+
+    fn push_color(&mut self, val: Color) {
+        self.RGB0 = self.RGB1;
+        self.RGB1 = self.RGB2;
+        self.RGB2 = val;
     }
 
     fn lzcr(&self) -> u32 {
@@ -628,9 +646,88 @@ impl GTE {
         );
     }
 
-    fn ncds(&mut self) {
-        
-        self.RGB2 = self.RGBC.clone();
+    fn ncds(&mut self, command: u32) {
+        self.RGB2 = self.RGBC;
+        // let shift = (command.get_bit(19) as usize) * 12;
+        // let lm = command.get_bit(10);
+
+        // // TODO move these dot product calculations into functions
+
+        // //  [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (LLM*V0) SAR (sf*12)
+
+        // let dot_x_light = (self.L11 as i64* self.VX0 as i64) + (self.L12 as i64*self.VY0 as i64) + (self.L13 as i64 * self.VZ0 as i64);
+        // let dot_y_light = (self.L21 as i64* self.VX0 as i64) + (self.L22 as i64*self.VY0 as i64) + (self.L23 as i64 * self.VZ0 as i64);
+        // let dot_z_light = (self.L31 as i64* self.VX0 as i64) + (self.L32 as i64*self.VY0 as i64) + (self.L33 as i64 * self.VZ0 as i64);
+
+        // self.truncate_write_mac1(dot_x_light, shift);
+        // self.truncate_write_mac2(dot_y_light, shift);
+        // self.truncate_write_mac3(dot_z_light, shift);
+
+        // self.truncate_write_ir1(self.MAC1, lm);
+        // self.truncate_write_ir2(self.MAC2, lm);
+        // self.truncate_write_ir3(self.MAC3 as i64, lm);
+
+        // // [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (BK*1000h + LCM*IR) SAR (sf*12)
+
+        // let dot_x_color = (self.RBK as i64 * 0x1000) + (self.LR1 as i64* self.IR1 as i64) + (self.LR2 as i64*self.IR2 as i64) + (self.LR3 as i64 * self.IR3 as i64);
+        // let dot_y_color = (self.GBK as i64 * 0x1000) + (self.LG1 as i64* self.IR1 as i64) + (self.LG2 as i64*self.IR2 as i64) + (self.LG3 as i64 * self.IR3 as i64);
+        // let dot_z_color = (self.BBK as i64 * 0x1000) + (self.LB1 as i64* self.IR1 as i64) + (self.LB2 as i64*self.IR2 as i64) + (self.LB3 as i64 * self.IR3 as i64);
+
+
+        // self.truncate_write_mac1(dot_x_color, shift);
+        // self.truncate_write_mac2(dot_y_color, shift);
+        // self.truncate_write_mac3(dot_z_color, shift);
+
+        // self.truncate_write_ir1(self.MAC1, lm);
+        // self.truncate_write_ir2(self.MAC2, lm);
+        // self.truncate_write_ir3(self.MAC3 as i64, lm);
+
+        // // [MAC1,MAC2,MAC3] = [R*IR1,G*IR2,B*IR3] SHL 4 
+
+        // self.truncate_write_mac1((self.RGBC.r as i64 * self.IR1 as i64) << 4, 0);
+        // self.truncate_write_mac2((self.RGBC.g as i64 * self.IR2 as i64) << 4, 0);
+        // self.truncate_write_mac3((self.RGBC.b as i64 * self.IR3 as i64) << 4, 0);
+
+        // // [MAC1,MAC2,MAC3] = MAC+(FC-MAC)*IR0   
+
+        // let cx = self.MAC1 as i64 + (self.RFC as i64 - self.MAC1 as i64) * self.IR0 as i64;
+        // let cy = self.MAC2 as i64 + (self.GFC as i64 - self.MAC2 as i64) * self.IR0 as i64;
+        // let cz = self.MAC3 as i64 + (self.BFC as i64 - self.MAC3 as i64) * self.IR0 as i64;
+
+        // self.truncate_write_mac1(cx, shift);
+        // self.truncate_write_mac2(cy, shift);
+        // self.truncate_write_mac3(cz, shift);
+
+        // self.truncate_write_ir1(self.MAC1, lm);
+        // self.truncate_write_ir2(self.MAC2, lm);
+        // self.truncate_write_ir3(self.MAC3 as i64, lm);
+
+        // //println!("mac1 {} mac2 {} mac3 {}", self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4);
+
+        // self.RGB2 = Color::new(clamp(self.MAC1 as u32 >> 4, 0, 0xFF) as u8, clamp(self.MAC2 as u32 >> 4, 0, 0xFF) as u8, clamp(self.MAC3 as u32 >> 4, 0, 0xFF) as u8, self.RGBC.c);
+    }
+
+    fn dpcs(&mut self, command: u32) {
+        let shift = (command.get_bit(19) as usize) * 12;
+        let lm = command.get_bit(10);
+
+        self.truncate_write_mac1(((self.RGBC.r as u64) << 16) as i64, 0);
+        self.truncate_write_mac2(((self.RGBC.g as u64) << 16) as i64, 0);
+        self.truncate_write_mac3(((self.RGBC.b as u64) << 16) as i64, 0);
+
+        let cx = self.MAC1 as i64 + (self.RFC as i64 - self.MAC1 as i64) * self.IR0 as i64;
+        let cy = self.MAC2 as i64 + (self.GFC as i64 - self.MAC2 as i64) * self.IR0 as i64;
+        let cz = self.MAC3 as i64 + (self.BFC as i64 - self.MAC3 as i64) * self.IR0 as i64;
+
+        self.truncate_write_mac1(cx, shift);
+        self.truncate_write_mac2(cy, shift);
+        self.truncate_write_mac3(cz, shift);
+
+        self.truncate_write_ir1(self.MAC1, lm);
+        self.truncate_write_ir2(self.MAC2, lm);
+        self.truncate_write_ir3(self.MAC3 as i64, lm);
+
+        self.push_color(Color::new(clamp(self.MAC1 as u32 >> 4, 0, 0xFF) as u8, clamp(self.MAC2 as u32 >> 4, 0, 0xFF) as u8, clamp(self.MAC3 as u32 >> 4, 0, 0xFF) as u8, self.RGBC.c));
     }
 
     // fn nct(&mut self) {

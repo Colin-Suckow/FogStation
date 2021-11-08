@@ -188,7 +188,6 @@ pub(super) fn get_tn(state: &mut CDDrive) -> Packet {
 // In practice this will probably send code instead of music to the SPU, and play some crazy audio
 // Future colin, you have been warned
 pub(super) fn get_td(state: &mut CDDrive, track: u8) -> Packet {
-    println!("get_td track {}", track);
     let mut initial_response = stat(state, 0x14);
     initial_response.response.push(0x0);
     initial_response.response.push(0x2);

@@ -118,6 +118,7 @@ impl MainBus {
             0x1F801C00..=0x1F801E80 => self.spu.read_half_word(addr),
             0x1F800000..=0x1F8003FF => self.scratchpad.read_half_word(addr - 0x1F800000),
             0x1F80_1040..=0x1F80_104E => self.controllers.read_half_word(addr),
+            0x1fc0_0000..=0x1fc7_ffff => self.bios.read_half_word(addr - 0x1fc0_0000),
             _ => panic!("Invalid half word read at address {:#X}! This address is not mapped to any device.", addr)
         };
         if unsafe{LOGGING} {println!("Loaded {:#X} from addr {:#X}", val, addr)};

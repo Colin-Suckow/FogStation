@@ -38,7 +38,7 @@ impl SPU {
     }
 
     pub fn read_half_word(&mut self, addr: u32) -> u16 {
-        println!("Reading spu {:#X}", addr);
+        //println!("Reading spu {:#X}", addr);
         match addr {
             0x1F801C00 ..= 0x1F801D7F => {
                 let addr = (addr - 0x1F801C00) / 2;

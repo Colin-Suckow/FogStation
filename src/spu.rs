@@ -14,11 +14,15 @@ pub struct SPU {
     spu_control: u16,
     voice0_volume: u32,
     current_mode: SpuMode,
-    transfer_address: u16,
 
     voice_registers: [u16; 192],
 
+    transfer_address_register: u16,
+    internal_transfer_address: u32,
+
     memory: [u8; 0x7FFFF],
+
+    pending_irq_acked: bool,
 
 }
 
@@ -30,10 +34,14 @@ impl SPU {
             spu_control: 0x8000, //Start with spu enabled
             voice0_volume: 0,
             current_mode: SpuMode::Stop,
-            transfer_address: 0,
             voice_registers: [0; 192],
 
-            memory: [0; 0x7FFFF]
+            internal_transfer_address: 0,
+            transfer_address_register: 0,
+
+            memory: [0; 0x7FFFF],
+
+            pending_irq_acked: true,
         }
     }
 
@@ -50,9 +58,8 @@ impl SPU {
                 self.spu_control
             },
             0x1F801DAC => 0x4, //SPU transfer control
-            0x1F801C00 => (self.voice0_volume & 0xFFFF) as u16,
-            0x1F801DA6 => self.transfer_address,
-            _ => 0xffff, //{println!("Read unknown SPU address {:#X}", addr); 0}
+            0x1F801DA6 => self.transfer_address_register,
+            _ => 0, //{println!("Read unknown SPU address {:#X}", addr); 0}
         }
     }
 
@@ -69,7 +76,7 @@ impl SPU {
             0x1F801D86 => {
                 self.reverb_volume = ((value as u32) << 4) | (self.reverb_volume & 0xFFFF)
             }
-            0x1F801DA8 => (), //SPU data transfer fifo
+            0x1F801DA8 => self.push_transfer_fifo(value), //SPU data transfer fifo
             0x1F801DAA => {
                 self.spu_control = value;
                 self.current_mode = match value.get_bits(4..5) {
@@ -79,21 +86,40 @@ impl SPU {
                     3 => SpuMode::DMAread,
                     i => panic!("Unknown SPU mode {}", i)
                 };
-                println!("spu_cnt <- {:#X}", value);
             },
             0x1F801C00 => self.voice0_volume = value as u32, //TODO implement real voice registers
-            0x1F801DA6 => self.transfer_address = value,
-            _ => (), //println!("Wrote unknown SPU address {:#X} with {:#X}", addr, value)
+            0x1F801DA6 => self.set_transfer_address(value),
+            _ => (),//println!("Wrote unknown SPU address {:#X} with {:#X}", addr, value)
         }
+    }
+
+    fn set_transfer_address(&mut self, addr: u16) {
+        self.internal_transfer_address = (addr as u32) * 8;
+        self.transfer_address_register = addr;
+    }
+
+    fn push_transfer_fifo(&mut self, value: u16) {
+        // TODO: Push data into spu memory. Right now we just increment the transfer address  for the SPU irq
+        self.internal_transfer_address += 2;
+    }
+
+    fn check_irq(&self) {
+
+    }
+
+    fn pending_irq(&self) -> bool {
+        !self.pending_irq_acked
     }
 
 
     fn status_register(&self) -> u16 {
         //println!("Reading spu stat. mode is {:?}", self.current_mode);
-        let mut result: u16 = 0;
+        //let mut result: u16 = 0;
 
-        result |= self.current_mode.clone() as u16;
+        //result |= self.current_mode.clone() as u16;
 
-        result
+        //result
+
+        self.spu_control & 0x3F
     }
 }

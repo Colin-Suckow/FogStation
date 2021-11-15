@@ -647,48 +647,47 @@ impl GTE {
     }
 
     fn ncds(&mut self, command: u32) {
-        self.RGB2 = self.RGBC;
-        // let shift = (command.get_bit(19) as usize) * 12;
-        // let lm = command.get_bit(10);
+        let shift = (command.get_bit(19) as usize) * 12;
+        let lm = command.get_bit(10);
 
-        // // TODO move these dot product calculations into functions
+        // TODO move these dot product calculations into functions
 
-        // //  [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (LLM*V0) SAR (sf*12)
+        //  [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (LLM*V0) SAR (sf*12)
 
-        // let dot_x_light = (self.L11 as i64* self.VX0 as i64) + (self.L12 as i64*self.VY0 as i64) + (self.L13 as i64 * self.VZ0 as i64);
-        // let dot_y_light = (self.L21 as i64* self.VX0 as i64) + (self.L22 as i64*self.VY0 as i64) + (self.L23 as i64 * self.VZ0 as i64);
-        // let dot_z_light = (self.L31 as i64* self.VX0 as i64) + (self.L32 as i64*self.VY0 as i64) + (self.L33 as i64 * self.VZ0 as i64);
+        let dot_x_light = (self.L11 as i64* self.VX0 as i64) + (self.L12 as i64*self.VY0 as i64) + (self.L13 as i64 * self.VZ0 as i64);
+        let dot_y_light = (self.L21 as i64* self.VX0 as i64) + (self.L22 as i64*self.VY0 as i64) + (self.L23 as i64 * self.VZ0 as i64);
+        let dot_z_light = (self.L31 as i64* self.VX0 as i64) + (self.L32 as i64*self.VY0 as i64) + (self.L33 as i64 * self.VZ0 as i64);
 
-        // self.truncate_write_mac1(dot_x_light, shift);
-        // self.truncate_write_mac2(dot_y_light, shift);
-        // self.truncate_write_mac3(dot_z_light, shift);
+        self.truncate_write_mac1(dot_x_light, shift);
+        self.truncate_write_mac2(dot_y_light, shift);
+        self.truncate_write_mac3(dot_z_light, shift);
 
-        // self.truncate_write_ir1(self.MAC1, lm);
-        // self.truncate_write_ir2(self.MAC2, lm);
-        // self.truncate_write_ir3(self.MAC3 as i64, lm);
+        self.truncate_write_ir1(self.MAC1, lm);
+        self.truncate_write_ir2(self.MAC2, lm);
+        self.truncate_write_ir3(self.MAC3 as i64, lm);
 
-        // // [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (BK*1000h + LCM*IR) SAR (sf*12)
+        // [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (BK*1000h + LCM*IR) SAR (sf*12)
 
-        // let dot_x_color = (self.RBK as i64 * 0x1000) + (self.LR1 as i64* self.IR1 as i64) + (self.LR2 as i64*self.IR2 as i64) + (self.LR3 as i64 * self.IR3 as i64);
-        // let dot_y_color = (self.GBK as i64 * 0x1000) + (self.LG1 as i64* self.IR1 as i64) + (self.LG2 as i64*self.IR2 as i64) + (self.LG3 as i64 * self.IR3 as i64);
-        // let dot_z_color = (self.BBK as i64 * 0x1000) + (self.LB1 as i64* self.IR1 as i64) + (self.LB2 as i64*self.IR2 as i64) + (self.LB3 as i64 * self.IR3 as i64);
+        let dot_x_color = (self.RBK as i64 * 0x1000) + (self.LR1 as i64* self.IR1 as i64) + (self.LR2 as i64*self.IR2 as i64) + (self.LR3 as i64 * self.IR3 as i64);
+        let dot_y_color = (self.GBK as i64 * 0x1000) + (self.LG1 as i64* self.IR1 as i64) + (self.LG2 as i64*self.IR2 as i64) + (self.LG3 as i64 * self.IR3 as i64);
+        let dot_z_color = (self.BBK as i64 * 0x1000) + (self.LB1 as i64* self.IR1 as i64) + (self.LB2 as i64*self.IR2 as i64) + (self.LB3 as i64 * self.IR3 as i64);
 
 
-        // self.truncate_write_mac1(dot_x_color, shift);
-        // self.truncate_write_mac2(dot_y_color, shift);
-        // self.truncate_write_mac3(dot_z_color, shift);
+        self.truncate_write_mac1(dot_x_color, shift);
+        self.truncate_write_mac2(dot_y_color, shift);
+        self.truncate_write_mac3(dot_z_color, shift);
 
-        // self.truncate_write_ir1(self.MAC1, lm);
-        // self.truncate_write_ir2(self.MAC2, lm);
-        // self.truncate_write_ir3(self.MAC3 as i64, lm);
+        self.truncate_write_ir1(self.MAC1, lm);
+        self.truncate_write_ir2(self.MAC2, lm);
+        self.truncate_write_ir3(self.MAC3 as i64, lm);
 
-        // // [MAC1,MAC2,MAC3] = [R*IR1,G*IR2,B*IR3] SHL 4 
+        // [MAC1,MAC2,MAC3] = [R*IR1,G*IR2,B*IR3] SHL 4 
 
-        // self.truncate_write_mac1((self.RGBC.r as i64 * self.IR1 as i64) << 4, 0);
-        // self.truncate_write_mac2((self.RGBC.g as i64 * self.IR2 as i64) << 4, 0);
-        // self.truncate_write_mac3((self.RGBC.b as i64 * self.IR3 as i64) << 4, 0);
+        self.truncate_write_mac1((self.RGBC.r as i64 * self.IR1 as i64) << 4, 0);
+        self.truncate_write_mac2((self.RGBC.g as i64 * self.IR2 as i64) << 4, 0);
+        self.truncate_write_mac3((self.RGBC.b as i64 * self.IR3 as i64) << 4, 0);
 
-        // // [MAC1,MAC2,MAC3] = MAC+(FC-MAC)*IR0   
+        // [MAC1,MAC2,MAC3] = MAC+(FC-MAC)*IR0   
 
         // let cx = self.MAC1 as i64 + (self.RFC as i64 - self.MAC1 as i64) * self.IR0 as i64;
         // let cy = self.MAC2 as i64 + (self.GFC as i64 - self.MAC2 as i64) * self.IR0 as i64;
@@ -702,9 +701,30 @@ impl GTE {
         // self.truncate_write_ir2(self.MAC2, lm);
         // self.truncate_write_ir3(self.MAC3 as i64, lm);
 
-        // //println!("mac1 {} mac2 {} mac3 {}", self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4);
+        self.truncate_write_mac1(((self.RGBC.r as u64) << 16) as i64, 0);
+        self.truncate_write_mac2(((self.RGBC.g as u64) << 16) as i64, 0);
+        self.truncate_write_mac3(((self.RGBC.b as u64) << 16) as i64, 0);
 
-        // self.RGB2 = Color::new(clamp(self.MAC1 as u32 >> 4, 0, 0xFF) as u8, clamp(self.MAC2 as u32 >> 4, 0, 0xFF) as u8, clamp(self.MAC3 as u32 >> 4, 0, 0xFF) as u8, self.RGBC.c);
+        let cx = (((self.RFC as i32) << 12) - self.MAC1 as i32) >> shift;
+        let cy = (((self.GFC as i32) << 12) - self.MAC2 as i32) >> shift;
+        let cz = (((self.BFC as i32) << 12) - self.MAC3 as i32) >> shift;
+
+       
+        self.truncate_write_ir1(cx, false);
+        self.truncate_write_ir2(cy, false);
+        self.truncate_write_ir3(cz as i64, false);
+
+        self.truncate_write_mac1(self.IR1 as i64 * self.IR0 as i64 + self.MAC1 as i64, shift);
+        self.truncate_write_mac2(self.IR2 as i64 * self.IR0 as i64 + self.MAC2 as i64, shift);
+        self.truncate_write_mac3(self.IR3 as i64 * self.IR0 as i64 + self.MAC3 as i64, shift);
+        
+        self.truncate_write_ir1(self.MAC1, lm);
+        self.truncate_write_ir2(self.MAC2, lm);
+        self.truncate_write_ir3(self.MAC3 as i64, lm);
+
+        let final_color = self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
+
+        self.push_color(final_color);
     }
 
     fn dpcs(&mut self, command: u32) {
@@ -715,19 +735,26 @@ impl GTE {
         self.truncate_write_mac2(((self.RGBC.g as u64) << 16) as i64, 0);
         self.truncate_write_mac3(((self.RGBC.b as u64) << 16) as i64, 0);
 
-        let cx = self.MAC1 as i64 + (self.RFC as i64 - self.MAC1 as i64) * self.IR0 as i64;
-        let cy = self.MAC2 as i64 + (self.GFC as i64 - self.MAC2 as i64) * self.IR0 as i64;
-        let cz = self.MAC3 as i64 + (self.BFC as i64 - self.MAC3 as i64) * self.IR0 as i64;
+        let cx = (((self.RFC as i32) << 12) - self.MAC1 as i32) >> shift;
+        let cy = (((self.GFC as i32) << 12) - self.MAC2 as i32) >> shift;
+        let cz = (((self.BFC as i32) << 12) - self.MAC3 as i32) >> shift;
 
-        self.truncate_write_mac1(cx, shift);
-        self.truncate_write_mac2(cy, shift);
-        self.truncate_write_mac3(cz, shift);
+       
+        self.truncate_write_ir1(cx, false);
+        self.truncate_write_ir2(cy, false);
+        self.truncate_write_ir3(cz as i64, false);
 
+        self.truncate_write_mac1(self.IR1 as i64 * self.IR0 as i64 + self.MAC1 as i64, shift);
+        self.truncate_write_mac2(self.IR2 as i64 * self.IR0 as i64 + self.MAC2 as i64, shift);
+        self.truncate_write_mac3(self.IR3 as i64 * self.IR0 as i64 + self.MAC3 as i64, shift);
+        
         self.truncate_write_ir1(self.MAC1, lm);
         self.truncate_write_ir2(self.MAC2, lm);
         self.truncate_write_ir3(self.MAC3 as i64, lm);
 
-        self.push_color(Color::new(clamp(self.MAC1 as u32 >> 4, 0, 0xFF) as u8, clamp(self.MAC2 as u32 >> 4, 0, 0xFF) as u8, clamp(self.MAC3 as u32 >> 4, 0, 0xFF) as u8, self.RGBC.c));
+        let final_color = self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
+
+        self.push_color(final_color);
     }
 
     // fn nct(&mut self) {
@@ -761,6 +788,23 @@ impl GTE {
 
 // Command helper functions
 impl GTE {
+
+    fn make_color(&mut self, r: i32, g: i32, b: i32, c: u8) -> Color {
+        if !(0..=0xFF).contains(&r) {
+            self.FLAG.set_bit(21, true);
+        }
+
+        if !(0..=0xFF).contains(&g) {
+            self.FLAG.set_bit(20, true);
+        }
+
+        if !(0..=0xFF).contains(&b) {
+            self.FLAG.set_bit(19, true);
+        }
+
+        return Color::new(clamp(r, 0, 0xFF) as u8, clamp(g, 0, 0xFF) as u8, clamp(b, 0, 0xFF) as u8, c)
+    }
+
     fn do_rtps(&mut self, vx: i16, vy: i16, vz: i16, shift: usize, last: bool, lm: bool) {
         
         let x = self.i64_to_i44((self.TRX as i64) << 12)

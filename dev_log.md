@@ -23,3 +23,8 @@ I was right. In 'variable_init()' theres two calls (one for each ordering table)
 ### Later
 
 Turns out that 'GsSortClear()' is working fine. I need to adjust my gpu to handle the 24bit color depth, but thats no biggie. what I don't understand is why the OT address is getting screwed up. It is being set to 'ot->tag', maybe the tag value is getting corrupted for some reason?
+
+
+## 11-8-21 (thank school for the delay)
+
+Would you believe the issue was an off by one bug with the ordering table? Turns out that my entire OTC list was shifted down one word from where it should have been. Puzzle Bobble just happens to use the space right after the OTC list for loading CD data. The interaction of these two parts caused some bugs that really looked like a CD problem. Unfortunately I got carried away with looking at the CD-ROM drive instead of focusing on the OTC dma. Looking back at these notes, I was already looking in the right direction, but I got distracted. Thankfully the time wasn't entirely wasted, I was able to find and fix a lot of random bugs around the system. As a result, Puzzle Bobble now boots and plays! The most obvious bug with that game is texture blending, everything has a jello like appearance thanks to all the colors being partially transparent. After that I need to finish rewriting my triangle rasterization algorithms. I have already fixed the solid color triangles (see lovely ps boot logo) but but textured and shaded polygons remain broken.

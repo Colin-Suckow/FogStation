@@ -488,12 +488,14 @@ impl GTE {
             0x10 => self.dpcs(command),
             0x12 => self.mvmva(command),
             0x13 => self.ncds(command),
-            // 0x1E => self.ncs(),
-            // 0x20 => self.nct(),
+            0x1E => (), // ncs
+            0x20 => (), //nct
             0x30 => self.rtpt(command),
             0x2d => self.avsz3(),
             0x2e => self.avsz4(),
-            //0x3f => self.ncct(),
+            0x3f => (),
+            0x16 => (), //NCDT
+            0x11 => (), //INTPL
             _ => (),
             //_ => panic!("Unknown GTE command {:#X}!", command & 0x3F)
         };

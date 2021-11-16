@@ -1,6 +1,7 @@
 use std::{
     borrow::Borrow,
     cmp::{max, min, Ordering},
+    mem::size_of_val,
 };
 
 use bit_field::BitField;
@@ -40,20 +41,21 @@ enum ColorDepth {
 
 impl Point {
     fn from_word(word: u32, color: u16) -> Self {
-        Self {
-            x: (word & 0xFFFF) as i32,
-            y: ((word >> 16) & 0xFFFF) as i32,
+        let result = Self {
+            x: sign_extend(word as i32 & 0x7FF, 11),
+            y: sign_extend(((word as i32) >> 16) & 0x7FF, 11),
             color,
             tex_x: 0,
             tex_y: 0,
-        }
+        };
+        result
     }
 
-    fn from_word_with_offset(word: u32, color: u16, offset: Point) -> Self {
+    fn from_word_with_offset(word: u32, color: u16, offset: &Point) -> Self {
         Self {
-            x: ((word & 0xFFFF) as i32 + offset.x as i32) as i32,
-            y: (((word >> 16) & 0xFFFF) as i32 + offset.y as i32) as i32,
-            color,
+            x: sign_extend(word as i32 & 0x7FF, 11) + offset.x,
+            y: sign_extend((word as i32 >> 16) & 0x7FF, 11) + offset.y,
+            color: 0,
             tex_x: 0,
             tex_y: 0,
         }
@@ -71,13 +73,18 @@ impl Point {
 
     fn new_textured_point(word: u32, tex_y: i32, tex_x: i32) -> Self {
         Self {
-            x: (word & 0xFFFF) as i16 as i32,
-            y: ((word >> 16) & 0xFFFF) as i16 as i32,
+            x: sign_extend(word as i32 & 0x7FF, 11),
+            y: sign_extend(((word as i32) >> 16) & 0x7FF, 11),
             color: 0,
             tex_x,
             tex_y,
         }
     }
+}
+
+fn sign_extend(x: i32, nbits: u32) -> i32 {
+    let notherbits = size_of_val(&x) as u32 * 8 - nbits;
+    x.wrapping_shl(notherbits).wrapping_shr(notherbits)
 }
 
 #[allow(dead_code)]
@@ -202,15 +209,16 @@ impl Gpu {
                             return;
                         }
 
-                        let x1 = self.gp0_buffer[1] & 0xFFFF;
-                        let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
-                        let x2 = (self.gp0_buffer[2] & 0xFFFF) + x1;
-                        let y2 = ((self.gp0_buffer[2] >> 16) & 0xFFFF) + y1;
+                        let p1 = Point::from_word(self.gp0_buffer[1], 0);
+                        let p2 = Point::from_word_with_offset(self.gp0_buffer[2], 0, &p1);
+
+                        //println!("quick fill p1 {:?}  p2 {:?}", p1, p2);
+
                         self.draw_solid_box(
-                            x1,
-                            y1,
-                            x2,
-                            y2,
+                            p1.x as u32,
+                            p1.y as u32,
+                            p2.x as u32,
+                            p2.y as u32,
                             b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF) + 1,
                             false,
                         );
@@ -250,7 +258,7 @@ impl Gpu {
                         //Should be blending in colors. Do that later
                         trace!("Tried to try draw texture blended quad!");
 
-                        let points: Vec<Point> = vec![
+                        let mut points: Vec<Point> = vec![
                             Point::new_textured_point(
                                 self.gp0_buffer[1],
                                 ((self.gp0_buffer[2] >> 8) & 0xFF) as i32,
@@ -275,16 +283,31 @@ impl Gpu {
 
                         trace!("points {:?}", points);
 
+                        for point in &mut points {
+                            point.x += self.draw_offset.x;
+                            point.y += self.draw_offset.y;
+                        }
+
                         self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
                         self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
                         self.texpage_x_base = ((self.gp0_buffer[4] >> 16) & 0xF) as u16;
                         self.texpage_y_base = ((self.gp0_buffer[4] >> 20) & 0x1) as u16;
                         self.blend_color = fill;
 
-                        self.draw_textured_quad(&points, command.get_bit(25));
+                        let min_x = points.iter().min_by_key(|v| v.x).unwrap().x;
+                        let max_x = points.iter().max_by_key(|v| v.x).unwrap().x;
+
+                        let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
+                        let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
+
+                        if max_x - min_x > 1023 || max_y - min_y > 511 {
+                            trace!("Quad too big, dropping");
+                        } else {
+                            self.draw_textured_quad(&points, command.get_bit(25));
+                        }
                     } else if is_textured {
                         trace!("GPU: Tex quad");
-                        let points: Vec<Point> = vec![
+                        let mut points: Vec<Point> = vec![
                             Point::new_textured_point(
                                 self.gp0_buffer[1],
                                 ((self.gp0_buffer[2] >> 8) & 0xFF) as i32,
@@ -309,16 +332,31 @@ impl Gpu {
 
                         trace!("points {:?}", points);
 
+                        for point in &mut points {
+                            point.x += self.draw_offset.x;
+                            point.y += self.draw_offset.y;
+                        }
+
                         self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
                         self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
                         self.texpage_x_base = ((self.gp0_buffer[4] >> 16) & 0xF) as u16;
                         self.texpage_y_base = ((self.gp0_buffer[4] >> 20) & 0x1) as u16;
                         self.blend_color = fill;
 
-                        self.draw_textured_quad(&points, command.get_bit(25));
+                        let min_x = points.iter().min_by_key(|v| v.x).unwrap().x;
+                        let max_x = points.iter().max_by_key(|v| v.x).unwrap().x;
+
+                        let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
+                        let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
+
+                        if max_x - min_x > 1023 || max_y - min_y > 511 {
+                            trace!("Quad too big, dropping");
+                        } else {
+                            self.draw_textured_quad(&points, command.get_bit(25));
+                        }
                     } else if is_gouraud {
                         trace!("GPU: gouraud quad");
-                        let points: Vec<Point> = vec![
+                        let mut points: Vec<Point> = vec![
                             Point::from_word(self.gp0_buffer[1], fill),
                             Point::from_word(
                                 self.gp0_buffer[3],
@@ -333,8 +371,15 @@ impl Gpu {
                                 b24color_to_b15color(self.gp0_buffer[6]),
                             ),
                         ];
+
+                        for point in &mut points {
+                            point.x += self.draw_offset.x;
+                            point.y += self.draw_offset.y;
+                        }
+
                         self.draw_shaded_quad(&points, command.get_bit(25));
                     } else {
+                        trace!("GPU: Solid quad");
                         let mut points: Vec<Point> = vec![
                             Point::from_word(self.gp0_buffer[1], 0),
                             Point::from_word(self.gp0_buffer[2], 0),
@@ -342,11 +387,26 @@ impl Gpu {
                             Point::from_word(self.gp0_buffer[4], 0),
                         ];
 
-                        // let center = center_of_points(&points);
+                        let min_x = points.iter().min_by_key(|v| v.x).unwrap().x;
+                        let max_x = points.iter().max_by_key(|v| v.x).unwrap().x;
+
+                        let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
+                        let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
+
+                        for point in &mut points {
+                            point.x += self.draw_offset.x;
+                            point.y += self.draw_offset.y;
+                        }
+
+                        if max_x - min_x > 1023 || max_y - min_y > 511 {
+                            trace!("Quad too big, dropping");
+                        } else {
+                            self.draw_solid_quad(&points, fill, command.get_bit(25));
+                        }
+
+                        //let center = center_of_points(&points);
 
                         // points.sort_unstable_by(|a, b| sort_clockwise_big_match(*a, *b, center));
-
-                        self.draw_solid_quad(&points, fill, command.get_bit(25));
                     };
                 } else {
                     if is_gouraud && is_textured {
@@ -354,9 +414,52 @@ impl Gpu {
                             "Tried to try draw texture blended tri! Queue {:?}",
                             self.gp0_buffer
                         );
+
+                        let mut points: Vec<Point> = vec![
+                            Point::new_textured_point(
+                                self.gp0_buffer[1],
+                                ((self.gp0_buffer[2] >> 8) & 0xFF) as i32,
+                                (self.gp0_buffer[2] & 0xFF) as i32,
+                            ),
+                            Point::new_textured_point(
+                                self.gp0_buffer[4],
+                                ((self.gp0_buffer[5] >> 8) & 0xFF) as i32,
+                                (self.gp0_buffer[5] & 0xFF) as i32,
+                            ),
+                            Point::new_textured_point(
+                                self.gp0_buffer[7],
+                                ((self.gp0_buffer[8] >> 8) & 0xFF) as i32,
+                                (self.gp0_buffer[8] & 0xFF) as i32,
+                            ),
+                        ];
+
+                        trace!("points {:?}", points);
+
+                        for point in &mut points {
+                            point.x += self.draw_offset.x;
+                            point.y += self.draw_offset.y;
+                        }
+
+                        self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
+                        self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
+                        self.texpage_x_base = ((self.gp0_buffer[4] >> 16) & 0xF) as u16;
+                        self.texpage_y_base = ((self.gp0_buffer[4] >> 20) & 0x1) as u16;
+                        self.blend_color = fill;
+
+                        let min_x = points.iter().min_by_key(|v| v.x).unwrap().x;
+                        let max_x = points.iter().max_by_key(|v| v.x).unwrap().x;
+
+                        let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
+                        let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
+
+                        if max_x - min_x > 1023 || max_y - min_y > 511 {
+                            trace!("Quad too big, dropping");
+                        } else {
+                            self.draw_textured_triangle(&points, command.get_bit(25));
+                        }
                     } else if is_textured {
                         trace!("GPU: Tex tri");
-                        let points: Vec<Point> = vec![
+                        let mut points: Vec<Point> = vec![
                             Point::new_textured_point(
                                 self.gp0_buffer[1],
                                 ((self.gp0_buffer[2] >> 8) & 0xFF) as i32,
@@ -373,6 +476,12 @@ impl Gpu {
                                 (self.gp0_buffer[6] & 0xFF) as i32,
                             ),
                         ];
+
+                        for point in &mut points {
+                            point.x += self.draw_offset.x;
+                            point.y += self.draw_offset.y;
+                        }
+
                         ////trace!("{:?}", points);
                         self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
                         self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
@@ -385,10 +494,21 @@ impl Gpu {
                         //     fill
                         // };
                         self.blend_color = fill;
-                        self.draw_textured_triangle(&points, command.get_bit(25));
+
+                        let min_x = points.iter().min_by_key(|v| v.x).unwrap().x;
+                        let max_x = points.iter().max_by_key(|v| v.x).unwrap().x;
+
+                        let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
+                        let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
+
+                        if max_x - min_x > 1023 || max_y - min_y > 511 {
+                            trace!("Quad too big, dropping");
+                        } else {
+                            self.draw_textured_triangle(&points, command.get_bit(25));
+                        }
                     } else if is_gouraud {
                         trace!("GPU: gouraud tri");
-                        let points: Vec<Point> = vec![
+                        let mut points: Vec<Point> = vec![
                             Point::from_word(self.gp0_buffer[1], fill),
                             Point::from_word(
                                 self.gp0_buffer[3],
@@ -399,16 +519,49 @@ impl Gpu {
                                 b24color_to_b15color(self.gp0_buffer[4]),
                             ),
                         ];
+
+                        for point in &mut points {
+                            point.x += self.draw_offset.x;
+                            point.y += self.draw_offset.y;
+                        }
+
+                        let min_x = points.iter().min_by_key(|v| v.x).unwrap().x;
+                        let max_x = points.iter().max_by_key(|v| v.x).unwrap().x;
+
+                        let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
+                        let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
+
+                        if max_x - min_x > 1023 || max_y - min_y > 511 {
+                            trace!("Quad too big, dropping");
+                        } else {
+                            self.draw_shaded_triangle(&points, command.get_bit(25));
+                        }
+
                         ////trace!("{:?}", points);
-                        self.draw_shaded_triangle(&points, command.get_bit(25));
                     } else {
                         trace!("GPU: Solid tri");
-                        let points: Vec<Point> = vec![
+                        let mut points: Vec<Point> = vec![
                             Point::from_word(self.gp0_buffer[1], 0),
                             Point::from_word(self.gp0_buffer[3], 0),
                             Point::from_word(self.gp0_buffer[2], 0),
                         ];
-                        self.draw_solid_triangle(&points, fill, command.get_bit(25));
+
+                        for point in &mut points {
+                            point.x += self.draw_offset.x;
+                            point.y += self.draw_offset.y;
+                        }
+
+                        let min_x = points.iter().min_by_key(|v| v.x).unwrap().x;
+                        let max_x = points.iter().max_by_key(|v| v.x).unwrap().x;
+
+                        let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
+                        let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
+
+                        if max_x - min_x > 1023 || max_y - min_y > 511 {
+                            trace!("Quad too big, dropping");
+                        } else {
+                            self.draw_solid_triangle(&points, fill, command.get_bit(25));
+                        }
                     }
                 }
             }
@@ -488,7 +641,7 @@ impl Gpu {
                             trace!("GPU: solid box");
                             let tl_point = Point::from_word(self.gp0_buffer[1], 0);
                             let br_point =
-                                Point::from_word_with_offset(self.gp0_buffer[2], 0, tl_point);
+                                Point::from_word_with_offset(self.gp0_buffer[2], 0, &tl_point);
 
                             //trace!("tl: {:?} br: {:?}", tl_point, br_point);
 
@@ -680,7 +833,7 @@ impl Gpu {
                         //Set Drawing Area Top Left
                         self.draw_area_tl_point = Point::from_components(
                             ((command & 0x3FF) as u16) as i32,
-                            (((command >> 10) & 0x1FF) as u16) as i32,
+                            (((command >> 10) & 0x3FF) as u16) as i32,
                             0,
                         );
                     }
@@ -689,15 +842,15 @@ impl Gpu {
                         //Set Drawing Area Bottom Right
                         self.draw_area_br_point = Point::from_components(
                             ((command & 0x3FF) as u16) as i32,
-                            (((command >> 10) & 0x1FF) as u16) as i32,
+                            (((command >> 10) & 0x3FF) as u16) as i32,
                             0,
                         );
                     }
 
                     0xE5 => {
                         //Set Drawing Offset
-                        let x = (command & 0x7FF) as i32;
-                        let y = ((command >> 11) & 0x7FF) as i32;
+                        let x = sign_extend(command as i32 & 0x7FF, 11);
+                        let y = sign_extend((command as i32 >> 11) & 0x7FF, 11);
                         self.draw_offset = Point::from_components(x, y, 0);
                     }
 
@@ -996,7 +1149,7 @@ impl Gpu {
             } else {
                 fill
             };
-            if fill != 0 {
+            if color != 0 {
                 self.vram[address] = color;
             }
         }
@@ -1008,7 +1161,7 @@ impl Gpu {
         } else {
             fill
         };
-        if fill != 0 {
+        if color != 0 {
             self.vram[min(addr, 524287)] = color;
         }
     }
@@ -1034,130 +1187,6 @@ impl Gpu {
         }
     }
 
-    fn draw_shaded_flat_bottom_triangle(
-        &mut self,
-        p1: Point,
-        p2: Point,
-        p3: Point,
-        transparent: bool,
-    ) {
-        let invslope1 = (p2.x - p1.x) as f32 / (p2.y - p1.y) as f32;
-        let invslope2 = (p3.x - p1.x) as f32 / (p3.y - p1.y) as f32;
-
-        let mut curx1 = p1.x as f32;
-        let mut curx2 = p1.x as f32;
-
-        for scanline in p1.y..p3.y {
-            let curx1_color = lerp_color(p1.color, p2.color, p1.y, p3.y, scanline);
-            let curx2_color = lerp_color(p1.color, p3.color, p1.y, p3.y, scanline);
-            self.draw_horizontal_line_shaded(
-                curx1 as i32,
-                curx2 as i32,
-                scanline,
-                curx1_color,
-                curx2_color,
-                transparent,
-            );
-            curx1 = curx1 + invslope1;
-            curx2 = curx2 + invslope2;
-        }
-    }
-
-    fn draw_shaded_flat_top_triangle(
-        &mut self,
-        p1: Point,
-        p2: Point,
-        p3: Point,
-        transparent: bool,
-    ) {
-        let invslope1 = (p3.x - p1.x) as f32 / (p3.y - p1.y) as f32;
-        let invslope2 = (p3.x - p2.x) as f32 / (p3.y - p2.y) as f32;
-
-        let mut curx1 = p3.x as f32;
-        let mut curx2 = p3.x as f32;
-
-        for scanline in (p1.y..=p3.y).rev() {
-            let curx1_color = lerp_color(p1.color, p3.color, p1.y, p3.y, scanline);
-            let curx2_color = lerp_color(p2.color, p3.color, p1.y, p3.y, scanline);
-            self.draw_horizontal_line_shaded(
-                (curx1 + 0.5) as i32,
-                (curx2 + 0.5) as i32,
-                scanline,
-                curx1_color,
-                curx2_color,
-                transparent,
-            );
-            curx1 = curx1 - invslope1;
-            curx2 = curx2 - invslope2;
-        }
-    }
-
-    fn draw_textured_flat_bottom_triangle(
-        &mut self,
-        p1: Point,
-        p2: Point,
-        p3: Point,
-        transparent: bool,
-    ) {
-        let invslope1 = (p2.x - p1.x) as f32 / (p2.y - p1.y) as f32;
-        let invslope2 = (p3.x - p1.x) as f32 / (p3.y - p1.y) as f32;
-
-        let mut curx1 = p1.x as f32;
-        let mut curx2 = p1.x as f32;
-
-        for scanline in p1.y..p3.y {
-            let y1 = lerp_coords(p1.tex_y, p3.tex_y, p1.y, p3.y, scanline);
-            let y2 = lerp_coords(p1.tex_y, p2.tex_y, p1.y, p3.y, scanline);
-            let x1 = lerp_coords(p1.tex_x, p3.tex_x, p1.y, p3.y, scanline);
-            let x2 = lerp_coords(p1.tex_x, p2.tex_x, p1.y, p3.y, scanline);
-            self.draw_horizontal_line_textured(
-                curx1 as i32,
-                curx2 as i32,
-                scanline,
-                y1,
-                y2,
-                x1,
-                x2,
-                transparent,
-            );
-            curx1 = curx1 + invslope1;
-            curx2 = curx2 + invslope2;
-        }
-    }
-
-    fn draw_textured_flat_top_triangle(
-        &mut self,
-        p1: Point,
-        p2: Point,
-        p3: Point,
-        transparent: bool,
-    ) {
-        let invslope1 = (p3.x - p1.x) as f32 / (p3.y - p1.y) as f32;
-        let invslope2 = (p3.x - p2.x) as f32 / (p3.y - p2.y) as f32;
-
-        let mut curx1 = p3.x as f32;
-        let mut curx2 = p3.x as f32;
-
-        for scanline in (p1.y..=p3.y).rev() {
-            let y1 = lerp_coords(p1.tex_y, p3.tex_y, p1.y, p3.y, scanline);
-            let y2 = lerp_coords(p2.tex_y, p3.tex_y, p1.y, p3.y, scanline);
-            let x1 = lerp_coords(p1.tex_x, p3.tex_x, p1.y, p3.y, scanline);
-            let x2 = lerp_coords(p2.tex_x, p3.tex_x, p1.y, p3.y, scanline);
-            self.draw_horizontal_line_textured(
-                (curx1 + 0.5) as i32,
-                (curx2 + 0.5) as i32,
-                scanline,
-                y1,
-                y2,
-                x1,
-                x2,
-                transparent,
-            );
-            curx1 = curx1 - invslope1;
-            curx2 = curx2 - invslope2;
-        }
-    }
-
     fn draw_solid_triangle(&mut self, points: &[Point], fill: u16, transparent: bool) {
         fn edge_function(a: &Point, b: &Point, c: &Vector2<i32>) -> bool {
             (c.x as isize - a.x as isize) * (b.y as isize - a.y as isize)
@@ -1178,7 +1207,7 @@ impl Gpu {
                     && edge_function(&points[1], &points[2], &point)
                     && edge_function(&points[2], &points[0], &point);
                 let addr = ((y as u32) * 1024) + x as u32;
-                if inside {
+                if !self.out_of_draw_area(&Point::from_components(x, y, 0)) && inside {
                     self.vram[min(addr as usize, 524287)] = fill;
                 }
             }
@@ -1228,7 +1257,11 @@ impl Gpu {
 
                 let addr = ((y as u32) * 1024) + x as u32;
 
-                if w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0 {
+                if !self.out_of_draw_area(&Point::from_components(x, y, 0))
+                    && w0 >= 0.0
+                    && w1 >= 0.0
+                    && w2 >= 0.0
+                {
                     w0 /= area as f32;
                     w1 /= area as f32;
                     w2 /= area as f32;
@@ -1239,21 +1272,20 @@ impl Gpu {
                     let c2 = b15_to_rgb(points[1].color);
                     let c3 = b15_to_rgb(points[2].color);
 
-                    let red = (w0 * c1.0 as f32)
-                        + (w1 * c2.0 as f32)
-                        + (w2 * c3.0 as f32);
+                    let red = (w0 * c1.0 as f32) + (w1 * c2.0 as f32) + (w2 * c3.0 as f32);
 
-                    let green = (w0 * c1.1 as f32)
-                        + (w1 * c2.1 as f32)
-                        + (w2 * c3.1 as f32);
+                    let green = (w0 * c1.1 as f32) + (w1 * c2.1 as f32) + (w2 * c3.1 as f32);
 
-                    let blue = (w0 * c1.2 as f32)
-                        + (w1 * c2.2 as f32)
-                        + (w2 * c3.2 as f32);
+                    let blue = (w0 * c1.2 as f32) + (w1 * c2.2 as f32) + (w2 * c3.2 as f32);
 
-                    let mut fill = (((red as u8 as u16) & 0x1f) << 10) | ((green as u8 as u16)  << 5) | (blue as u8 as u16);
+                    let mut fill = (((red as u8 as u16) & 0x1f) << 10)
+                        | ((green as u8 as u16) << 5)
+                        | (blue as u8 as u16);
 
-                    if points[0].color.get_bit(15) || points[1].color.get_bit(15) || points[2].color.get_bit(15) {
+                    if points[0].color.get_bit(15)
+                        || points[1].color.get_bit(15)
+                        || points[2].color.get_bit(15)
+                    {
                         fill.set_bit(15, true);
                     }
 
@@ -1311,10 +1343,13 @@ impl Gpu {
                 let mut w1 = edge_function(&points[2], &points[0], &point) as f32;
                 let mut w2 = edge_function(&points[0], &points[1], &point) as f32;
 
-
                 let addr = ((y as u32) * 1024) + x as u32;
 
-                if w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0 {
+                if !self.out_of_draw_area(&Point::from_components(x, y, 0))
+                    && w0 >= 0.0
+                    && w1 >= 0.0
+                    && w2 >= 0.0
+                {
                     w0 /= area as f32;
                     w1 /= area as f32;
                     w2 /= area as f32;
@@ -1333,25 +1368,24 @@ impl Gpu {
                     let fill = self.get_texel(tex_x as i32, tex_y as i32);
 
                     self.composite_and_place_pixel(addr as usize, fill, transparent);
-
                 }
             }
         }
     }
 
     fn draw_solid_quad(&mut self, points: &[Point], fill: u16, transparent: bool) {
-        self.draw_solid_triangle(&[points[0], points[3], points[1]], fill, transparent);
-        self.draw_solid_triangle(&[points[0], points[2], points[3]], fill, transparent);
+        self.draw_solid_triangle(&[points[0], points[2], points[1]], fill, transparent);
+        self.draw_solid_triangle(&[points[1], points[2], points[3]], fill, transparent);
     }
 
     fn draw_shaded_quad(&mut self, points: &[Point], transparent: bool) {
-        self.draw_shaded_triangle(&[points[0], points[3], points[1]], transparent);
-        self.draw_shaded_triangle(&[points[0], points[2], points[3]], transparent);
+        self.draw_shaded_triangle(&[points[0], points[2], points[1]], transparent);
+        self.draw_shaded_triangle(&[points[1], points[2], points[3]], transparent);
     }
 
     fn draw_textured_quad(&mut self, points: &[Point], transparent: bool) {
-        self.draw_textured_triangle(&[points[0], points[3], points[1]], transparent);
-        self.draw_textured_triangle(&[points[0], points[2], points[3]], transparent);
+        self.draw_textured_triangle(&[points[0], points[2], points[1]], transparent);
+        self.draw_textured_triangle(&[points[1], points[2], points[3]], transparent);
     }
 
     fn get_texel(&self, x: i32, y: i32) -> u16 {
@@ -1373,10 +1407,13 @@ impl Gpu {
                 )]
             }
             TextureColorMode::EightBit => {
-                let value = self.vram[point_to_address(
-                    (page_x * 64) as u32 + (x / 2) as u32,
-                    (page_y * 256) as u32 + y as u32,
-                ) as usize];
+                let value = self.vram[min(
+                    point_to_address(
+                        (page_x * 64) as u32 + (x / 2) as u32,
+                        (page_y * 256) as u32 + y as u32,
+                    ) as usize,
+                    524287,
+                )];
                 let clut_index = (value >> (x % 2) * 8) & 0xF;
                 self.vram[min(
                     point_to_address((clut_x * 16 + clut_index as u32) as u32, clut_y as u32)

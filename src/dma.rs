@@ -353,10 +353,6 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
 
             4 => {
                 //SPU
-                
-                
-
-
                 cpu.main_bus.dma.channels[num].complete();
                 cpu.main_bus.dma.raise_irq(num);
                 if cpu.main_bus.dma.irq_channel_enabled(num) {

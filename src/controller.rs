@@ -55,12 +55,12 @@ impl ButtonState {
             button_square: false,
             button_triangle: false,
             button_circle: false,
-        
+
             button_up: false,
             button_down: false,
             button_left: false,
             button_right: false,
-        
+
             button_l1: false,
             button_l2: false,
             button_l3: false,
@@ -115,7 +115,7 @@ enum Slot {
 enum TXstate {
     Disabled,
     Ready,
-    Transfering{slot: Slot, step: usize},
+    Transfering { slot: Slot, step: usize },
 }
 
 pub(super) struct Controllers {
@@ -160,7 +160,10 @@ impl Controllers {
             JOY_CTRL => self.write_joy_ctrl(val),
             JOY_BAUD => self.write_joy_baud(val),
             JOY_MODE => self.write_joy_mode(val),
-            _ => error!("CONTROLLER: Unknown half word write! Addr {:#X} val: {:#X}", addr, val)
+            _ => error!(
+                "CONTROLLER: Unknown half word write! Addr {:#X} val: {:#X}",
+                addr, val
+            ),
         };
     }
 
@@ -168,7 +171,7 @@ impl Controllers {
         match addr {
             JOY_STAT => self.read_joy_stat(),
             JOY_CTRL => self.read_joy_ctrl(),
-            _ =>  {
+            _ => {
                 error!("CONTROLLER: Unknown half word read! Addr {:#X}", addr);
                 0
             }
@@ -185,15 +188,15 @@ impl Controllers {
         }
     }
 
-
     pub(super) fn write_byte(&mut self, addr: u32, val: u8) {
         match addr {
             JOY_DATA => self.write_joy_data(val),
-            _ => error!("CONTROLLER: Unknown byte write! Addr {:#X} val: {:#X}", addr, val)
+            _ => error!(
+                "CONTROLLER: Unknown byte write! Addr {:#X} val: {:#X}",
+                addr, val
+            ),
         };
     }
-
-    
 
     fn write_joy_mode(&mut self, val: u16) {
         self.joy_mode = val;
@@ -205,15 +208,13 @@ impl Controllers {
     }
 
     fn write_joy_ctrl(&mut self, val: u16) {
-
         //println!("JOY_CTRL {:#X}", val);
 
-        
         if val.get_bit(0) && self.tx_state == TXstate::Disabled {
             //println!("TX Enabled!");
             self.tx_state = TXstate::Ready;
         }
-        
+
         if !val.get_bit(0) {
             //println!("TX Disabled!");
             self.tx_state = TXstate::Disabled;
@@ -250,8 +251,12 @@ impl Controllers {
                     return;
                 }
 
-                
-               
+                // if !self.joy_ctrl.get_bit(13) && !self.joy_ctrl.get_bit(1)
+                //     || self.joy_ctrl.get_bit(13) && self.joy_ctrl.get_bit(1)
+                // {
+                //     // Controller 2
+                //     return;
+                // }
 
                 self.push_rx_buf(0);
                 self.queue_interrupt();
@@ -262,13 +267,6 @@ impl Controllers {
             }
             TXstate::Transfering { slot, step } => {
                 if slot == Slot::Controller {
-
-                    if !self.joy_ctrl.get_bit(13) && self.joy_ctrl.get_bit(1) || self.joy_ctrl.get_bit(13) && !self.joy_ctrl.get_bit(1) {
-                    // Controller 2
-                    self.push_rx_buf(0);
-                    return;
-                    }
-                     
                     let response = match step {
                         0 => 0x41, // Digital pad idlo
                         1 => 0x5A, // Digital pad idhi
@@ -277,12 +275,12 @@ impl Controllers {
                         _ => 0,
                     };
                     self.push_rx_buf(response);
-                    if step < 3 {
+                    if step <= 3 {
                         self.queue_interrupt();
                     }
                     TXstate::Transfering {
                         slot: slot.clone(),
-                        step: step + 1
+                        step: step + 1,
                     }
                 } else {
                     panic!("Tried to read memory card! It's not implemented yet :(");
@@ -294,7 +292,6 @@ impl Controllers {
 
     fn read_joy_stat(&mut self) -> u16 {
         let mut val: u16 = 0;
-
 
         if self.tx_state != TXstate::Disabled {
             val |= 0x1;
@@ -342,7 +339,7 @@ impl Controllers {
     }
 
     fn acknowledge(&mut self) {
-       self.irq_status = false;
+        self.irq_status = false;
     }
 
     fn push_rx_buf(&mut self, val: u8) {
@@ -352,14 +349,14 @@ impl Controllers {
     fn pop_rx_buf(&mut self) -> u8 {
         match self.rx_buf.pop_front() {
             Some(val) => val,
-            _ => 0
+            _ => 0,
         }
     }
 
     fn queue_interrupt(&mut self) {
         self.pending_irq = true;
         self.irq_status = true;
-        self.irq_cycle_timer = 200;
+        self.irq_cycle_timer = 350;
     }
 }
 

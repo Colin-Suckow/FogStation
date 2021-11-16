@@ -12,15 +12,18 @@ A toy playstation emulator written in rust. Better than my nes emulator, but sti
 Just run `cargo build --release` from /desktop to build the emulator core and desktop client. Right now windows is not supported due to a dependnecy on libcue.
 
 ## Status
-My current goal is to make Puzzle Bobble 2 playable. Puzzle Bobble 2 is known for being an easy game to emulate. Most games require the **Graphics Transformation Engine (GTE)** to run. The GTE handles all the math required for 3D rendering. Puzzle Bobble 2, being a 2D only game, does not require the GTE. In fact, the game doesn't require many other hardware features at all. This simplicity makes it a good candidate for early emulation.
+
+### Runs some games, most still freeze up while booting
+
+Thanks to fixing one last issue with the OTC DMA, things are starting to work! Puzzle Bobble 2 is 100% playable, with minor graphical issues. Ridge racer is rendering some 3d graphics now, but there are some strange vertex explosions happening on the cars. I don't know if this is a GTE or GPU issue right now. On the brightside, I can see the proper geometry rendering under the vertex issues. Aside from that there is still some texure issues, but I believe that is due to texture paging, which I haven't implemented yet.
+
 
 Previously acheived goals
 - Can boot bios
 - render boot screen
 - load and execute software from cdrom
 - display a very broken version of ridge racer
-
-Right now I am working on fixing my GPU implementation while I wait for my copy of puzzle bobble 2 to arrive.
+- Implement basic GTE commands
 
 ## Implemented (for the most part)
 - MIPS R3000 CPU
@@ -31,12 +34,13 @@ Right now I am working on fixing my GPU implementation while I wait for my copy 
 - Graphics processor (GPU)
 - CDROM drive
 - GDB support
+- Matrix multiplication accelerator (GTE)
+
 
 ## TODO
-- Matrix multiplication engine (GTE)
 - Massive code cleanup
-- Speedup (Already runs at near full speed, but it can be a lot better)
-- Sound prcessor (SPU)
+- Optimize (Runs at full speed on my desktop, but thats not a good thing)
+- Sound processor (SPU)
 
 # Why VaporStation?
 ![Vaporwave test rom](https://i.imgur.com/xs7LBiG.png)

@@ -122,6 +122,8 @@ pub struct Gpu {
     ntsc_y2: u32,
 
     blend_mode: BlendMode,
+    force_mask: bool,
+    check_mask: bool,
 }
 
 impl Gpu {
@@ -159,6 +161,8 @@ impl Gpu {
             ntsc_y2: 256,
 
             blend_mode: BlendMode::BAF,
+            force_mask: false,
+            check_mask: false,
         }
     }
 
@@ -208,9 +212,18 @@ impl Gpu {
                             //Not enough commands
                             return;
                         }
+                        trace!("Quick rec");
 
-                        let p1 = Point::from_word(self.gp0_buffer[1], 0);
-                        let p2 = Point::from_word_with_offset(self.gp0_buffer[2], 0, &p1);
+                        let mut p1 = Point::from_components((self.gp0_buffer[1] & 0xFFFF) as i32, ((self.gp0_buffer[1] >> 16) & 0xFFFF) as i32, 0);
+                        let mut p2 = Point::from_components((self.gp0_buffer[2] & 0xFFFF) as i32, ((self.gp0_buffer[2] >> 16) & 0xFFFF) as i32, 0);
+
+                        p1.x += self.draw_offset.x;
+                        p1.y += self.draw_offset.y;
+                        p2.x += self.draw_offset.x;
+                        p2.y += self.draw_offset.y;
+
+                        p2.x += p1.x;
+                        p2.y += p1.y;
 
                         //println!("quick fill p1 {:?}  p2 {:?}", p1, p2);
 
@@ -608,17 +621,8 @@ impl Gpu {
                         let point = Point::from_word(self.gp0_buffer[1], 0);
 
                         let address = point_to_address(point.x as u32, point.y as u32) as usize;
-                        let color = if command.get_bit(25) {
-                            //Transparent
-                            alpha_composite(
-                                self.vram[address],
-                                b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
-                                &self.blend_mode,
-                            )
-                        } else {
-                            b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF)
-                        };
-                        self.vram[address] = color;
+                        let fill = b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF);
+                        self.composite_and_place_pixel(address, fill, false);
                     }
 
                     0b0 => {
@@ -643,7 +647,7 @@ impl Gpu {
                             let br_point =
                                 Point::from_word_with_offset(self.gp0_buffer[2], 0, &tl_point);
 
-                            //trace!("tl: {:?} br: {:?}", tl_point, br_point);
+                            trace!("tl: {:?} br: {:?}", tl_point, br_point);
 
                             self.draw_solid_box(
                                 (tl_point.x + self.draw_offset.x) as u32,
@@ -660,7 +664,7 @@ impl Gpu {
                         //8x8 sprite
                         trace!("GPU: 8x8 sprite");
                         if command.get_bit(26) {
-                            let tl_point = Point::new_textured_point(
+                            let mut tl_point = Point::new_textured_point(
                                 self.gp0_buffer[1],
                                 ((self.gp0_buffer[2] >> 8) & 0xFF) as i32,
                                 (self.gp0_buffer[2] & 0xFF) as i32,
@@ -671,15 +675,20 @@ impl Gpu {
                             self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
                             self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
 
+                            tl_point.x += self.draw_offset.x;
+                            tl_point.y += self.draw_offset.y;
+                            
+
+
                             self.draw_textured_box(&tl_point, size.x, size.y, command.get_bit(25));
                         } else {
-                            let x1 = self.gp0_buffer[1] & 0xFFFF;
-                            let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
+                            let x1 = (self.gp0_buffer[1] & 0xFFFF) as i32 + self.draw_offset.x;
+                            let y1 = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as i32 + self.draw_offset.y;
                             self.draw_solid_box(
-                                x1,
-                                y1,
-                                x1 + 8,
-                                y1 + 8,
+                                x1 as u32,
+                                y1 as u32,
+                                x1 as u32 + 8,
+                                y1 as u32 + 8,
                                 b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
                                 command.get_bit(25),
                             );
@@ -690,7 +699,7 @@ impl Gpu {
                         //16x16 sprite
                         trace!("GPU: 16x16 sprite");
                         if command.get_bit(26) {
-                            let tl_point = Point::new_textured_point(
+                            let mut tl_point = Point::new_textured_point(
                                 self.gp0_buffer[1],
                                 ((self.gp0_buffer[2] >> 8) & 0xFF) as i32,
                                 (self.gp0_buffer[2] & 0xFF) as i32,
@@ -701,15 +710,18 @@ impl Gpu {
                             self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
                             self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
 
+                            tl_point.x += self.draw_offset.x;
+                            tl_point.y += self.draw_offset.y;
+
                             self.draw_textured_box(&tl_point, size.x, size.y, command.get_bit(25));
                         } else {
-                            let x1 = self.gp0_buffer[1] & 0xFFFF;
-                            let y1 = (self.gp0_buffer[1] >> 16) & 0xFFFF;
+                            let x1 = (self.gp0_buffer[1] & 0xFFFF) as i32 + self.draw_offset.x;
+                            let y1 = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as i32 + self.draw_offset.y;
                             self.draw_solid_box(
-                                x1,
-                                y1,
-                                x1 + 16,
-                                y1 + 16,
+                                x1 as u32,
+                                y1 as u32,
+                                x1 as u32 + 16,
+                                y1 as u32 + 16,
                                 b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
                                 command.get_bit(25),
                             );
@@ -758,6 +770,7 @@ impl Gpu {
                     //Not enough for the header
                     return;
                 }
+                trace!("cpu to vram");
                 let mut width = (self.gp0_buffer[2] & 0xFFFF) as u32;
                 let mut height = ((self.gp0_buffer[2] >> 16) & 0xFFFF) as u32;
                 if width == 0 {
@@ -1068,48 +1081,11 @@ impl Gpu {
                 continue;
             }
             let address = point_to_address(x, y) as usize;
-            let color = if transparent {
-                alpha_composite(self.vram[address], fill, &self.blend_mode)
-            } else {
-                fill
-            };
-            if fill != 0 {
-                self.vram[address] = color;
-            }
+            self.composite_and_place_pixel(address, fill, transparent);
         }
     }
 
-    fn draw_horizontal_line_shaded(
-        &mut self,
-        x1: i32,
-        x2: i32,
-        y: i32,
-        x1_color: u16,
-        x2_color: u16,
-        transparent: bool,
-    ) {
-        let (start, end, start_color, end_color) = if x1 > x2 {
-            (x2, x1, x2_color, x1_color)
-        } else {
-            (x1, x2, x1_color, x2_color)
-        };
-        for x in start..end {
-            if self.out_of_draw_area(&Point::from_components(x, y, 0)) {
-                continue;
-            }
-            let address = point_to_address(x as u32, y as u32) as usize;
-            let fill = lerp_color(start_color, end_color, start, end, x);
-            ////trace!("x {} end {} fill {:#X}", x, end, fill);
-            let color = if transparent {
-                alpha_composite(self.vram[address], fill, &self.blend_mode)
-            } else {
-                fill
-            };
-            if fill != 0 {
-                self.vram[address] = color;
-            }
-        }
-    }
+    
     fn out_of_draw_area(&self, test_point: &Point) -> bool {
         !(test_point.x > self.draw_area_tl_point.x
             && test_point.x < self.draw_area_br_point.x
@@ -1141,17 +1117,8 @@ impl Gpu {
                 lerp_coords(x1_tex, x2_tex, start, end, x),
                 lerp_coords(y1_tex, y2_tex, start, end, x),
             );
-            //let fill = 0xFFFF;
-            ////trace!("x {} end {} fill {:#X}", x, end, fill);
-
-            let color = if transparent && fill.get_bit(15) {
-                alpha_composite(self.vram[address], fill, &self.blend_mode)
-            } else {
-                fill
-            };
-            if color != 0 {
-                self.vram[address] = color;
-            }
+           
+            self.composite_and_place_pixel(address, fill, transparent);
         }
     }
 
@@ -1187,18 +1154,21 @@ impl Gpu {
         }
     }
 
-    fn draw_solid_triangle(&mut self, points: &[Point], fill: u16, transparent: bool) {
+    fn draw_solid_triangle(&mut self, in_points: &[Point], fill: u16, transparent: bool) {
         fn edge_function(a: &Point, b: &Point, c: &Vector2<i32>) -> bool {
             (c.x as isize - a.x as isize) * (b.y as isize - a.y as isize)
                 - (c.y as isize - a.y as isize) * (b.x as isize - a.x as isize)
-                >= 0
+                <= 0
         }
+
+        let points = sort_points_clockwise(&in_points);
 
         let min_x = points.iter().min_by_key(|v| v.x).unwrap().x;
         let max_x = points.iter().max_by_key(|v| v.x).unwrap().x;
 
         let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
         let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
+        
 
         for x in min_x..=max_x {
             for y in min_y..=max_y {
@@ -1214,7 +1184,7 @@ impl Gpu {
         }
     }
 
-    fn draw_shaded_triangle(&mut self, points: &[Point], transparent: bool) {
+    fn draw_shaded_triangle(&mut self, in_points: &[Point], transparent: bool) {
         // let mut sp = points.to_vec();
         // sp.sort_by_key(|p| p.y);
 
@@ -1235,6 +1205,8 @@ impl Gpu {
             (c.x as isize - a.x as isize) * (b.y as isize - a.y as isize)
                 - (c.y as isize - a.y as isize) * (b.x as isize - a.x as isize)
         }
+
+        let points = sort_points_clockwise(&in_points);
 
         let min_x = points.iter().min_by_key(|v| v.x).unwrap().x;
         let max_x = points.iter().max_by_key(|v| v.x).unwrap().x;
@@ -1258,9 +1230,9 @@ impl Gpu {
                 let addr = ((y as u32) * 1024) + x as u32;
 
                 if !self.out_of_draw_area(&Point::from_components(x, y, 0))
-                    && w0 >= 0.0
-                    && w1 >= 0.0
-                    && w2 >= 0.0
+                    && w0 <= 0.0
+                    && w1 <= 0.0
+                    && w2 <= 0.0
                 {
                     w0 /= area as f32;
                     w1 /= area as f32;
@@ -1295,7 +1267,7 @@ impl Gpu {
         }
     }
 
-    fn draw_textured_triangle(&mut self, points: &[Point], transparent: bool) {
+    fn draw_textured_triangle(&mut self, in_points: &[Point], transparent: bool) {
         // let mut sp = points.to_vec();
         // sp.sort_by_key(|p| p.y);
 
@@ -1324,6 +1296,8 @@ impl Gpu {
                 - (c.y as isize - a.y as isize) * (b.x as isize - a.x as isize)
         }
 
+        let points = sort_points_clockwise(&in_points);
+
         let min_x = points.iter().min_by_key(|v| v.x).unwrap().x;
         let max_x = points.iter().max_by_key(|v| v.x).unwrap().x;
 
@@ -1346,9 +1320,9 @@ impl Gpu {
                 let addr = ((y as u32) * 1024) + x as u32;
 
                 if !self.out_of_draw_area(&Point::from_components(x, y, 0))
-                    && w0 >= 0.0
-                    && w1 >= 0.0
-                    && w2 >= 0.0
+                    && w0 <= 0.0
+                    && w1 <= 0.0
+                    && w2 <= 0.0
                 {
                     w0 /= area as f32;
                     w1 /= area as f32;
@@ -1513,6 +1487,57 @@ fn alpha_composite(background_color: u16, alpha_color: u16, mode: &BlendMode) ->
         BlendMode::BAF => rgb_to_b15(a_r + b_r, a_g + b_g, a_b + b_b),
         BlendMode::BSF => rgb_to_b15(a_r - b_r, a_g - b_g, a_b - b_b),
         BlendMode::BF4 => rgb_to_b15(a_r + (b_r / 4), a_g + (b_g / 4), a_b + (b_b / 4)),
+    }
+}
+
+fn sort_points_clockwise(points: &[Point]) -> Vec<Point> {
+    let center_x: i32 = points.iter().map(|p| p.x).sum::<i32>() / points.len() as i32;
+    let center_y: i32 = points.iter().map(|p| p.y).sum::<i32>() / points.len() as i32;
+
+    let center_point = Point::from_components(center_x, center_y, 0);
+
+    let mut sorted_points = points.to_vec();
+    sorted_points.sort_by(|a, b| sort_clockwise_big_match(a, b, &center_point));
+    sorted_points
+}
+
+// Stolen from https://wapl.es/rust/2020/07/25/optimising-with-cmp-and-ordering.html
+fn sort_clockwise_big_match(a: &Point, b: &Point, center: &Point) -> Ordering {
+    let d_ax = a.x - center.x;
+    let d_bx = b.x - center.x;
+
+    let cmp_ax = d_ax.cmp(&0);
+    let cmp_bx = d_bx.cmp(&0);
+
+    match (cmp_ax, cmp_bx) {
+        // d_ax >= 0 && d_bx < 0
+        (Ordering::Greater, Ordering::Less) | (Ordering::Equal, Ordering::Less) => {
+            Ordering::Greater
+        }
+        // d_ax < 0 && d_bx >= 0
+        (Ordering::Less, Ordering::Greater) | (Ordering::Less, Ordering::Equal) => Ordering::Less,
+        // d_ax == 0 && d_bx == 0
+        (Ordering::Equal, Ordering::Equal) if a.y - center.y >= 0 || b.y - center.y >= 0 => {
+            a.y.cmp(&b.y)
+        }
+        (Ordering::Equal, Ordering::Equal) => b.y.cmp(&a.y),
+        _ => {
+            // Compute the cross product of vectors (center -> a) x (center -> b)
+            let det = (d_ax) * (b.y - center.y) - (d_bx) * (a.y - center.y);
+
+            match det.cmp(&0) {
+                Ordering::Less => Ordering::Greater,
+                Ordering::Greater => Ordering::Less,
+                Ordering::Equal => {
+                    // Points a and b are on the same line from the center. Check which point is closer to
+                    // the center.
+                    let d1 = (d_ax) * (d_ax) + (a.y - center.y) * (a.y - center.y);
+                    let d2 = (d_bx) * (d_bx) + (b.y - center.y) * (b.y - center.y);
+
+                    d1.cmp(&d2)
+                }
+            }
+        }
     }
 }
 

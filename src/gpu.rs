@@ -5,7 +5,7 @@ use std::{
 };
 
 use bit_field::BitField;
-use log::{error, trace};
+use log::{error, trace, warn};
 use nalgebra::Vector2;
 use num_traits::clamp;
 
@@ -34,6 +34,7 @@ struct Point {
     tex_y: i32,
 }
 
+#[derive(PartialEq)]
 enum ColorDepth {
     Full,    // 24 bit
     Reduced, // 15 bit
@@ -55,7 +56,7 @@ impl Point {
         Self {
             x: sign_extend(word as i32 & 0x7FF, 11) + offset.x,
             y: sign_extend((word as i32 >> 16) & 0x7FF, 11) + offset.y,
-            color: 0,
+            color: color,
             tex_x: 0,
             tex_y: 0,
         }
@@ -945,12 +946,16 @@ impl Gpu {
                 self.color_depth = match command.get_bit(4) {
                     true => ColorDepth::Full,
                     false => ColorDepth::Reduced,
+                };
+
+                if self.color_depth == ColorDepth::Full {
+                    panic!("24 bit color depth not supported!");
                 }
             }
 
             0x10 => {
                 //Get gpu information
-                trace!("Getting gpu info {:#X}", command.parameter());
+                warn!("CPU tried to query gpu parameter: {:#X}!", command.parameter());
             }
             _ => error!(
                 "Unknown gp1 command {:#X} parameter {}!",

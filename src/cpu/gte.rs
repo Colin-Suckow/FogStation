@@ -543,7 +543,7 @@ impl GTE {
         let blue = (val >> 10) & 0x1F;
         self.truncate_write_ir1((red * 0x80) as i32, false);
         self.truncate_write_ir2((green * 0x80) as i32, false);
-        self.truncate_write_ir3((blue * 0x80) as i64, false);
+        self.truncate_write_ir3((blue * 0x80) as i32, false);
     }
 
     fn orgb(&mut self) -> u32 {
@@ -576,7 +576,7 @@ impl GTE {
 
         self.truncate_write_ir1(self.MAC1, lm);
         self.truncate_write_ir2(self.MAC2, lm);
-        self.truncate_write_ir3(self.MAC3 as i64, lm);
+        self.truncate_write_ir3(self.MAC3, lm);
 
     }
 
@@ -616,7 +616,7 @@ impl GTE {
 
         self.truncate_write_ir1(self.MAC1, lm);
         self.truncate_write_ir2(self.MAC2, lm);
-        self.truncate_write_ir3(self.MAC3 as i64, lm);
+        self.truncate_write_ir3(self.MAC3, lm);
     } 
 
     fn rtps(&mut self, command: u32) {
@@ -666,7 +666,7 @@ impl GTE {
 
         self.truncate_write_ir1(self.MAC1, lm);
         self.truncate_write_ir2(self.MAC2, lm);
-        self.truncate_write_ir3(self.MAC3 as i64, lm);
+        self.truncate_write_ir3(self.MAC3, lm);
 
         // [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (BK*1000h + LCM*IR) SAR (sf*12)
 
@@ -681,7 +681,7 @@ impl GTE {
 
         self.truncate_write_ir1(self.MAC1, lm);
         self.truncate_write_ir2(self.MAC2, lm);
-        self.truncate_write_ir3(self.MAC3 as i64, lm);
+        self.truncate_write_ir3(self.MAC3, lm);
 
         // [MAC1,MAC2,MAC3] = [R*IR1,G*IR2,B*IR3] SHL 4 
 
@@ -714,7 +714,7 @@ impl GTE {
        
         self.truncate_write_ir1(cx, false);
         self.truncate_write_ir2(cy, false);
-        self.truncate_write_ir3(cz as i64, false);
+        self.truncate_write_ir3(cz, false);
 
         self.truncate_write_mac1(self.IR1 as i64 * self.IR0 as i64 + self.MAC1 as i64, shift);
         self.truncate_write_mac2(self.IR2 as i64 * self.IR0 as i64 + self.MAC2 as i64, shift);
@@ -722,7 +722,7 @@ impl GTE {
         
         self.truncate_write_ir1(self.MAC1, lm);
         self.truncate_write_ir2(self.MAC2, lm);
-        self.truncate_write_ir3(self.MAC3 as i64, lm);
+        self.truncate_write_ir3(self.MAC3, lm);
 
         let final_color = self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
 
@@ -737,22 +737,32 @@ impl GTE {
         self.truncate_write_mac2(((self.RGBC.g as u64) << 16) as i64, 0);
         self.truncate_write_mac3(((self.RGBC.b as u64) << 16) as i64, 0);
 
-        let cx = (((self.RFC as i32) << 12) - self.MAC1 as i32) >> shift;
-        let cy = (((self.GFC as i32) << 12) - self.MAC2 as i32) >> shift;
-        let cz = (((self.BFC as i32) << 12) - self.MAC3 as i32) >> shift;
+        // Interpolate Color
+
+        let in_mac1 = self.MAC1;
+        let in_mac2 = self.MAC2;
+        let in_mac3 = self.MAC3;
+
+        let cx = (((self.RFC as i64) << 12) - in_mac1 as i64);
+        let cy = (((self.GFC as i64) << 12) - in_mac2 as i64);
+        let cz = (((self.BFC as i64) << 12) - in_mac3 as i64);
+
+        self.truncate_write_mac1(cx, shift);
+        self.truncate_write_mac2(cy, shift);
+        self.truncate_write_mac3(cz, shift);
 
        
-        self.truncate_write_ir1(cx, false);
-        self.truncate_write_ir2(cy, false);
-        self.truncate_write_ir3(cz as i64, false);
+        self.truncate_write_ir1((cx >> shift) as i32, false);
+        self.truncate_write_ir2((cy >> shift) as i32, false);
+        self.truncate_write_ir3((cz >> shift) as i32, false);
 
-        self.truncate_write_mac1(self.IR1 as i64 * self.IR0 as i64 + self.MAC1 as i64, shift);
-        self.truncate_write_mac2(self.IR2 as i64 * self.IR0 as i64 + self.MAC2 as i64, shift);
-        self.truncate_write_mac3(self.IR3 as i64 * self.IR0 as i64 + self.MAC3 as i64, shift);
+        self.truncate_write_mac1(self.IR1 as i64 * self.IR0 as i64 + in_mac1 as i64, shift);
+        self.truncate_write_mac2(self.IR2 as i64 * self.IR0 as i64 + in_mac2 as i64, shift);
+        self.truncate_write_mac3(self.IR3 as i64 * self.IR0 as i64 + in_mac3 as i64, shift);
         
         self.truncate_write_ir1(self.MAC1, lm);
         self.truncate_write_ir2(self.MAC2, lm);
-        self.truncate_write_ir3(self.MAC3 as i64, lm);
+        self.truncate_write_ir3(self.MAC3, lm);
 
         let final_color = self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
 
@@ -836,7 +846,7 @@ impl GTE {
         self.truncate_write_ir2(self.MAC2, lm);
 
         // This is just to lazily set the error flags
-        self.truncate_write_ir3(z >> 12, false);
+        self.truncate_write_ir3((z >> 12) as i32, false);
 
         // This actually sets ir3 to the unshifted mac3 value
         self.IR3 = match (self.MAC3 as i64, lm) {
@@ -1021,7 +1031,7 @@ impl GTE {
         }
     }
 
-    fn truncate_write_ir3(&mut self, val: i64, lm_set: bool) {
+    fn truncate_write_ir3(&mut self, val: i32, lm_set: bool) {
         self.IR3 = match (val, lm_set) {
             (val, true) if val < 0 => {
                 self.FLAG.set_bit(22, true);

@@ -486,16 +486,12 @@ impl GTE {
             0x6 => self.nclip(),
             0xc => self.op(command),
             0x10 => self.dpcs(command),
+            0x11 => self.intpl(command),
             0x12 => self.mvmva(command),
             0x13 => self.ncds(command),
-            0x1E => (), // ncs
-            0x20 => (), //nct
             0x30 => self.rtpt(command),
             0x2d => self.avsz3(),
             0x2e => self.avsz4(),
-            0x3f => (),
-            0x16 => (), //NCDT
-            0x11 => (), //INTPL
             _ => (),
             //_ => panic!("Unknown GTE command {:#X}!", command & 0x3F)
         };
@@ -581,14 +577,19 @@ impl GTE {
     }
 
     fn mvmva(&mut self, command: u32) {
-        let (m11, m12, m13, m21, m22, m23, m31, m32, m33) = match command.get_bits(17..=18) {
+
+        let mx = command.get_bits(17..=18);
+        let vx = command.get_bits(15..=16);
+        let tx = command.get_bits(13..=14);
+
+        let (m11, m12, m13, m21, m22, m23, m31, m32, m33) = match mx {
             0 => (self.RT11, self.RT12, self.RT13, self.RT21, self.RT22, self.RT23, self.RT31, self.RT32, self.RT33),
             1 => (self.L11, self.L12, self.L13, self.L21, self.L22, self.L23, self.L31, self.L32, self.L33),
             2 => (self.LR1, self.LR2, self.LR3, self.LG1, self.LG2, self.LG3, self.LB1, self.LB2, self.LB3),
             _ => panic!("Unimplemented/Unknown MVMVA matrix!")
         };
 
-        let (mvx, mvy, mvz) = match command.get_bits(15..=16) {
+        let (mvx, mvy, mvz) = match vx {
             0 => (self.VX0, self.VY0, self.VZ0),
             1 => (self.VX1, self.VY1, self.VZ1),
             2 => (self.VX2, self.VY2, self.VZ2),
@@ -596,19 +597,19 @@ impl GTE {
             _ => panic!("Unimplemented/Unknown MVMVA Multiply Vector!")
         };
 
-        let (tvx, tvy, tvz) = match command.get_bits(13..=14) {
+        let (tvx, tvy, tvz) = match tx {
             0 => (self.TRX, self.TRY, self.TRZ),
             1 => (self.RBK, self.GBK, self.BBK),
-            2 => panic!("MVMVA broken FC translation vector not implemented!"),
+            2 => (self.RFC, self.GFC, self.BFC),
             3 => (0,0,0),
             n => panic!("Unimplemented/Unknown MVMVA translation vector {}!", n)
         };
         let shift = (command.get_bit(19) as usize) * 12;
         let lm = command.get_bit(10);
 
-        let x = (tvx as i64 * 0x1000) + (m11 as i64*mvx as i64) + (m12 as i64*mvy as i64) + (m13 as i64 * mvz as i64);
-        let y = (tvy as i64 * 0x1000) + (m21 as i64*mvx as i64) + (m22 as i64*mvy as i64) + (m23 as i64 * mvz as i64);
-        let z = (tvz as i64 * 0x1000) + (m31 as i64*mvx as i64) + (m32 as i64*mvy as i64) + (m33 as i64 * mvz as i64);
+        let x = ((tvx as i64) << 12) + (m11 as i64*mvx as i64) + (m12 as i64*mvy as i64) + (m13 as i64 * mvz as i64);
+        let y = ((tvy as i64) << 12) + (m21 as i64*mvx as i64) + (m22 as i64*mvy as i64) + (m23 as i64 * mvz as i64);
+        let z = ((tvz as i64) << 12) + (m31 as i64*mvx as i64) + (m32 as i64*mvy as i64) + (m33 as i64 * mvz as i64);
 
         self.truncate_write_mac1(x, shift);
         self.truncate_write_mac2(y, shift);
@@ -617,6 +618,33 @@ impl GTE {
         self.truncate_write_ir1(self.MAC1, lm);
         self.truncate_write_ir2(self.MAC2, lm);
         self.truncate_write_ir3(self.MAC3, lm);
+
+        // tx=2 is bugged on original hardware, so we must redo some calculations to match these bugs
+        if tx == 2 {
+            let x = ((tvx as i64) << 12) + (m13 as i64 * mvz as i64);
+            let y = ((tvy as i64) << 12) + (m23 as i64 * mvz as i64);
+            let z = ((tvz as i64) << 12) + (m33 as i64 * mvz as i64);
+
+            self.truncate_write_mac1(x, shift);
+            self.truncate_write_mac2(y, shift);
+            self.truncate_write_mac3(z, shift);
+
+            self.truncate_write_ir1(self.MAC1, lm);
+            self.truncate_write_ir2(self.MAC2, lm);
+            self.truncate_write_ir3(self.MAC3, lm);
+
+            let x = (m12 as i64*mvy as i64) + (m13 as i64 * mvz as i64);
+            let y = (m22 as i64*mvy as i64) + (m23 as i64 * mvz as i64);
+            let z = (m32 as i64*mvy as i64) + (m33 as i64 * mvz as i64);
+
+            self.truncate_write_mac1(x, shift);
+            self.truncate_write_mac2(y, shift);
+            self.truncate_write_mac3(z, shift);
+
+            self.truncate_write_ir1(self.MAC1, lm);
+            self.truncate_write_ir2(self.MAC2, lm);
+            self.truncate_write_ir3(self.MAC3, lm);
+        }
     } 
 
     fn rtps(&mut self, command: u32) {
@@ -737,32 +765,22 @@ impl GTE {
         self.truncate_write_mac2(((self.RGBC.g as u64) << 16) as i64, 0);
         self.truncate_write_mac3(((self.RGBC.b as u64) << 16) as i64, 0);
 
-        // Interpolate Color
+        self.interpolate_color(self.MAC1, self.MAC2, self.MAC3, lm, shift);
 
-        let in_mac1 = self.MAC1;
-        let in_mac2 = self.MAC2;
-        let in_mac3 = self.MAC3;
+        let final_color = self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
 
-        let cx = (((self.RFC as i64) << 12) - in_mac1 as i64);
-        let cy = (((self.GFC as i64) << 12) - in_mac2 as i64);
-        let cz = (((self.BFC as i64) << 12) - in_mac3 as i64);
+        self.push_color(final_color);
+    }
 
-        self.truncate_write_mac1(cx, shift);
-        self.truncate_write_mac2(cy, shift);
-        self.truncate_write_mac3(cz, shift);
+    fn intpl(&mut self, command: u32) {
+        let shift = (command.get_bit(19) as usize) * 12;
+        let lm = command.get_bit(10);
 
-       
-        self.truncate_write_ir1((cx >> shift) as i32, false);
-        self.truncate_write_ir2((cy >> shift) as i32, false);
-        self.truncate_write_ir3((cz >> shift) as i32, false);
+        self.truncate_write_mac1((self.IR1 as i64) << 12, 0);
+        self.truncate_write_mac2((self.IR2 as i64) << 12, 0);
+        self.truncate_write_mac3((self.IR3 as i64) << 12, 0);
 
-        self.truncate_write_mac1(self.IR1 as i64 * self.IR0 as i64 + in_mac1 as i64, shift);
-        self.truncate_write_mac2(self.IR2 as i64 * self.IR0 as i64 + in_mac2 as i64, shift);
-        self.truncate_write_mac3(self.IR3 as i64 * self.IR0 as i64 + in_mac3 as i64, shift);
-        
-        self.truncate_write_ir1(self.MAC1, lm);
-        self.truncate_write_ir2(self.MAC2, lm);
-        self.truncate_write_ir3(self.MAC3, lm);
+        self.interpolate_color(self.MAC1, self.MAC2, self.MAC3, lm, shift);
 
         let final_color = self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
 
@@ -800,6 +818,29 @@ impl GTE {
 
 // Command helper functions
 impl GTE {
+
+    fn interpolate_color(&mut self, in_mac1: i32, in_mac2: i32, in_mac3: i32, lm: bool, shift: usize) {
+        let cx = ((self.RFC as i64) << 12) - in_mac1 as i64;
+        let cy = ((self.GFC as i64) << 12) - in_mac2 as i64;
+        let cz = ((self.BFC as i64) << 12) - in_mac3 as i64;
+
+        self.truncate_write_mac1(cx, shift);
+        self.truncate_write_mac2(cy, shift);
+        self.truncate_write_mac3(cz, shift);
+
+       
+        self.truncate_write_ir1((cx >> shift) as i32, false);
+        self.truncate_write_ir2((cy >> shift) as i32, false);
+        self.truncate_write_ir3((cz >> shift) as i32, false);
+
+        self.truncate_write_mac1(self.IR1 as i64 * self.IR0 as i64 + in_mac1 as i64, shift);
+        self.truncate_write_mac2(self.IR2 as i64 * self.IR0 as i64 + in_mac2 as i64, shift);
+        self.truncate_write_mac3(self.IR3 as i64 * self.IR0 as i64 + in_mac3 as i64, shift);
+        
+        self.truncate_write_ir1(self.MAC1, lm);
+        self.truncate_write_ir2(self.MAC2, lm);
+        self.truncate_write_ir3(self.MAC3, lm);
+    }
 
     fn make_color(&mut self, r: i32, g: i32, b: i32, c: u8) -> Color {
         if !(0..=0xFF).contains(&r) {

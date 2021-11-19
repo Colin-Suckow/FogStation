@@ -125,6 +125,11 @@ pub struct Gpu {
     blend_mode: BlendMode,
     force_mask: bool,
     check_mask: bool,
+
+    tex_mask_x: u32,
+    tex_mask_y: u32,
+    tex_offset_x: u32,
+    tex_offset_y: u32,
 }
 
 impl Gpu {
@@ -164,6 +169,11 @@ impl Gpu {
             blend_mode: BlendMode::BAF,
             force_mask: false,
             check_mask: false,
+
+            tex_mask_x: 0,
+            tex_mask_y: 0,
+            tex_offset_x: 0,
+            tex_offset_y: 0,
         }
     }
 
@@ -302,10 +312,11 @@ impl Gpu {
                             point.y += self.draw_offset.y;
                         }
 
-                        self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
-                        self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
-                        self.texpage_x_base = ((self.gp0_buffer[4] >> 16) & 0xF) as u16;
-                        self.texpage_y_base = ((self.gp0_buffer[4] >> 20) & 0x1) as u16;
+                        let clut_x = (self.gp0_buffer[2] >> 16) & 0x3F;
+                        let clut_y = (self.gp0_buffer[2] >> 22) & 0x1FF;
+                        let page_x = (self.gp0_buffer[4] >> 16) & 0xF;
+                        let page_y = (self.gp0_buffer[4] >> 20) & 0x1;
+
                         self.blend_color = fill;
 
                         let min_x = points.iter().min_by_key(|v| v.x).unwrap().x;
@@ -317,7 +328,7 @@ impl Gpu {
                         if max_x - min_x > 1023 || max_y - min_y > 511 {
                             trace!("Quad too big, dropping");
                         } else {
-                            self.draw_textured_quad(&points, command.get_bit(25));
+                            self.draw_textured_quad(&points, command.get_bit(25), page_x, page_y, clut_x, clut_y);
                         }
                     } else if is_textured {
                         trace!("GPU: Tex quad");
@@ -351,10 +362,11 @@ impl Gpu {
                             point.y += self.draw_offset.y;
                         }
 
-                        self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
-                        self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
-                        self.texpage_x_base = ((self.gp0_buffer[4] >> 16) & 0xF) as u16;
-                        self.texpage_y_base = ((self.gp0_buffer[4] >> 20) & 0x1) as u16;
+                        let clut_x = (self.gp0_buffer[2] >> 16) & 0x3F;
+                        let clut_y = (self.gp0_buffer[2] >> 22) & 0x1FF;
+                        let page_x = (self.gp0_buffer[4] >> 16) & 0xF;
+                        let page_y = (self.gp0_buffer[4] >> 20) & 0x1;
+
                         self.blend_color = fill;
 
                         let min_x = points.iter().min_by_key(|v| v.x).unwrap().x;
@@ -366,7 +378,7 @@ impl Gpu {
                         if max_x - min_x > 1023 || max_y - min_y > 511 {
                             trace!("Quad too big, dropping");
                         } else {
-                            self.draw_textured_quad(&points, command.get_bit(25));
+                            self.draw_textured_quad(&points, command.get_bit(25), page_x, page_y, clut_x, clut_y);
                         }
                     } else if is_gouraud {
                         trace!("GPU: gouraud quad");
@@ -454,10 +466,12 @@ impl Gpu {
                             point.y += self.draw_offset.y;
                         }
 
-                        self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
-                        self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
-                        self.texpage_x_base = ((self.gp0_buffer[4] >> 16) & 0xF) as u16;
-                        self.texpage_y_base = ((self.gp0_buffer[4] >> 20) & 0x1) as u16;
+                       
+                        let clut_x = (self.gp0_buffer[2] >> 16) & 0x3F;
+                        let clut_y = (self.gp0_buffer[2] >> 22) & 0x1FF;
+                        let page_x = (self.gp0_buffer[4] >> 16) & 0xF;
+                        let page_y = (self.gp0_buffer[4] >> 20) & 0x1;
+
                         self.blend_color = fill;
 
                         let min_x = points.iter().min_by_key(|v| v.x).unwrap().x;
@@ -469,7 +483,7 @@ impl Gpu {
                         if max_x - min_x > 1023 || max_y - min_y > 511 {
                             trace!("Quad too big, dropping");
                         } else {
-                            self.draw_textured_triangle(&points, command.get_bit(25));
+                            self.draw_textured_triangle(&points, command.get_bit(25), page_x, page_y, clut_x, clut_y);
                         }
                     } else if is_textured {
                         trace!("GPU: Tex tri");
@@ -496,17 +510,11 @@ impl Gpu {
                             point.y += self.draw_offset.y;
                         }
 
-                        ////trace!("{:?}", points);
-                        self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
-                        self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
-                        //trace!("palx {}", self.palette_x);
-                        self.texpage_x_base = ((self.gp0_buffer[4] >> 16) & 0xF) as u16;
-                        self.texpage_y_base = ((self.gp0_buffer[4] >> 20) & 0x1) as u16;
-                        // self.blend_color = if fill == 0 {
-                        //     0xFFFF
-                        // } else {
-                        //     fill
-                        // };
+                        let clut_x = (self.gp0_buffer[2] >> 16) & 0x3F;
+                        let clut_y = (self.gp0_buffer[2] >> 22) & 0x1FF;
+                        let page_x = (self.gp0_buffer[4] >> 16) & 0xF;
+                        let page_y = (self.gp0_buffer[4] >> 20) & 0x1;
+                       
                         self.blend_color = fill;
 
                         let min_x = points.iter().min_by_key(|v| v.x).unwrap().x;
@@ -518,7 +526,7 @@ impl Gpu {
                         if max_x - min_x > 1023 || max_y - min_y > 511 {
                             trace!("Quad too big, dropping");
                         } else {
-                            self.draw_textured_triangle(&points, command.get_bit(25));
+                            self.draw_textured_triangle(&points, command.get_bit(25), page_x, page_y, clut_x, clut_y);
                         }
                     } else if is_gouraud {
                         trace!("GPU: gouraud tri");
@@ -843,6 +851,14 @@ impl Gpu {
                         };
                     }
 
+                    0xE2 => {
+                        // Texture window settings
+                        self.tex_mask_x = command.get_bits(0..=4);
+                        self.tex_mask_y = command.get_bits(5..=9);
+                        self.tex_offset_x = command.get_bits(10..=14);
+                        self.tex_offset_y = command.get_bits(15..=19);
+                    }
+
                     0xE3 => {
                         //Set Drawing Area Top Left
                         self.draw_area_tl_point = Point::from_components(
@@ -949,7 +965,7 @@ impl Gpu {
                 };
 
                 if self.color_depth == ColorDepth::Full {
-                    panic!("24 bit color depth not supported!");
+                    println!("24 bit color depth not supported!");
                 }
             }
 
@@ -1118,9 +1134,14 @@ impl Gpu {
 
             let address = point_to_address(x as u32, y as u32) as usize;
 
+
             let fill = self.get_texel(
                 lerp_coords(x1_tex, x2_tex, start, end, x),
                 lerp_coords(y1_tex, y2_tex, start, end, x),
+                self.texpage_x_base as u32,
+                self.texpage_y_base as u32,
+                self.palette_x as u32,
+                self.palette_y as u32
             );
            
             self.composite_and_place_pixel(address, fill, transparent);
@@ -1272,7 +1293,7 @@ impl Gpu {
         }
     }
 
-    fn draw_textured_triangle(&mut self, in_points: &[Point], transparent: bool) {
+    fn draw_textured_triangle(&mut self, in_points: &[Point], transparent: bool, page_x: u32, page_y: u32, clut_x: u32, clut_y: u32) {
         // let mut sp = points.to_vec();
         // sp.sort_by_key(|p| p.y);
 
@@ -1344,7 +1365,7 @@ impl Gpu {
 
                     //println!("tex_x {} tex_y {}", tex_x, tex_y);
 
-                    let fill = self.get_texel(tex_x as i32, tex_y as i32);
+                    let fill = self.get_texel(tex_x as i32, tex_y as i32, page_x, page_y, clut_x, clut_y);
 
                     self.composite_and_place_pixel(addr as usize, fill, transparent);
                 }
@@ -1362,34 +1383,46 @@ impl Gpu {
         self.draw_shaded_triangle(&[points[1], points[2], points[3]], transparent);
     }
 
-    fn draw_textured_quad(&mut self, points: &[Point], transparent: bool) {
-        self.draw_textured_triangle(&[points[0], points[2], points[1]], transparent);
-        self.draw_textured_triangle(&[points[1], points[2], points[3]], transparent);
+    fn draw_textured_quad(&mut self, points: &[Point], transparent: bool, page_x: u32, page_y: u32, clut_x: u32, clut_y: u32) {
+        self.draw_textured_triangle(&[points[0], points[2], points[1]], transparent, page_x, page_y, clut_x, clut_y);
+        self.draw_textured_triangle(&[points[1], points[2], points[3]], transparent, page_x, page_y, clut_x, clut_y);
     }
 
-    fn get_texel(&self, x: i32, y: i32) -> u16 {
-        //TODO inline variables. Just did this because I'm lazy
-        let page_x = self.texpage_x_base as u32;
-        let page_y = self.texpage_y_base as u32;
-        let clut_x = self.palette_x as u32;
-        let clut_y = self.palette_y as u32;
+    fn apply_texture_mask(&self, x: u32, y: u32) -> (u32, u32) {
+        let new_x = (x & !(self.tex_mask_x * 8)) | ((self.tex_offset_x & self.tex_mask_x) * 8);
+        let new_y = (y & !(self.tex_mask_y * 8)) | ((self.tex_offset_y & self.tex_mask_y) * 8);
+        (new_x, new_y)
+    }
+
+    fn get_texel(&self, x: i32, y: i32, page_x: u32, page_y: u32, clut_x: u32, clut_y: u32) -> u16 {
+        // //TODO inline variables. Just did this because I'm lazy
+       
         let size = self.texmode;
 
         let pixel_val = match size {
             TextureColorMode::FifteenBit => {
-                self.vram[min(
-                    (point_to_address(
-                        ((page_x * 64) as u32 + x as u32) as u32,
-                        ((page_y * 256) as u32 + y as u32) as u32,
-                    ) as usize),
+                let tex_x = (page_x * 64) as u32 + x as u32;
+                let tex_y = (page_y * 256) as u32 + y as u32;
+                let (masked_x, masked_y) = self.apply_texture_mask(tex_x, tex_y);
+                let addr = min(
+                    point_to_address(
+                        masked_x,
+                        masked_y,
+                    ) as usize,
                     524287,
-                )]
+                );
+
+
+                self.vram[addr]
             }
             TextureColorMode::EightBit => {
+                let tex_x = (page_x * 64) as u32 + (x / 2) as u32;
+                let tex_y = (page_y * 256) as u32 + y as u32;
+                let (masked_x, masked_y) = self.apply_texture_mask(tex_x, tex_y);
                 let value = self.vram[min(
                     point_to_address(
-                        (page_x * 64) as u32 + (x / 2) as u32,
-                        (page_y * 256) as u32 + y as u32,
+                        masked_x,
+                        masked_y,
                     ) as usize,
                     524287,
                 )];
@@ -1401,11 +1434,14 @@ impl Gpu {
                 )]
             }
             TextureColorMode::FourBit => {
+                let tex_x = (page_x * 64) as u32 + (x / 4) as u32;
+                let tex_y = (page_y * 256) as u32 + y as u32;
+                let (masked_x, masked_y) = self.apply_texture_mask(tex_x, tex_y);
                 let value = self.vram[min(
-                    (point_to_address(
-                        (page_x * 64) as u32 + (x / 4) as u32,
-                        (page_y * 256) as u32 + y as u32,
-                    ) as usize),
+                    point_to_address(
+                        masked_x,
+                        masked_y,
+                    ) as usize,
                     524287,
                 )];
                 let (clut_index, _) = value.overflowing_shr(((x % 4) * 4) as u32);

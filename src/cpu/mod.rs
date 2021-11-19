@@ -189,6 +189,12 @@ impl R3000 {
             //trace!("SYSCALL C({:#X}) pc: {:#X}", self.read_reg(9), self.current_pc);
         }
 
+        // Handle SPU irq
+        if self.main_bus.spu.check_and_ack_irq() {
+            println!("SPU Interrupt fired!");
+            self.fire_external_interrupt(InterruptSource::SPU);
+        }
+
         
         // Handle interrupts
         let mut cause = self.cop0.read_reg(13);
@@ -464,7 +470,7 @@ impl R3000 {
                         self.last_was_branch = true;
                         self.op_bgezal(instruction)
                     }
-                    _ => (), //psxtest_cpu spams a bunch of invalid instructions, so I'm not printing anything
+                    _ => println!("INVALID BRANCH!"), //psxtest_cpu spams a bunch of invalid instructions, so I'm not printing anything
                 }
             }
 

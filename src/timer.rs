@@ -51,8 +51,8 @@ impl Timer {
         // println!("Timer {} triggered because of {:?}", self.timer_number, cause);
         // println!("Timer {} mode is {:#X}", self.timer_number, self.mode);
 
-        if (self.mode.get_bit(4) == true && cause == Cause::Target)
-            || (self.mode.get_bit(5) == true && cause == Cause::Full)
+        if (self.mode.get_bit(4) && cause == Cause::Target)
+            || (self.mode.get_bit(5) && cause == Cause::Full)
         {
             println!("Firing timer interrupt");
             let source = match self.timer_number {

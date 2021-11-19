@@ -1,4 +1,5 @@
 use bit_field::BitField;
+use byteorder::{ByteOrder, LittleEndian};
 
 #[derive(Clone, Copy, Debug)]
 enum SpuMode {
@@ -15,13 +16,13 @@ pub struct SPU {
     voice0_volume: u32,
     current_mode: SpuMode,
 
-    voice_registers: [u16; 192],
+    voice_registers: [u16; 607],
 
     transfer_address_register: u16,
     internal_transfer_address: u32,
 
     memory: [u8; 0x7FFFF],
-
+    irq_addr: u32,
     pending_irq_acked: bool,
 
 }
@@ -34,10 +35,11 @@ impl SPU {
             spu_control: 0x8000, //Start with spu enabled
             voice0_volume: 0,
             current_mode: SpuMode::Stop,
-            voice_registers: [0; 192],
+            voice_registers: [0; 607],
 
             internal_transfer_address: 0,
             transfer_address_register: 0,
+            irq_addr: 1,
 
             memory: [0; 0x7FFFF],
 
@@ -46,36 +48,26 @@ impl SPU {
     }
 
     pub fn read_half_word(&mut self, addr: u32) -> u16 {
-        //println!("Reading spu {:#X}", addr);
-        match addr {
-            0x1F801C00 ..= 0x1F801D7F => {
-                let addr = (addr - 0x1F801C00) / 2;
-                self.voice_registers[addr as usize]
-            },
+        
+        let val  = match addr {
             0x1F801DAE => self.status_register(),
-            0x1F801DAA => {
-                println!("{:#X}", self.spu_control);
-                self.spu_control
-            },
+            0x1F801DAA => self.spu_control,
             0x1F801DAC => 0x4, //SPU transfer control
             0x1F801DA6 => self.transfer_address_register,
+            0x1F801C00 ..= 0x1F801E5F => {
+                let addr = (addr - 0x1F801C00);
+                self.voice_registers[addr as usize]
+            },
             _ => 0, //{println!("Read unknown SPU address {:#X}", addr); 0}
-        }
+        };
+        //println!("Reading spu {:#X}  val {:#X}", addr, val);
+        val
     }
 
     pub fn write_half_word(&mut self, addr: u32, value: u16) {
         //println!("Writing spu {:#X} v {:#X}", addr, value);
         match addr {
-            0x1F801C00 ..= 0x1F801D7F => {
-                let offset = (addr - 0x1F801C00) / 2;
-                self.voice_registers[offset as usize] = value;
-            },
-            0x1F801D80 => self.main_volume = (value as u32) | (self.main_volume & 0xFFFF0000),
-            0x1F801D82 => self.main_volume = ((value as u32) << 4) | (self.main_volume & 0xFFFF),
-            0x1F801D84 => self.reverb_volume = (value as u32) | (self.reverb_volume & 0xFFFF0000),
-            0x1F801D86 => {
-                self.reverb_volume = ((value as u32) << 4) | (self.reverb_volume & 0xFFFF)
-            }
+            0x1F801DA4 => self.irq_addr = value as u32,
             0x1F801DA8 => self.push_transfer_fifo(value), //SPU data transfer fifo
             0x1F801DAA => {
                 self.spu_control = value;
@@ -87,8 +79,12 @@ impl SPU {
                     i => panic!("Unknown SPU mode {}", i)
                 };
             },
-            0x1F801C00 => self.voice0_volume = value as u32, //TODO implement real voice registers
             0x1F801DA6 => self.set_transfer_address(value),
+
+            0x1F801C00 ..= 0x1F801E5F => {
+                let offset = (addr - 0x1F801C00);
+                self.voice_registers[offset as usize] = value;
+            },
             _ => (),//println!("Wrote unknown SPU address {:#X} with {:#X}", addr, value)
         }
     }
@@ -99,18 +95,26 @@ impl SPU {
     }
 
     fn push_transfer_fifo(&mut self, value: u16) {
-        // TODO: Push data into spu memory. Right now we just increment the transfer address  for the SPU irq
+        LittleEndian::write_u16(&mut self.memory, value);
         self.internal_transfer_address += 2;
+        if self.check_irq() {
+            self.queue_irq();
+        }
     }
 
-    fn check_irq(&self) {
-
+    fn queue_irq(&mut self) {
+        self.pending_irq_acked = false;
     }
 
-    fn pending_irq(&self) -> bool {
-        !self.pending_irq_acked
+    fn check_irq(&self) -> bool {
+        self.internal_transfer_address == self.irq_addr * 8
     }
 
+    pub fn check_and_ack_irq(&mut self) -> bool {
+        let result = !self.pending_irq_acked;
+        self.pending_irq_acked = true;
+        result
+    }
 
     fn status_register(&self) -> u16 {
         //println!("Reading spu stat. mode is {:?}", self.current_mode);

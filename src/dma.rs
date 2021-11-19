@@ -353,6 +353,24 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
 
             4 => {
                 //SPU
+
+                let entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
+                let block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
+                let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
+
+                match cpu.main_bus.dma.channels[num].control {
+                    0x01000201 => {
+                        for i in 0..entries {
+                            for j in 0..block_size {
+                                cpu.main_bus.spu.write_half_word(0x1F801DA8, 0);
+                                cpu.main_bus.spu.write_half_word(0x1F801DA8, 0);
+                            }
+                        }
+                    },
+                    control => panic!("Unknown SPU DMA transfer! {:#X}", control)
+                }
+
+
                 cpu.main_bus.dma.channels[num].complete();
                 cpu.main_bus.dma.raise_irq(num);
                 if cpu.main_bus.dma.irq_channel_enabled(num) {

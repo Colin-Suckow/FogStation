@@ -14,7 +14,7 @@ pub struct MainBus {
     pub memory: Memory,
     pub gpu: Gpu,
     pub dma: DMAState,
-    spu: SPU,
+    pub spu: SPU,
     pub cd_drive: CDDrive,
     scratchpad: Memory,
     pub(super) controllers: Controllers,

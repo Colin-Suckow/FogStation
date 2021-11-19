@@ -251,12 +251,16 @@ impl Controllers {
                     return;
                 }
 
-                // if !self.joy_ctrl.get_bit(13) && !self.joy_ctrl.get_bit(1)
-                //     || self.joy_ctrl.get_bit(13) && self.joy_ctrl.get_bit(1)
-                // {
-                //     // Controller 2
-                //     return;
-                // }
+                  if !self.joy_ctrl.get_bit(13) && self.joy_ctrl.get_bit(1)
+                || self.joy_ctrl.get_bit(13) && !self.joy_ctrl.get_bit(1)
+                {
+                    // Controller 2
+                    self.push_rx_buf(0);
+                    return;
+                }
+
+               
+
 
                 self.push_rx_buf(0);
                 self.queue_interrupt();
@@ -267,6 +271,9 @@ impl Controllers {
             }
             TXstate::Transfering { slot, step } => {
                 if slot == Slot::Controller {
+
+                  
+
                     let response = match step {
                         0 => 0x41, // Digital pad idlo
                         1 => 0x5A, // Digital pad idhi
@@ -275,7 +282,7 @@ impl Controllers {
                         _ => 0,
                     };
                     self.push_rx_buf(response);
-                    if step <= 3 {
+                    if step < 3 {
                         self.queue_interrupt();
                     }
                     TXstate::Transfering {
@@ -296,6 +303,10 @@ impl Controllers {
         if self.tx_state != TXstate::Disabled {
             val |= 0x1;
         };
+
+        if !self.rx_buf.is_empty() {
+            val |= 0x2;
+        }
 
         if self.tx_state != TXstate::Ready {
             val |= 0x4;

@@ -197,6 +197,7 @@ enum ClientMessage {
     ResolutionChanged(Resolution),
     AwaitingGDBClient,
     GDBClientConnected,
+    LatestPC(u32),
 }
 
 struct EmuComms {
@@ -257,7 +258,10 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
     // Handle incoming messages
     if let Ok(msg) = state.comm.rx.try_recv() {
         match msg {
-            EmuMessage::Halt => state.halted = true,
+            EmuMessage::Halt => {
+                state.halted = true;
+                state.comm.tx.send(ClientMessage::LatestPC(state.emu.pc()));
+            },
             EmuMessage::Continue => {
                 state.halted = false;
                 state.emu.clear_halt();

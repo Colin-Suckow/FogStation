@@ -16,12 +16,12 @@ pub struct SPU {
     voice0_volume: u32,
     current_mode: SpuMode,
 
-    voice_registers: [u16; 607],
+    voice_registers: Vec<u8>,
 
     transfer_address_register: u16,
     internal_transfer_address: u32,
 
-    memory: [u8; 0x7FFFF],
+    memory: Vec<u8>,
     irq_addr: u32,
     pending_irq_acked: bool,
 
@@ -35,13 +35,13 @@ impl SPU {
             spu_control: 0x8000, //Start with spu enabled
             voice0_volume: 0,
             current_mode: SpuMode::Stop,
-            voice_registers: [0; 607],
+            voice_registers: vec![0; 608],
 
             internal_transfer_address: 0,
             transfer_address_register: 0,
             irq_addr: 1,
 
-            memory: [0; 0x7FFFF],
+            memory: vec![0; 0x800000],
 
             pending_irq_acked: true,
         }
@@ -55,8 +55,8 @@ impl SPU {
             0x1F801DAC => 0x4, //SPU transfer control
             0x1F801DA6 => self.transfer_address_register,
             0x1F801C00 ..= 0x1F801E5F => {
-                let addr = (addr - 0x1F801C00);
-                self.voice_registers[addr as usize]
+                let offset = (addr - 0x1F801C00);
+                LittleEndian::read_u16(&self.voice_registers[offset as usize..(offset + 2) as usize])
             },
             _ => 0, //{println!("Read unknown SPU address {:#X}", addr); 0}
         };
@@ -83,7 +83,7 @@ impl SPU {
 
             0x1F801C00 ..= 0x1F801E5F => {
                 let offset = (addr - 0x1F801C00);
-                self.voice_registers[offset as usize] = value;
+                LittleEndian::write_u16(&mut self.voice_registers[offset as usize..(offset + 2) as usize], value);
             },
             _ => (),//println!("Wrote unknown SPU address {:#X} with {:#X}", addr, value)
         }
@@ -95,7 +95,8 @@ impl SPU {
     }
 
     fn push_transfer_fifo(&mut self, value: u16) {
-        LittleEndian::write_u16(&mut self.memory, value);
+        //println!("SPU FIFO pushing value: {:#X} to addr {:#X}", value, self.internal_transfer_address);
+        LittleEndian::write_u16(&mut self.memory[self.internal_transfer_address as usize..(self.internal_transfer_address + 2) as usize], value);
         self.internal_transfer_address += 2;
         if self.check_irq() {
             self.queue_irq();

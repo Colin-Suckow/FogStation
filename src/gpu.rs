@@ -200,6 +200,21 @@ impl Gpu {
 
         stat |= 0x1C000000;
 
+
+        if !self.is_vblank() {
+            stat.set_bit(31, true);
+        }
+
+        if !self.enabled {
+            stat.set_bit(23, true);
+        }
+
+        if self.color_depth == ColorDepth::Full {
+            stat.set_bit(21, true);
+        }
+
+
+
         stat
     }
 

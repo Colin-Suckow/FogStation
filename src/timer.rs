@@ -26,17 +26,24 @@ impl Timer {
 
     pub fn increment(&mut self, cpu: &mut R3000) {
         self.value += 1;
+        
+        if self.value == self.target {
+            self.trigger(cpu, Cause::Target);
+        }
+
+        if self.value == 0xFFFF {
+            self.trigger(cpu, Cause::Full);
+        }
+
         match self.mode.get_bit(3) {
             true => {
                 if self.value as u16 >= self.target as u16 {
                     self.value = 0;
-                    self.trigger(cpu, Cause::Full);
                 }
             }
             false => {
                 if self.value as u16 >= 0xFFFF {
                     self.value = 0;
-                    self.trigger(cpu, Cause::Target);
                 }
             }
         }

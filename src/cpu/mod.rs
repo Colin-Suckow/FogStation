@@ -444,34 +444,28 @@ impl R3000 {
             }
 
             0x1 => {
-                //"PC-relative" test and branch instructions
-                match instruction.rt() {
-                    0x0 => {
-                        //BLTZ
-                        self.last_was_branch = true;
-                        self.op_bltz(instruction)
-                    }
-                    0x1 => {
-                        //BGEZ
-                        self.last_was_branch = true;
+                // Wacky branch instructions. Copied from rustation
+                let i = instruction.immediate_sign_extended();
+                let s = instruction.rs();
 
-                        self.op_bgez(instruction)
-                    }
+                let is_bgez = instruction.get_bit(16) as u32;
+                let is_link = (instruction >> 17) & 0xf == 0x8;
 
-                    0x10 => {
-                        //BLTZAL
-                        self.last_was_branch = true;
+                let v = self.read_reg(s) as i32;
+                let test = (v < 0) as u32;
 
-                        self.op_bltzal(instruction)
-                    }
+                let test = test ^ is_bgez;
 
-                    0x11 => {
-                        //BGEZAL
-                        self.last_was_branch = true;
-                        self.op_bgezal(instruction)
-                    }
-                    _ => println!("INVALID BRANCH!"), //psxtest_cpu spams a bunch of invalid instructions, so I'm not printing anything
+                if is_link {
+                    self.write_reg(31, self.pc);
                 }
+
+                if test != 0 {
+                    self.delay_slot = self.pc;
+                    self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
+                }
+
+    
             }
 
             0x2 => {
@@ -956,7 +950,7 @@ impl R3000 {
     fn op_addiu(&mut self, instruction: u32) {
         self.write_reg(
             instruction.rt(),
-            (self.read_reg(instruction.rs()) as i32).wrapping_add(instruction.immediate_sign_extended() as i32) as u32,
+            (self.read_reg(instruction.rs())).wrapping_add(instruction.immediate_sign_extended()) as u32,
         );
     }
 
@@ -1014,37 +1008,37 @@ impl R3000 {
         self.pc = (instruction.address() << 2) | ((self.delay_slot) & 0xF0000000);
     }
 
-    fn op_bgezal(&mut self, instruction: u32) {
-        let og_pc = self.pc;
-        if self.read_reg(instruction.rs()) as i32 >= 0 {
-            self.delay_slot = self.pc;
-            self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
-        }
-        self.write_reg(31, og_pc + 4);
-    }
+    // fn op_bgezal(&mut self, instruction: u32) {
+    //     let og_pc = self.pc;
+    //     if self.read_reg(instruction.rs()) as i32 >= 0 {
+    //         self.delay_slot = self.pc;
+    //         self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
+    //     }
+    //     self.write_reg(31, og_pc + 4);
+    // }
 
-    fn op_bltzal(&mut self, instruction: u32) {
-        let og_pc = self.pc;
-        if (self.read_reg(instruction.rs()) as i32) < 0 {
-            self.delay_slot = self.pc;
-            self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
-        }
-        self.write_reg(31, og_pc + 4);
-    }
+    // fn op_bltzal(&mut self, instruction: u32) {
+    //     let og_pc = self.pc;
+    //     if (self.read_reg(instruction.rs()) as i32) < 0 {
+    //         self.delay_slot = self.pc;
+    //         self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
+    //     }
+    //     self.write_reg(31, og_pc + 4);
+    // }
 
-    fn op_bgez(&mut self, instruction: u32) {
-        if self.read_reg(instruction.rs()) as i32 >= 0 {
-            self.delay_slot = self.pc;
-            self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
-        }
-    }
+    // fn op_bgez(&mut self, instruction: u32) {
+    //     if self.read_reg(instruction.rs()) as i32 >= 0 {
+    //         self.delay_slot = self.pc;
+    //         self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
+    //     }
+    // }
 
-    fn op_bltz(&mut self, instruction: u32) {
-        if (self.read_reg(instruction.rs()) as i32) < 0 {
-            self.delay_slot = self.pc;
-            self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
-        }
-    }
+    // fn op_bltz(&mut self, instruction: u32) {
+    //     if (self.read_reg(instruction.rs()) as i32) < 0 {
+    //         self.delay_slot = self.pc;
+    //         self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
+    //     }
+    // }
 
     fn op_slt(&mut self, instruction: u32) {
         self.write_reg(
@@ -1310,7 +1304,7 @@ impl R3000 {
 
     pub fn fire_external_interrupt(&mut self, source: InterruptSource) {
         //println!("Recieved interrupt interrupt request from: {:?}", source);
-        let mask_bit = source.clone() as usize;
+        let mask_bit = source as usize;
         self.i_status.set_bit(mask_bit, true);
     }
 
@@ -1358,7 +1352,9 @@ impl R3000 {
     }
 
     fn read_bus_half_word(&mut self, addr: u32, timers: &mut TimerState) -> u16 {
-        //self.last_touched_addr = addr & 0x1fffffff;
+        // if addr == 0x1F801C0C {
+        //     println!("Read spu thing at pc {:#X}", self.current_pc);
+        // }
         match addr & 0x1fffffff {
             0x1F801070 => self.i_status as u16,
             0x1F801074 => self.i_mask as u16,
@@ -1369,6 +1365,9 @@ impl R3000 {
     
     pub fn read_bus_byte(&mut self, addr: u32) -> u8 {
         //self.last_touched_addr = addr & 0x1fffffff;
+        if addr & 0x1fffffff == 0x1f801040 {
+            println!("Read JOY_DATA at pc {:#X}", self.current_pc);
+        }
         match addr & 0x1fffffff {
             0x1F801070 => self.i_status as u8,
             0x1F801072 => (self.i_status >> 8) as u8,

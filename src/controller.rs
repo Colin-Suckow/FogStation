@@ -243,16 +243,19 @@ impl Controllers {
             TXstate::Ready => {
                 let slot = if val == CONTROLER_SELECT_BYTE {
                     Slot::Controller
-                } else {
+                } else if val == MEMORY_CARD_SELECT_BYTE {
                     Slot::MemoryCard
+                } else {
+                    panic!("Unknown SIO slot!");
                 };
 
                 if slot == Slot::MemoryCard {
+                    self.push_rx_buf(0);
                     return;
                 }
 
-                  if !self.joy_ctrl.get_bit(13) && self.joy_ctrl.get_bit(1)
-                || self.joy_ctrl.get_bit(13) && !self.joy_ctrl.get_bit(1)
+                if !self.joy_ctrl.get_bit(13) && !self.joy_ctrl.get_bit(1)
+                || self.joy_ctrl.get_bit(13) && self.joy_ctrl.get_bit(1)
                 {
                     // Controller 2
                     self.push_rx_buf(0);
@@ -320,9 +323,9 @@ impl Controllers {
             val |= 2;
         }
 
-        if self.joy_ctrl.get_bit(12) {
-            val |= 0x1000;
-        }
+        // if self.joy_ctrl.get_bit(12) {
+        //     val |= 0x1000;
+        // }
 
         //val |= 0x80;
         //println!("Reading JOY_STAT {:#X}", val);

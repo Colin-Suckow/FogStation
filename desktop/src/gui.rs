@@ -17,6 +17,7 @@ pub(crate) fn run_gui(mut state: ClientState) {
     let mut times = AverageList::new();
 
     let mut awaiting_gdb = false;
+    let mut latest_pc: u32 = 0;
 
     system.main_loop(move |_, ui, gl_ctx, textures| {
         state.comm.tx.send(EmuMessage::UpdateControllers(get_button_state(ui))).unwrap();
@@ -39,6 +40,9 @@ pub(crate) fn run_gui(mut state: ClientState) {
                             awaiting_gdb = false;
                             state.halted = false;
                         },
+                        ClientMessage::LatestPC(pc) => {
+                            latest_pc = pc;
+                        }
                     }
                 },
                 Err(e) => {
@@ -102,6 +106,7 @@ pub(crate) fn run_gui(mut state: ClientState) {
                     ui.text(format!("{:.1} FPS", (1000.0 / times.average())));
                 } else {
                     ui.text("Halted");
+                    ui.text(format!("PC: {:#X}", latest_pc));
                     if ui.button(im_str!("Step Instruction"), [120.0, 20.0]) {
                         state.comm.tx.send(EmuMessage::StepCPU).unwrap();
                     }

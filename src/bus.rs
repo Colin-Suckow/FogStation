@@ -52,30 +52,36 @@ impl MainBus {
         // if og_addr == 0x800c14a8{
         //     return 3;
         // }
-        let word = match addr {
+        let value = match addr {
             0x0..=0x001f_ffff => self.memory.read_word(addr),
             0x1f801810 => self.gpu.read_word_gp0(),
             0x1f801814 => self.gpu.read_status_register(),
             0x1F80101C => 0x00070777, //Expansion 2 delay/size
             0x1F801080..=0x1F8010F4 => self.dma.read_word(addr),
-            0x1fc0_0000..=0x1fc7_ffff => self.bios.read_word(addr - 0x1fc0_0000),
             0x1F800000..=0x1F8003FF => self.scratchpad.read_word(addr - 0x1F800000),
             0x1F801014 => 0x200931E1, //SPU_DELAY
             0x1F801060 => 0x00000B88, //RAM_SIZE
             0x1F801824 => 0, //MDEC_IN
+            0x1fc0_0000..=0x1fc7_ffff => self.bios.read_word(addr - 0x1fc0_0000),
             _ => panic!(
                 "Invalid word read at address {:#X}! This address is not mapped to any device.",
                 addr
             ),
         };
-        //println!("Read {:#X} word from bus address {:#X}", word, addr);
-        if unsafe{LOGGING} {println!("Loaded {:#X} from addr {:#X}", word, addr)};
-        word
+        // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {
+        //     println!("Read IO addr {:#X} value {:#X}", addr, value);
+        // } 
+        if unsafe{LOGGING} {println!("Loaded {:#X} from addr {:#X}", value, addr)};
+        value
     }
 
     pub fn write_word(&mut self, og_addr: u32, word: u32) {
         let addr = translate_address(og_addr);
         self.last_touched_addr = addr;
+
+        // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {
+        //     println!("wrote IO addr {:#X} value {:#X}", addr, word);
+        // } 
 
         match addr {
             0x1F802002 => info!("Serial: {}", word),
@@ -121,6 +127,9 @@ impl MainBus {
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_half_word(addr - 0x1fc0_0000),
             _ => panic!("Invalid half word read at address {:#X}! This address is not mapped to any device.", addr)
         };
+        // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {
+        //     println!("Read IO hw addr {:#X} value {:#X}", addr, val);
+        // } 
         if unsafe{LOGGING} {println!("Loaded {:#X} from addr {:#X}", val, addr)};
         val
     }
@@ -129,9 +138,13 @@ impl MainBus {
         let addr = translate_address(og_addr);
         self.last_touched_addr = addr;
 
-        if addr == 0x7C7C8 {
-            println!("0x7c7c8 written with hw val {:#X}", value);
-        }
+        // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {
+        //     println!("wrote hw IO addr {:#X} value {:#X}", addr, value);
+        // } 
+
+        // if addr == 0x7C7C8 {
+        //     println!("0x7c7c8 written with hw val {:#X}", value);
+        // }
 
         match addr {
             0x1F802002 => info!("Serial: {}", value),
@@ -149,6 +162,7 @@ impl MainBus {
 
     pub fn read_byte(&mut self, og_addr: u32) -> u8 {
         let addr = translate_address(og_addr);
+        
         let val = match addr {
             0x1F801070 => {
                 warn!("Tried to read i_status word");
@@ -158,6 +172,7 @@ impl MainBus {
                 warn!("Tried to read i_mask byte");
                 0
             }
+            
             0x0..=0x001f_ffff => self.memory.read_byte(addr), //KUSEG
             0x1F00_0000..=0x1f00_FFFF => {
                 //println!("Something tried to read the parallel port. This is not currently emulated, so a 0 was returned. The address was {:#X}", addr);
@@ -175,6 +190,9 @@ impl MainBus {
                 0
             }
         };
+        // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {
+        //     println!("Read IO byte addr {:#X} value {:#X}", addr, val);
+        // } 
         if unsafe{LOGGING} {println!("Loaded {:#X} from addr {:#X}", val, addr)};
         val
     }
@@ -183,9 +201,9 @@ impl MainBus {
         let addr = translate_address(og_addr);
         self.last_touched_addr = addr & 0x1fffffff;
 
-        if addr == 0x7C7C8 {
-            println!("0x7c7c8 written with b val {:#X}", value);
-        }
+        // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {
+        //     println!("wrote byte IO addr {:#X} value {:#X}", addr, value);
+        // } 
 
         match addr {
             0x0..=0x001f_ffff => self.memory.write_byte(addr, value), //KUSEG

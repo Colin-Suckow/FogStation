@@ -195,4 +195,8 @@ impl PSXEmu {
     pub fn remove_watchpoint(&mut self, addr: u32) {
         self.watchpoints.retain(|&x| x != addr & 0x1FFFFFFF);
     }
+
+    pub fn pc(&self) -> u32 {
+        self.r3000.pc
+    }
 }

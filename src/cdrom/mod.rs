@@ -518,7 +518,7 @@ pub fn step_cycle(cpu: &mut R3000) {
                     .cd_drive
                     .disc
                     .as_ref()
-                    .expect("Tried to read nonexistant disc!")
+                    .expect("Tried to read nonexistent disc!")
                     .read_sector(
                         cpu.main_bus
                             .cd_drive
@@ -532,6 +532,12 @@ pub fn step_cycle(cpu: &mut R3000) {
                 // if !cpu.main_bus.cd_drive.data_queue.is_empty() {
                 //     panic!("DROPPED SECTOR");
                 // }
+
+                // Get rid of all the middle sectors, leave only the oldest
+                let sector_size = *cpu.main_bus.cd_drive.sector_size() as usize;
+                if cpu.main_bus.cd_drive.data_queue.len() > sector_size {
+                    cpu.main_bus.cd_drive.data_queue.drain(sector_size..cpu.main_bus.cd_drive.data_queue.len());
+                }
 
                 // cpu.main_bus.cd_drive.data_queue.clear();
                 cpu.main_bus.cd_drive.data_queue.extend(data.iter());

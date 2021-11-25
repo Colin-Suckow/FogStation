@@ -61,7 +61,7 @@ impl MainBus {
             0x1F800000..=0x1F8003FF => self.scratchpad.read_word(addr - 0x1F800000),
             0x1F801014 => 0x200931E1, //SPU_DELAY
             0x1F801060 => 0x00000B88, //RAM_SIZE
-            0x1F801824 => 0, //MDEC_IN
+            //0x1F801824 => 0, //MDEC_IN
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_word(addr - 0x1fc0_0000),
             _ => panic!(
                 "Invalid word read at address {:#X}! This address is not mapped to any device.",
@@ -125,6 +125,7 @@ impl MainBus {
             0x1F800000..=0x1F8003FF => self.scratchpad.read_half_word(addr - 0x1F800000),
             0x1F80_1040..=0x1F80_104E => self.controllers.read_half_word(addr),
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_half_word(addr - 0x1fc0_0000),
+            0x1f801050..=0x1f80105e => 0xBEEF, //SIO registers
             _ => panic!("Invalid half word read at address {:#X}! This address is not mapped to any device.", addr)
         };
         // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {
@@ -155,6 +156,7 @@ impl MainBus {
             0x1F801C00..=0x1F801E80 => self.spu.write_half_word(addr, value),
             0x1F800000..=0x1F8003FF => self.scratchpad.write_half_word(addr - 0x1F800000, value),
             0x1F80_1040..=0x1F80_104E => self.controllers.write_half_word(addr, value),
+            0x1f801050..=0x1f80105e => (), //SIO registers
             0x1F80_1000..=0x1F80_2000 => warn!("Something tried to half word write to the I/O ports. This is not currently emulated. The address was {:#X}. value was {:#X}", addr, value),
             _ => println!("Invalid half word write at address {:#X}! This address is not mapped to any device.", addr)
         }
@@ -176,14 +178,14 @@ impl MainBus {
             0x0..=0x001f_ffff => self.memory.read_byte(addr), //KUSEG
             0x1F00_0000..=0x1f00_FFFF => {
                 //println!("Something tried to read the parallel port. This is not currently emulated, so a 0 was returned. The address was {:#X}", addr);
-                0
+                0xBE
             }
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_byte(addr - 0x1fc0_0000),
             0x1F801800..=0x1F801803 => self.cd_drive.read_byte(addr), //CDROM
             0x1F80_1040..=0x1F80_104E => self.controllers.read_byte(addr),
             0x1F800000..=0x1F8003FF => self.scratchpad.read_byte(addr - 0x1F800000),
             _ => {
-                error!(
+                panic!(
                     "Invalid byte read at address {:#X}! This address is not mapped to any device.",
                     addr
                 );

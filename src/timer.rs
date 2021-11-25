@@ -25,13 +25,19 @@ impl Timer {
     }
 
     pub fn increment(&mut self, cpu: &mut R3000) {
-        self.value += 1;
+        // Crash Bandicoot hack to get it running faster
+        if self.timer_number == 2 {
+            self.value += 2;
+        } else {
+            self.value += 1;
+        }
         
-        if self.value == self.target {
+        // Check the value after target to make sure we don't miss when incrementing by two
+        if self.value == self.target || self.value == self.target + 1{
             self.trigger(cpu, Cause::Target);
         }
 
-        if self.value == 0xFFFF {
+        if self.value == 0xFFFF || self.value == 0xFFFF + 1 {
             self.trigger(cpu, Cause::Full);
         }
 
@@ -61,7 +67,7 @@ impl Timer {
         if (self.mode.get_bit(4) && cause == Cause::Target)
             || (self.mode.get_bit(5) && cause == Cause::Full)
         {
-            println!("Firing timer interrupt");
+            //println!("Firing timer interrupt");
             let source = match self.timer_number {
                 0 => InterruptSource::TMR0,
                 1 => InterruptSource::TMR1,

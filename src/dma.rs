@@ -212,6 +212,21 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
         //println!("Executing DMA {}", num);
         cpu.main_bus.dma.channels[num].print_stats();
         match num {
+
+            1 => {
+                //MDEC_in
+
+                
+                cpu.main_bus.dma.channels[num].complete();
+                cpu.main_bus.dma.raise_irq(num);
+                if cpu.main_bus.dma.irq_channel_enabled(num) {
+                    cpu.fire_external_interrupt(InterruptSource::DMA);
+                } else {
+                    trace!("DMA IRQ Rejected");
+                    trace!("DICR: {:#X}", cpu.main_bus.dma.interrupt);
+                }
+            },
+            
             2 => {
                 //GPU
                 match cpu.main_bus.dma.channels[num].control {
@@ -292,10 +307,10 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                         let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
                         for i in 0..entries {
                             for j in 0..block_size {
-                                //Lets just write all zeros for now
+                                let val = cpu.main_bus.gpu.read_word_gp0();
                                 cpu.main_bus.write_word(
                                     base_addr + ((i * block_size) * 4) + (j * 4),
-                                    0xFFFFFFFF,
+                                    val,
                                 );
                             }
                         }

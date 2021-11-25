@@ -43,8 +43,8 @@ enum ColorDepth {
 impl Point {
     fn from_word(word: u32, color: u16) -> Self {
         let result = Self {
-            x: sign_extend(word as i32 & 0x7FF, 11),
-            y: sign_extend(((word as i32) >> 16) & 0x7FF, 11),
+            x: sign_extend((word & 0x7FF) as i32, 11),
+            y: sign_extend(((word >> 16) & 0x7FF) as i32, 11),
             color,
             tex_x: 0,
             tex_y: 0,
@@ -54,8 +54,8 @@ impl Point {
 
     fn from_word_with_offset(word: u32, color: u16, offset: &Point) -> Self {
         Self {
-            x: sign_extend(word as i32 & 0x7FF, 11) + offset.x,
-            y: sign_extend((word as i32 >> 16) & 0x7FF, 11) + offset.y,
+            x: sign_extend((word & 0x7FF) as i32, 11) + offset.x,
+            y: sign_extend(((word >> 16) & 0x7FF) as i32, 11) + offset.y,
             color: color,
             tex_x: 0,
             tex_y: 0,
@@ -74,14 +74,59 @@ impl Point {
 
     fn new_textured_point(word: u32, tex_y: i32, tex_x: i32) -> Self {
         Self {
-            x: sign_extend(word as i32 & 0x7FF, 11),
-            y: sign_extend(((word as i32) >> 16) & 0x7FF, 11),
+            x: sign_extend((word & 0x7FF) as i32, 11),
+            y: sign_extend(((word  >> 16) & 0x7FF) as i32, 11),
             color: 0,
             tex_x,
             tex_y,
         }
     }
 }
+
+struct VramTransfer {
+    base_x: usize,
+    base_y: usize,
+    current_x: usize,
+    current_y: usize,
+    width: usize,
+    height: usize,
+}
+
+impl VramTransfer {
+    fn new(x: usize, y: usize, width: usize, height: usize) -> Self{
+        Self {
+            base_x: x,
+            base_y: y,
+            current_x: x,
+            current_y: y,
+            width: width,
+            height: height,
+        }
+    }
+
+    fn next(&mut self, buf: &Vec<u16>) -> u32 {
+
+        if self.complete() {
+            return 0;
+        }
+
+
+        let addr = point_to_address(self.current_x as u32, self.current_y as u32);
+        let result = (buf[addr as usize] as u32) | ((buf[addr as usize + 1] as u32) << 16);
+        self.current_x += 2;
+
+        if self.current_x >= self.base_x + self.width {
+            self.current_x = self.base_x;
+            self.current_y += 1;
+        }
+        result
+    }
+
+    fn complete(&self) -> bool {
+        self.current_y >= self.height + self.base_y
+    }
+}
+
 
 fn sign_extend(x: i32, nbits: u32) -> i32 {
     let notherbits = size_of_val(&x) as u32 * 8 - nbits;
@@ -130,6 +175,8 @@ pub struct Gpu {
     tex_mask_y: u32,
     tex_offset_x: u32,
     tex_offset_y: u32,
+
+    current_transfer: Option<VramTransfer>
 }
 
 impl Gpu {
@@ -174,6 +221,8 @@ impl Gpu {
             tex_mask_y: 0,
             tex_offset_x: 0,
             tex_offset_y: 0,
+
+            current_transfer: None,
         }
     }
 
@@ -219,8 +268,17 @@ impl Gpu {
     }
 
     pub fn read_word_gp0(&mut self) -> u32 {
-        //trace!("Reading gp0");
-        0x0 as u32
+        if let Some(transfer) = &mut self.current_transfer {
+            let val = transfer.next(&self.vram);
+            // if transfer.complete() {
+            //     // This transfer is over, so lets drop it
+            //     self.current_transfer = None;
+            // }
+            val as u32
+        } else {
+            // No transfer, return 0
+            0
+        }
     }
 
     pub fn send_gp0_command(&mut self, value: u32) {
@@ -240,18 +298,13 @@ impl Gpu {
                         }
                         trace!("Quick rec");
 
-                        let mut p1 = Point::from_components((self.gp0_buffer[1] & 0xFFFF) as i32, ((self.gp0_buffer[1] >> 16) & 0xFFFF) as i32, 0);
-                        let mut p2 = Point::from_components((self.gp0_buffer[2] & 0xFFFF) as i32, ((self.gp0_buffer[2] >> 16) & 0xFFFF) as i32, 0);
-
-                        p1.x += self.draw_offset.x;
-                        p1.y += self.draw_offset.y;
-                        p2.x += self.draw_offset.x;
-                        p2.y += self.draw_offset.y;
+                        let mut p1 = Point::from_components((self.gp0_buffer[1] & 0x3F0) as i32, ((self.gp0_buffer[1] >> 16) & 0x1FF) as i32, 0);
+                        let mut p2 = Point::from_components((((self.gp0_buffer[2] & 0x3FF) + 0xF) & !(0xF)) as i32, ((self.gp0_buffer[2] >> 16) & 0x1FF) as i32, 0);
 
                         p2.x += p1.x;
                         p2.y += p1.y;
 
-                        //println!("quick fill p1 {:?}  p2 {:?}", p1, p2);
+                        // println!("quick fill p1 {:?}  p2 {:?}", p1, p2);
 
                         self.draw_solid_box(
                             p1.x as u32,
@@ -260,6 +313,7 @@ impl Gpu {
                             p2.y as u32,
                             b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF) + 1,
                             false,
+                            true
                         );
                     }
                     _ => {
@@ -680,6 +734,7 @@ impl Gpu {
                                 (br_point.y + self.draw_offset.y) as u32,
                                 b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
                                 command.get_bit(25),
+                                true
                             );
                         }
                     }
@@ -706,8 +761,9 @@ impl Gpu {
 
                             self.draw_textured_box(&tl_point, size.x, size.y, command.get_bit(25));
                         } else {
-                            let x1 = (self.gp0_buffer[1] & 0xFFFF) as i32 + self.draw_offset.x;
-                            let y1 = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as i32 + self.draw_offset.y;
+                            let tl_point = Point::from_word(self.gp0_buffer[1], 0);
+                            let x1 = tl_point.x + self.draw_offset.x;
+                            let y1 = tl_point.y + self.draw_offset.y;
                             self.draw_solid_box(
                                 x1 as u32,
                                 y1 as u32,
@@ -715,6 +771,7 @@ impl Gpu {
                                 y1 as u32 + 8,
                                 b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
                                 command.get_bit(25),
+                                true
                             );
                         }
                     }
@@ -739,8 +796,9 @@ impl Gpu {
 
                             self.draw_textured_box(&tl_point, size.x, size.y, command.get_bit(25));
                         } else {
-                            let x1 = (self.gp0_buffer[1] & 0xFFFF) as i32 + self.draw_offset.x;
-                            let y1 = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as i32 + self.draw_offset.y;
+                            let tl_point = Point::from_word(self.gp0_buffer[1], 0);
+                            let x1 = tl_point.x + self.draw_offset.x;
+                            let y1 = tl_point.y + self.draw_offset.y;
                             self.draw_solid_box(
                                 x1 as u32,
                                 y1 as u32,
@@ -748,6 +806,7 @@ impl Gpu {
                                 y1 as u32 + 16,
                                 b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
                                 command.get_bit(25),
+                                true
                             );
                         }
                     }
@@ -835,14 +894,18 @@ impl Gpu {
                     return;
                 }
 
-                let width = (self.gp0_buffer[2] & 0xFFFF) as u32;
-                let height = (((self.gp0_buffer[2] >> 16) & 0xFFFF) as u32) * 2;
+                let width = (self.gp0_buffer[2] & 0xFFFF) as usize;
+                let height = ((self.gp0_buffer[2] >> 16) & 0xFFFF) as usize;
+
+                let base_x = (self.gp0_buffer[1] & 0xFFFF) as usize;
+                let base_y = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as usize;
+
 
                 if width == 0 || height == 0 {
-                    panic!("0 width or height! w {} h {}", width, height);
+                    panic!("GPU: VRAM->CPU transfer: 0 width or height! w {} h {}", width, height);
                 }
-                trace!("GPU: VRAM to CPU")
-                //Lets ignore this one for now
+                trace!("GPU: VRAM to CPU");
+                self.current_transfer = Some(VramTransfer::new(base_x, base_y, width, height));
             }
             0x7 => {
                 //Env commands
@@ -894,8 +957,8 @@ impl Gpu {
 
                     0xE5 => {
                         //Set Drawing Offset
-                        let x = sign_extend(command as i32 & 0x7FF, 11);
-                        let y = sign_extend((command as i32 >> 11) & 0x7FF, 11);
+                        let x = sign_extend((command & 0x7FF) as i32, 11);
+                        let y = sign_extend(((command >> 11) & 0x7FF) as i32, 11);
                         self.draw_offset = Point::from_components(x, y, 0);
                     }
 
@@ -1111,9 +1174,9 @@ impl Gpu {
         }
     }
 
-    fn draw_horizontal_line(&mut self, x1: u32, x2: u32, y: u32, fill: u16, transparent: bool) {
+    fn draw_horizontal_line(&mut self, x1: u32, x2: u32, y: u32, fill: u16, transparent: bool, clip: bool) {
         for x in x1..x2 {
-            if self.out_of_draw_area(&Point::from_components(x as i32, y as i32, 0)) {
+            if clip && self.out_of_draw_area(&Point::from_components(x as i32, y as i32, 0)) {
                 continue;
             }
             let address = point_to_address(x, y) as usize;
@@ -1174,9 +1237,9 @@ impl Gpu {
         }
     }
 
-    fn draw_solid_box(&mut self, x1: u32, y1: u32, x2: u32, y2: u32, fill: u16, transparent: bool) {
+    fn draw_solid_box(&mut self, x1: u32, y1: u32, x2: u32, y2: u32, fill: u16, transparent: bool, clip: bool) {
         for y in y1..y2 {
-            self.draw_horizontal_line(x1, x2, y, fill, transparent);
+            self.draw_horizontal_line(x1, x2, y, fill, transparent, clip);
         }
     }
 
@@ -1309,29 +1372,6 @@ impl Gpu {
     }
 
     fn draw_textured_triangle(&mut self, in_points: &[Point], transparent: bool, page_x: u32, page_y: u32, clut_x: u32, clut_y: u32) {
-        // let mut sp = points.to_vec();
-        // sp.sort_by_key(|p| p.y);
-
-        // if sp[1].y == sp[2].y {
-        //     self.draw_textured_flat_bottom_triangle(sp[0], sp[1], sp[2], transparent);
-        // } else if sp[0].y == sp[1].y {
-        //     self.draw_textured_flat_top_triangle(sp[0], sp[1], sp[2], transparent);
-        // } else {
-        //     let progress =
-        //         sp[0].x + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as i32;
-        //     let bound_x = progress * ((sp[2].x - sp[0].x) as i32);
-        //     let bound_point = Point {
-        //         x: bound_x,
-        //         y: sp[1].y,
-        //         color: 0,
-        //         tex_x: lerp_coords(sp[0].tex_x, sp[1].tex_x, sp[0].y, sp[1].y, progress),
-        //         tex_y: lerp_coords(sp[0].tex_y, sp[1].tex_y, sp[0].y, sp[1].y, progress),
-        //     };
-
-        //     self.draw_textured_flat_bottom_triangle(sp[0], bound_point, sp[1], transparent);
-        //     self.draw_textured_flat_top_triangle(sp[1], bound_point, sp[2], transparent);
-        // }
-
         fn edge_function(a: &Point, b: &Point, c: &Vector2<i32>) -> isize {
             (c.x as isize - a.x as isize) * (b.y as isize - a.y as isize)
                 - (c.y as isize - a.y as isize) * (b.x as isize - a.x as isize)
@@ -1404,14 +1444,13 @@ impl Gpu {
     }
 
     fn apply_texture_mask(&self, x: u32, y: u32) -> (u32, u32) {
-        let new_x = (x & !(self.tex_mask_x * 8)) | ((self.tex_offset_x & self.tex_mask_x) * 8);
-        let new_y = (y & !(self.tex_mask_y * 8)) | ((self.tex_offset_y & self.tex_mask_y) * 8);
-        (new_x, new_y)
+        (x, y)
+        // let new_x = (x & !(self.tex_mask_x * 8)) | ((self.tex_offset_x & self.tex_mask_x) * 8);
+        // let new_y = (y & !(self.tex_mask_y * 8)) | ((self.tex_offset_y & self.tex_mask_y) * 8);
+        // (new_x, new_y)
     }
 
-    fn get_texel(&self, x: i32, y: i32, page_x: u32, page_y: u32, clut_x: u32, clut_y: u32) -> u16 {
-        // //TODO inline variables. Just did this because I'm lazy
-       
+    fn get_texel(&self, x: i32, y: i32, page_x: u32, page_y: u32, clut_x: u32, clut_y: u32) -> u16 {       
         let size = self.texmode;
 
         let pixel_val = match size {
@@ -1459,7 +1498,7 @@ impl Gpu {
                     ) as usize,
                     524287,
                 )];
-                let (clut_index, _) = value.overflowing_shr(((x % 4) * 4) as u32);
+                let clut_index = (value >> (x % 4) * 4) & 0xF;
                 self.vram[min(
                     point_to_address(
                         (clut_x * 16 + (clut_index & 0xF) as u32) as u32,

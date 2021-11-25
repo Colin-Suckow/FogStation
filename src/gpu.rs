@@ -383,8 +383,8 @@ impl Gpu {
 
                         let clut_x = (self.gp0_buffer[2] >> 16) & 0x3F;
                         let clut_y = (self.gp0_buffer[2] >> 22) & 0x1FF;
-                        let page_x = (self.gp0_buffer[4] >> 16) & 0xF;
-                        let page_y = (self.gp0_buffer[4] >> 20) & 0x1;
+                        let page_x = (self.gp0_buffer[5] >> 16) & 0xF;
+                        let page_y = (self.gp0_buffer[5] >> 20) & 0x1;
 
                         self.blend_color = fill;
 
@@ -538,8 +538,8 @@ impl Gpu {
                        
                         let clut_x = (self.gp0_buffer[2] >> 16) & 0x3F;
                         let clut_y = (self.gp0_buffer[2] >> 22) & 0x1FF;
-                        let page_x = (self.gp0_buffer[4] >> 16) & 0xF;
-                        let page_y = (self.gp0_buffer[4] >> 20) & 0x1;
+                        let page_x = (self.gp0_buffer[5] >> 16) & 0xF;
+                        let page_y = (self.gp0_buffer[5] >> 20) & 0x1;
 
                         self.blend_color = fill;
 
@@ -1449,6 +1449,8 @@ impl Gpu {
         // let new_y = (y & !(self.tex_mask_y * 8)) | ((self.tex_offset_y & self.tex_mask_y) * 8);
         // (new_x, new_y)
     }
+
+
 
     fn get_texel(&self, x: i32, y: i32, page_x: u32, page_y: u32, clut_x: u32, clut_y: u32) -> u16 {       
         let size = self.texmode;

@@ -61,7 +61,7 @@ impl MainBus {
             0x1F800000..=0x1F8003FF => self.scratchpad.read_word(addr - 0x1F800000),
             0x1F801014 => 0x200931E1, //SPU_DELAY
             0x1F801060 => 0x00000B88, //RAM_SIZE
-            //0x1F801824 => 0, //MDEC_IN
+            0x1F801824 => 0, //MDEC_IN
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_word(addr - 0x1fc0_0000),
             _ => panic!(
                 "Invalid word read at address {:#X}! This address is not mapped to any device.",

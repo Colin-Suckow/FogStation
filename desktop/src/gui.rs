@@ -25,7 +25,8 @@ struct VaporstationApp {
     latest_resolution: Resolution,
     awaiting_gdb: bool,
     latest_pc: u32,
-    vram_texture: Option<TextureId>
+    vram_texture: Option<TextureId>,
+    show_vram_window: bool,
 }
 
 impl VaporstationApp {
@@ -42,6 +43,7 @@ impl VaporstationApp {
             awaiting_gdb: false,
             latest_pc: 0,
             vram_texture: None,
+            show_vram_window: false,
         }
     }
 }
@@ -93,9 +95,20 @@ impl epi::App for VaporstationApp {
                         frame.quit();
                     }
                 });
+                egui::menu::menu(ui, "Debug", |ui| {
+                    ui.checkbox(&mut self.show_vram_window, "VRAM Viewer");
+                });
                 ui.label(format!("{:.2} fps", self.times.average()));
             });
         });
+
+        if self.show_vram_window {
+            egui::Window::new("VRAM Viewer").show(ctx, |ui| {
+                if let Some(vram) = self.vram_texture {
+                    ui.image(vram, [VRAM_WIDTH as f32, VRAM_HEIGHT as f32]);
+                }
+            });
+        }
         
 
         egui::CentralPanel::default().show(ctx, |ui| {

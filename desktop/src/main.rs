@@ -1,5 +1,6 @@
 use byteorder::{ByteOrder, LittleEndian};
 use disc::*;
+use eframe::epi::RepaintSignal;
 use gdbstub::{DisconnectReason, GdbStub, GdbStubError};
 use getopts::Options;
 use psx_emu::controller::ButtonState;
@@ -9,6 +10,7 @@ use std::env;
 use std::fs;
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
+use std::sync::Arc;
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
@@ -20,7 +22,6 @@ use simple_logger::SimpleLogger;
 mod disc;
 mod gdb;
 mod gui;
-mod support;
 
 const DEFAULT_GDB_PORT: u16 = 4444;
 const DEFAULT_BIOS_PATH: &str = "SCPH1001.BIN";
@@ -41,6 +42,7 @@ struct EmuState {
     debugging: bool,
     last_frame_time: SystemTime,
     waiting_for_client: bool,
+    redraw_signal: Option<Arc<dyn RepaintSignal>>,
 }
 
 fn main() {
@@ -137,6 +139,7 @@ fn main() {
         debugging: matches.opt_present("g"),
         last_frame_time: SystemTime::now(),
         waiting_for_client: false,
+        redraw_signal: None,
     };
 
     let emu_thread = start_emu_thread(emu_state);
@@ -190,6 +193,7 @@ enum EmuMessage {
     UpdateControllers(ButtonState),
     Reset,
     StartFrame,
+    RequestDrawCallback(Arc<dyn RepaintSignal>),
 }
 
 enum ClientMessage {
@@ -275,6 +279,7 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
             }
             EmuMessage::Reset => state.emu.reset(),
             EmuMessage::StartFrame => state.waiting_for_client = false,
+            EmuMessage::RequestDrawCallback(signal) => state.redraw_signal = Some(signal),
         }
     }
 
@@ -311,7 +316,11 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
                 //The other side hung up, so lets end the emu thread
                 return Err(EmuThreadError::ClientDied);
             };
-            state.waiting_for_client = true; // Wait until next frame is ready
+            // Request redraw
+            if let Some(redraw_signal) = &state.redraw_signal {
+                redraw_signal.request_repaint();
+            }
+            //state.waiting_for_client = true; // Wait until next frame is ready
             state.last_frame_time = SystemTime::now();
         };
     } else {

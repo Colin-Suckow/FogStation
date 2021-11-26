@@ -1,14 +1,8 @@
-use eframe::{egui::{self, Direction, TextureId, pos2}, epi};
-use psx_emu::gpu::Resolution;
+use eframe::{egui::{self, Direction, Key, TextureId, pos2}, epi};
+use psx_emu::{controller::{ButtonState, ControllerType}, gpu::Resolution};
 
 use crate::{ClientMessage, ClientState, EmuMessage};
 
-// use std::{borrow::Cow, rc::Rc};
-// use glium::{Texture2d, backend::Facade, texture::{ClientFormat, RawImage2d}, uniforms::{MagnifySamplerFilter, MinifySamplerFilter, SamplerBehavior}};
-// use winit::event::VirtualKeyCode;
-// use crate::{ClientMessage, EmuMessage, ClientState};
-// use psx_emu::controller::{ButtonState, ControllerType};
-// use psx_emu::gpu::Resolution;
 
 const VRAM_WIDTH: usize = 1024;
 const VRAM_HEIGHT: usize = 512;
@@ -56,7 +50,7 @@ impl epi::App for VaporstationApp {
 
 
     fn update(&mut self, ctx: &eframe::egui::CtxRef, frame: &mut epi::Frame<'_>) {
-        
+        self.emu_handle.comm.tx.send(EmuMessage::UpdateControllers(get_button_state(ctx.input()))).unwrap();
         // Process emu messages until empty
         loop {
             match self.emu_handle.comm.rx.try_recv() {
@@ -284,32 +278,29 @@ impl epi::App for VaporstationApp {
 //     });
 // }
 
-// fn get_button_state(ui: &mut Ui) -> ButtonState {
-//     ButtonState {
-//         controller_type: ControllerType::DigitalPad,
-//         button_x: is_key_down(ui, VirtualKeyCode::K),
-//         button_square: is_key_down(ui, VirtualKeyCode::J),
-//         button_triangle: is_key_down(ui, VirtualKeyCode::I),
-//         button_circle: is_key_down(ui, VirtualKeyCode::L),
-//         button_up: is_key_down(ui, VirtualKeyCode::W),
-//         button_down: is_key_down(ui, VirtualKeyCode::S),
-//         button_left: is_key_down(ui, VirtualKeyCode::A),
-//         button_right: is_key_down(ui, VirtualKeyCode::D),
-//         button_l1: false,
-//         button_l2: false,
-//         button_l3: false,
-//         button_r1: false,
-//         button_r2: false,
-//         button_r3: false,
-//         button_select: false,
-//         button_start: is_key_down(ui, VirtualKeyCode::Apostrophe),
+fn get_button_state(input_state: &egui::InputState) -> ButtonState {
+    ButtonState {
+        controller_type: ControllerType::DigitalPad,
+        button_x: input_state.key_down(Key::K),
+        button_square: input_state.key_down( Key::J),
+        button_triangle: input_state.key_down( Key::I),
+        button_circle: input_state.key_down( Key::L),
+        button_up: input_state.key_down( Key::W),
+        button_down: input_state.key_down( Key::S),
+        button_left: input_state.key_down( Key::A),
+        button_right: input_state.key_down( Key::D),
+        button_l1: false,
+        button_l2: false,
+        button_l3: false,
+        button_r1: false,
+        button_r2: false,
+        button_r3: false,
+        button_select: false,
+        button_start: input_state.key_down( Key::Enter),
 
-//     }
-// }
+    }
+}
 
-// fn is_key_down(ui: &mut Ui, keycode: VirtualKeyCode) -> bool {
-//     ui.io().keys_down[keycode as usize]
-// }
 
 /// Creates eframe texture from 16 bit, psx format, framebuffer
 fn create_texture_from_buffer(

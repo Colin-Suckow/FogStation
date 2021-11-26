@@ -1,4 +1,4 @@
-use eframe::{egui::{self, Direction, Key, TextureId, pos2}, epi};
+use eframe::{egui::{self, Direction, Key, Layout, TextureId, pos2}, epi};
 use psx_emu::{controller::{ButtonState, ControllerType}, gpu::Resolution};
 
 use crate::{ClientMessage, ClientState, EmuMessage};
@@ -96,7 +96,10 @@ impl epi::App for VaporstationApp {
                 egui::menu::menu(ui, "Debug", |ui| {
                     ui.checkbox(&mut self.show_vram_window, "VRAM Viewer");
                 });
-                ui.label(format!("{:.2} fps", 1000.0 / self.times.average()));
+
+                ui.with_layout(Layout::right_to_left(), |ui| {
+                    ui.label(format!("{:.2} fps", 1000.0 / self.times.average()));
+                });
             });
         });
 

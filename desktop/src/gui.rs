@@ -56,6 +56,10 @@ impl epi::App for VaporstationApp {
             match self.emu_handle.comm.rx.try_recv() {
                 Ok(msg) => match msg {
                     ClientMessage::FrameReady(vram_frame, frame_time) => {
+                        // Free the old texture if it exists
+                        if let Some(vram_texture) = self.vram_texture {
+                            frame.tex_allocator().free(vram_texture);
+                        }
                         self.vram_texture = Some(create_texture_from_buffer(frame, &vram_frame, VRAM_WIDTH, VRAM_HEIGHT));
                         self.times.push(frame_time as usize);
                     }
@@ -92,7 +96,7 @@ impl epi::App for VaporstationApp {
                 egui::menu::menu(ui, "Debug", |ui| {
                     ui.checkbox(&mut self.show_vram_window, "VRAM Viewer");
                 });
-                ui.label(format!("{:.2} fps", self.times.average()));
+                ui.label(format!("{:.2} fps", 1000.0 / self.times.average()));
             });
         });
 

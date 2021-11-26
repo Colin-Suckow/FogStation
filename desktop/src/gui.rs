@@ -1,7 +1,4 @@
-use eframe::{
-    egui::{self, TextureId},
-    epi,
-};
+use eframe::{egui::{self, Direction, TextureId, pos2}, epi};
 use psx_emu::gpu::Resolution;
 
 use crate::{ClientMessage, ClientState, EmuMessage};
@@ -13,6 +10,9 @@ use crate::{ClientMessage, ClientState, EmuMessage};
 // use psx_emu::controller::{ButtonState, ControllerType};
 // use psx_emu::gpu::Resolution;
 
+const VRAM_WIDTH: usize = 1024;
+const VRAM_HEIGHT: usize = 512;
+
 pub(crate) fn run_gui(state: ClientState) {
     let app = VaporstationApp::new(state);
     let native_options = eframe::NativeOptions::default();
@@ -21,11 +21,11 @@ pub(crate) fn run_gui(state: ClientState) {
 
 struct VaporstationApp {
     emu_handle: ClientState,
-    latest_frame: Vec<u16>,
     times: AverageList,
     latest_resolution: Resolution,
     awaiting_gdb: bool,
     latest_pc: u32,
+    vram_texture: Option<TextureId>
 }
 
 impl VaporstationApp {
@@ -37,11 +37,11 @@ impl VaporstationApp {
 
         Self {
             emu_handle: state,
-            latest_frame: vec![0; (default_resolution.width * default_resolution.height) as usize],
             times: AverageList::new(),
             latest_resolution: default_resolution,
             awaiting_gdb: false,
             latest_pc: 0,
+            vram_texture: None,
         }
     }
 }
@@ -60,7 +60,7 @@ impl epi::App for VaporstationApp {
             match self.emu_handle.comm.rx.try_recv() {
                 Ok(msg) => match msg {
                     ClientMessage::FrameReady(vram_frame, frame_time) => {
-                        self.latest_frame = vram_frame;
+                        self.vram_texture = Some(create_texture_from_buffer(frame, &vram_frame, VRAM_WIDTH, VRAM_HEIGHT));
                         self.times.push(frame_time as usize);
                     }
                     ClientMessage::ResolutionChanged(res) => self.latest_resolution = res,
@@ -93,15 +93,25 @@ impl epi::App for VaporstationApp {
                         frame.quit();
                     }
                 });
-                ui.label(format!("{} fps", self.times.average()));
+                ui.label(format!("{:.2} fps", self.times.average()));
             });
         });
+        
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            let width = 1024;
-            let height = 512;
-            let viewport  = create_texture_from_buffer(frame, &self.latest_frame, width, height);
-            ui.image(viewport, [width as f32, height as f32]);
+            if let Some(vram) = self.vram_texture {
+                ui.with_layout(egui::Layout::centered_and_justified(Direction::TopDown), |ui| {
+                    let width = self.latest_resolution.width as usize;
+                    let height = self.latest_resolution.height as usize;
+                    let ratio = width as f32 / height as f32;
+                    let scaled_height = ui.max_rect().height();
+                    let scaled_width = scaled_height * ratio;
+                    let viewport_rect = egui::Rect::from_min_max(pos2(0.0,0.0), pos2((width - 1) as f32 / VRAM_WIDTH as f32, (height - 1) as f32 / VRAM_HEIGHT as f32));
+                    let image = egui::Image::new(vram, [scaled_width, scaled_height]).uv(viewport_rect);
+                    ui.add(image);
+                });
+                
+            }
             
         });
     }

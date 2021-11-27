@@ -117,9 +117,12 @@ impl epi::App for VaporstationApp {
                 ui.with_layout(egui::Layout::centered_and_justified(Direction::TopDown), |ui| {
                     let width = self.latest_resolution.width as usize;
                     let height = self.latest_resolution.height as usize;
-                    let ratio = width as f32 / height as f32;
-                    let scaled_height = ui.max_rect().height();
-                    let scaled_width = scaled_height * ratio;
+                    let pane_size = ui.max_rect();
+                    let (scaled_height, scaled_width) = if pane_size.width() > pane_size.height() * 1.3333 {
+                        (pane_size.height(), pane_size.height() * 1.3333)
+                    } else {
+                        (pane_size.width() * 0.75, pane_size.width())
+                    };
                     let viewport_rect = egui::Rect::from_min_max(pos2(0.0,0.0), pos2((width - 1) as f32 / VRAM_WIDTH as f32, (height - 1) as f32 / VRAM_HEIGHT as f32));
                     let image = egui::Image::new(vram, [scaled_width, scaled_height]).uv(viewport_rect);
                     ui.add(image);

@@ -114,6 +114,10 @@ impl epi::App for VaporstationApp {
                     if ui.button(halt_button_text).clicked() {
                         self.set_halt(!self.halted());
                     };
+
+                    if ui.checkbox(&mut self.emu_handle.frame_limited, "Frame Limiter").clicked() {
+                        self.emu_handle.comm.tx.send(EmuMessage::SetFrameLimiter(self.emu_handle.frame_limited)).unwrap();
+                    };
                 });
                 egui::menu::menu(ui, "Debug", |ui| {
                     ui.checkbox(&mut self.show_vram_window, "VRAM Viewer");

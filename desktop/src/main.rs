@@ -26,12 +26,14 @@ mod gui;
 const DEFAULT_GDB_PORT: u16 = 4444;
 const DEFAULT_BIOS_PATH: &str = "SCPH1001.BIN";
 const START_HALTED: bool = false;
+const START_FRAME_LIMITED: bool = true;
 
 #[allow(dead_code)]
 struct ClientState {
     comm: ClientComms,
     emu_thread: JoinHandle<()>,
     halted: bool,
+    frame_limited: bool,
 }
 
 struct EmuState {
@@ -43,6 +45,7 @@ struct EmuState {
     last_frame_time: SystemTime,
     waiting_for_client: bool,
     redraw_signal: Option<Arc<dyn RepaintSignal>>,
+    frame_limited: bool,
 }
 
 fn main() {
@@ -140,6 +143,7 @@ fn main() {
         last_frame_time: SystemTime::now(),
         waiting_for_client: false,
         redraw_signal: None,
+        frame_limited: START_FRAME_LIMITED,
     };
 
     let emu_thread = start_emu_thread(emu_state);
@@ -148,6 +152,7 @@ fn main() {
         emu_thread,
         comm: client_comm,
         halted: START_HALTED,
+        frame_limited: START_FRAME_LIMITED,
     };
 
     
@@ -163,7 +168,6 @@ fn run_headless(state: ClientState) {
     state.comm.tx.send(EmuMessage::Continue).unwrap();
     loop {
         match state.comm.rx.try_recv() {
-            Ok(ClientMessage::FrameReady(_, _)) => {state.comm.tx.send(EmuMessage::StartFrame).unwrap();}, // Drop the frame, but tell the emu to keep going
             _ => ()
         };
     }
@@ -194,6 +198,7 @@ enum EmuMessage {
     Reset,
     StartFrame,
     RequestDrawCallback(Arc<dyn RepaintSignal>),
+    SetFrameLimiter(bool),
 }
 
 enum ClientMessage {
@@ -265,7 +270,7 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
         match msg {
             EmuMessage::Halt => {
                 state.halted = true;
-                state.comm.tx.send(ClientMessage::LatestPC(state.emu.pc()));
+                state.comm.tx.send(ClientMessage::LatestPC(state.emu.pc())).unwrap();
             },
             EmuMessage::Continue => {
                 state.halted = false;
@@ -281,6 +286,7 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
             EmuMessage::Reset => state.emu.reset(),
             EmuMessage::StartFrame => state.waiting_for_client = false,
             EmuMessage::RequestDrawCallback(signal) => state.redraw_signal = Some(signal),
+            EmuMessage::SetFrameLimiter(val) => state.frame_limited = val,
         }
     }
 
@@ -301,12 +307,20 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
             };
 
             //Calculate frame time delta
-            let frame_time = SystemTime::now()
+            let mut frame_time = SystemTime::now()
                 .duration_since(state.last_frame_time)
                 .expect("Error getting frame duration")
                 .as_millis();
     
             let frame = state.emu.get_vram().clone();
+
+            // Wait for frame limiter time to pass
+            while state.frame_limited && frame_time < 17 {
+                frame_time = SystemTime::now()
+                .duration_since(state.last_frame_time)
+                .expect("Error getting frame duration")
+                .as_millis();
+            }
     
             // Send the new frame over to the gui thread
             if let Err(_) = state
@@ -321,11 +335,14 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
             if let Some(redraw_signal) = &state.redraw_signal {
                 redraw_signal.request_repaint();
             }
+
             //state.waiting_for_client = true; // Wait until next frame is ready
             state.last_frame_time = SystemTime::now();
         };
     } else {
         //thread::sleep(Duration::from_millis(1));
+
+
     }
 
    

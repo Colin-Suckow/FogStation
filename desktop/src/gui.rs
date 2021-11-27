@@ -40,6 +40,19 @@ impl VaporstationApp {
             show_vram_window: false,
         }
     }
+
+    fn set_halt(&mut self, should_halt: bool) {
+        self.emu_handle.halted = should_halt;
+        if self.emu_handle.halted {
+            self.emu_handle.comm.tx.send(EmuMessage::Halt).unwrap();
+        } else {
+            self.emu_handle.comm.tx.send(EmuMessage::Continue).unwrap();
+        }
+    }
+
+    fn halted(&self) -> bool {
+        self.emu_handle.halted
+    }
 }
 
 impl epi::App for VaporstationApp {
@@ -93,12 +106,22 @@ impl epi::App for VaporstationApp {
                         frame.quit();
                     }
                 });
+                egui::menu::menu(ui, "Control", |ui| {
+                    let halt_button_text = if self.halted() {"Resume"} else {"Halt"};
+                    if ui.button(halt_button_text).clicked() {
+                        self.set_halt(!self.halted());
+                    };
+                });
                 egui::menu::menu(ui, "Debug", |ui| {
                     ui.checkbox(&mut self.show_vram_window, "VRAM Viewer");
                 });
 
                 ui.with_layout(Layout::right_to_left(), |ui| {
-                    ui.label(format!("{:.2} fps", 1000.0 / self.times.average()));
+                    if self.emu_handle.halted {
+                        ui.label("HALTED");
+                    } else {
+                        ui.label(format!("{:.2} fps", 1000.0 / self.times.average()));
+                    }
                 });
             });
         });

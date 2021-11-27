@@ -176,7 +176,10 @@ pub struct Gpu {
     tex_offset_x: u32,
     tex_offset_y: u32,
 
-    current_transfer: Option<VramTransfer>
+    current_transfer: Option<VramTransfer>,
+
+    display_origin_x: usize,
+    display_origin_y: usize,
 }
 
 impl Gpu {
@@ -223,6 +226,9 @@ impl Gpu {
             tex_offset_y: 0,
 
             current_transfer: None,
+
+            display_origin_x: 0,
+            display_origin_y: 0,
         }
     }
 
@@ -1005,6 +1011,13 @@ impl Gpu {
                 // gpu dma direction. I don't think this is needed
             }
 
+            0x5 => {
+                let x = command.get_bits(0..=9);
+                let y = command.get_bits(10..=18);
+                self.display_origin_x = x as usize;
+                self.display_origin_y = y as usize;
+            }
+
             0x6 => {
                 //Horizontal Display Range
                 //Ignore this one for now
@@ -1012,8 +1025,8 @@ impl Gpu {
 
             0x7 => {
                 //Vertical display range
-                self.ntsc_y1 = command.get_bits(0..9);
-                self.ntsc_y2 = command.get_bits(10..19);
+                self.ntsc_y1 = command.get_bits(0..=9);
+                self.ntsc_y2 = command.get_bits(10..=19);
             }
 
             0x8 => {
@@ -1081,6 +1094,10 @@ impl Gpu {
 
     pub fn is_hblank(&self) -> bool {
         self.pixel_count % CYCLES_PER_SCANLINE > self.display_h_res
+    }
+
+    pub fn display_origin(&self) -> (usize, usize) {
+        (self.display_origin_x, self.display_origin_y)
     }
 
     pub fn resolution(&self) -> Resolution {

@@ -46,6 +46,7 @@ struct EmuState {
     waiting_for_client: bool,
     redraw_signal: Option<Arc<dyn RepaintSignal>>,
     frame_limited: bool,
+    current_origin: (usize, usize),
 }
 
 fn main() {
@@ -144,6 +145,7 @@ fn main() {
         waiting_for_client: false,
         redraw_signal: None,
         frame_limited: START_FRAME_LIMITED,
+        current_origin: (0, 0),
     };
 
     let emu_thread = start_emu_thread(emu_state);
@@ -209,6 +211,7 @@ enum ClientMessage {
     LatestPC(u32),
     Halted,
     Continuing,
+    DisplayOriginChanged((usize, usize)),
 }
 
 struct EmuComms {
@@ -305,6 +308,11 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
                     state.current_resolution.clone(),
                 )).unwrap();
             };
+
+            if state.emu.display_origin() != state.current_origin {
+                state.current_origin = state.emu.display_origin();
+                state.comm.tx.send(ClientMessage::DisplayOriginChanged(state.current_origin)).unwrap();
+            }
 
             //Calculate frame time delta
             let mut frame_time = SystemTime::now()

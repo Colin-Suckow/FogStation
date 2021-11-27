@@ -199,4 +199,8 @@ impl PSXEmu {
     pub fn pc(&self) -> u32 {
         self.r3000.pc
     }
+
+    pub fn display_origin(&self) -> (usize, usize) {
+        self.r3000.main_bus.gpu.display_origin()
+    }
 }

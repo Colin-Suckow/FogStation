@@ -22,6 +22,7 @@ struct VaporstationApp {
     vram_texture: Option<TextureId>,
     show_vram_window: bool,
     gdb_connected: bool,
+    display_origin: (usize, usize),
 }
 
 impl VaporstationApp {
@@ -40,6 +41,7 @@ impl VaporstationApp {
             vram_texture: None,
             show_vram_window: false,
             gdb_connected: false,
+            display_origin: (0,0),
         }
     }
 
@@ -92,6 +94,7 @@ impl epi::App for VaporstationApp {
                     }
                     ClientMessage::Halted => self.emu_handle.halted = true,
                     ClientMessage::Continuing => self.emu_handle.halted = false,
+                    ClientMessage::DisplayOriginChanged(new_origin) => self.display_origin = new_origin,
                 },
                 Err(e) => {
                     match e {
@@ -162,7 +165,9 @@ impl epi::App for VaporstationApp {
                     } else {
                         (pane_size.width() * 0.75, pane_size.width())
                     };
-                    let viewport_rect = egui::Rect::from_min_max(pos2(0.0,0.0), pos2((width - 1) as f32 / VRAM_WIDTH as f32, (height - 1) as f32 / VRAM_HEIGHT as f32));
+                    let origin_x = self.display_origin.0;
+                    let origin_y = self.display_origin.1;
+                    let viewport_rect = egui::Rect::from_min_max(pos2(origin_x as f32 / VRAM_WIDTH as f32, origin_y as f32 / VRAM_HEIGHT as f32), pos2((origin_x  + width - 1) as f32 / VRAM_WIDTH as f32,(origin_y + height - 1) as f32 / VRAM_HEIGHT as f32));
                     let image = egui::Image::new(vram, [scaled_width, scaled_height]).uv(viewport_rect);
                     ui.add(image);
                 });

@@ -202,6 +202,8 @@ enum ClientMessage {
     AwaitingGDBClient,
     GDBClientConnected,
     LatestPC(u32),
+    Halted,
+    Continuing,
 }
 
 struct EmuComms {
@@ -223,7 +225,6 @@ fn start_emu_thread(
             state.comm.tx.send(ClientMessage::AwaitingGDBClient).unwrap();
             let gdb_conn = wait_for_gdb_connection(DEFAULT_GDB_PORT).unwrap();
             state.comm.tx.send(ClientMessage::GDBClientConnected).unwrap();
-            state.halted = false;
             Some(GdbStub::<EmuState, TcpStream>::new(gdb_conn))
         } else {
             None

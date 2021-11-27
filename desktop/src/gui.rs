@@ -21,6 +21,7 @@ struct VaporstationApp {
     latest_pc: u32,
     vram_texture: Option<TextureId>,
     show_vram_window: bool,
+    gdb_connected: bool,
 }
 
 impl VaporstationApp {
@@ -38,6 +39,7 @@ impl VaporstationApp {
             latest_pc: 0,
             vram_texture: None,
             show_vram_window: false,
+            gdb_connected: false,
         }
     }
 
@@ -83,11 +85,13 @@ impl epi::App for VaporstationApp {
                     }
                     ClientMessage::GDBClientConnected => {
                         self.awaiting_gdb = false;
-                        self.emu_handle.halted = false;
+                        self.gdb_connected = true;
                     }
                     ClientMessage::LatestPC(pc) => {
                         self.latest_pc = pc;
                     }
+                    ClientMessage::Halted => self.emu_handle.halted = true,
+                    ClientMessage::Continuing => self.emu_handle.halted = false,
                 },
                 Err(e) => {
                     match e {
@@ -99,7 +103,6 @@ impl epi::App for VaporstationApp {
         }
 
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            // The top panel is often a good place for a menu bar:
             egui::menu::bar(ui, |ui| {
                 egui::menu::menu(ui, "File", |ui| {
                     if ui.button("Quit").clicked() {
@@ -122,6 +125,15 @@ impl epi::App for VaporstationApp {
                     } else {
                         ui.label(format!("{:.2} fps", 1000.0 / self.times.average()));
                     }
+
+                    if self.awaiting_gdb {
+                        ui.label("Awaiting GDB connection...");
+                    }
+
+                    if self.gdb_connected {
+                        ui.label("GDB Connected");
+                    }
+
                 });
             });
         });

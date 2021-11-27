@@ -185,10 +185,10 @@ impl MainBus {
             0x1F80_1040..=0x1F80_104E => self.controllers.read_byte(addr),
             0x1F800000..=0x1F8003FF => self.scratchpad.read_byte(addr - 0x1F800000),
             _ => {
-                panic!(
-                    "Invalid byte read at address {:#X}! This address is not mapped to any device.",
-                    addr
-                );
+                // panic!(
+                //     "Invalid byte read at address {:#X}! This address is not mapped to any device.",
+                //     addr
+                // );
                 0
             }
         };

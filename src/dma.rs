@@ -348,9 +348,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
 
 
                 trace!("Words {} base_addr {:#X}", words, base_addr);
-                if base_addr <= 0x121CA8 && base_addr + (words * 4) as usize >= 0x121CA8 {
-                    println!("CD DMA thing touched it");
-                }
+                
                 for i in 0..(words * 4) {
                     cpu.main_bus.memory.data[(base_addr + i as usize)] = data[i as usize];
                 }

@@ -713,13 +713,16 @@ impl Gpu {
                         //Draw variable size
                         if command.get_bit(26) {
                             trace!("GPU: Tex box");
-                            let tl_point = Point::new_textured_point(
+                            let mut tl_point = Point::new_textured_point(
                                 self.gp0_buffer[1],
                                 ((self.gp0_buffer[2] >> 8) & 0xFF) as i32,
                                 (self.gp0_buffer[2] & 0xFF) as i32,
                             );
 
                             let size = Point::from_word(self.gp0_buffer[3], 0);
+
+                            tl_point.x += self.draw_offset.x;
+                            tl_point.y += self.draw_offset.y;
 
                             self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
                             self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;

@@ -1,5 +1,5 @@
 use gdbstub::{arch, target::{Target, TargetResult, ext::{base::{ResumeAction, singlethread::{SingleThreadOps, StopReason}}, breakpoints::{HwBreakpoint, HwWatchpoint, SwBreakpoint}}}};
-use crate::{EmuState, emu_loop_step};
+use crate::{ClientMessage, EmuState, emu_loop_step};
 
 impl Target for EmuState {
     type Arch = arch::mips::Mips;
@@ -51,10 +51,10 @@ impl SingleThreadOps for EmuState {
             ResumeAction::Continue => {
                 let mut cycles = 0;
                 self.emu.clear_halt();
-                println!("Continuing!");
+                self.comm.tx.send(ClientMessage::Continuing).unwrap();
                 loop {
                     if self.emu.halt_requested() {
-                        println!("Halt hit!");
+                        self.comm.tx.send(ClientMessage::Halted).unwrap();
                         return Ok(StopReason::SwBreak);
                     }
                     if let Err(e) = emu_loop_step(self) {
@@ -62,7 +62,7 @@ impl SingleThreadOps for EmuState {
                     };
                     cycles += 1;
                     if cycles % 1024 == 0 && check_gdb_interrupt() {
-                        println!("GDB Interrupt hit!");
+                        self.comm.tx.send(ClientMessage::Halted).unwrap();
                         return Ok(StopReason::GdbInterrupt);
                     }
                 }

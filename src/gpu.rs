@@ -902,10 +902,11 @@ impl Gpu {
 
 
                 if width == 0 || height == 0 {
-                    panic!("GPU: VRAM->CPU transfer: 0 width or height! w {} h {}", width, height);
+                    //panic!("GPU: VRAM->CPU transfer: 0 width or height! w {} h {}", width, height);
+                } else {
+                    trace!("GPU: VRAM to CPU");
+                    self.current_transfer = Some(VramTransfer::new(base_x, base_y, width, height));
                 }
-                trace!("GPU: VRAM to CPU");
-                self.current_transfer = Some(VramTransfer::new(base_x, base_y, width, height));
             }
             0x7 => {
                 //Env commands

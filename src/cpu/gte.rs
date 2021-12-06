@@ -586,6 +586,7 @@ impl GTE {
             0 => (self.RT11, self.RT12, self.RT13, self.RT21, self.RT22, self.RT23, self.RT31, self.RT32, self.RT33),
             1 => (self.L11, self.L12, self.L13, self.L21, self.L22, self.L23, self.L31, self.L32, self.L33),
             2 => (self.LR1, self.LR2, self.LR3, self.LG1, self.LG2, self.LG3, self.LB1, self.LB2, self.LB3),
+            3 => (-(((self.RGBC.r as u16) << 4 ) as i16), ((self.RGBC.r as u16) << 4 ) as i16, self.IR0, self.RT13, self.RT13, self.RT13, self.RT22, self.RT22, self.RT22),
             _ => panic!("Unimplemented/Unknown MVMVA matrix!")
         };
 
@@ -619,19 +620,19 @@ impl GTE {
         self.truncate_write_ir2(self.MAC2, lm);
         self.truncate_write_ir3(self.MAC3, lm);
 
-        // tx=2 is bugged on original hardware, so we must redo some calculations to match these bugs
+        // tx=2 is bugged on original hardware, so we have to do a weird version of the calculation
         if tx == 2 {
-            let x = ((tvx as i64) << 12) + (m13 as i64 * mvz as i64);
-            let y = ((tvy as i64) << 12) + (m23 as i64 * mvz as i64);
-            let z = ((tvz as i64) << 12) + (m33 as i64 * mvz as i64);
+            // let x = ((tvx as i64) << 12) + (m13 as i64 * mvz as i64);
+            // let y = ((tvy as i64) << 12) + (m23 as i64 * mvz as i64);
+            // let z = ((tvz as i64) << 12) + (m33 as i64 * mvz as i64);
 
-            self.truncate_write_mac1(x, shift);
-            self.truncate_write_mac2(y, shift);
-            self.truncate_write_mac3(z, shift);
+            // self.truncate_write_mac1(x, shift);
+            // self.truncate_write_mac2(y, shift);
+            // self.truncate_write_mac3(z, shift);
 
-            self.truncate_write_ir1(self.MAC1, lm);
-            self.truncate_write_ir2(self.MAC2, lm);
-            self.truncate_write_ir3(self.MAC3, lm);
+            // self.truncate_write_ir1(self.MAC1, lm);
+            // self.truncate_write_ir2(self.MAC2, lm);
+            // self.truncate_write_ir3(self.MAC3, lm);
 
             let x = (m12 as i64*mvy as i64) + (m13 as i64 * mvz as i64);
             let y = (m22 as i64*mvy as i64) + (m23 as i64 * mvz as i64);

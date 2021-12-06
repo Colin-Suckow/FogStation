@@ -4,7 +4,6 @@ use bit_field::BitField;
 use log::warn;
 use nalgebra::clamp;
 
-
 #[derive(Clone, Copy)]
 struct Color {
     pub r: u8,
@@ -14,7 +13,6 @@ struct Color {
 }
 
 impl Color {
-
     fn new(r: u8, g: u8, b: u8, c: u8) -> Self {
         Self {
             r: r,
@@ -295,8 +293,11 @@ impl GTE {
             28 => self.DQB = val as i32,
             29 => self.ZSF3 = val as i16,
             30 => self.ZSF4 = val as i16,
-            31 => self.FLAG = *self.FLAG.set_bits(12..=30, (val >> 12) & 0x7FFFF ),
-            _ => panic!("Tried to write unknown GTE control register {} ({} RAW)", CTRL_REG_NAME[reg], reg)
+            31 => self.FLAG = *self.FLAG.set_bits(12..=30, (val >> 12) & 0x7FFFF),
+            _ => panic!(
+                "Tried to write unknown GTE control register {} ({} RAW)",
+                CTRL_REG_NAME[reg], reg
+            ),
         }
     }
 
@@ -325,7 +326,7 @@ impl GTE {
             5 => self.VZ2 = val as i16,
             6 => self.RGBC.set_word(val),
             7 => self.OTZ = val as u16,
-            
+
             8 => self.IR0 = val as i16,
             9 => self.IR1 = val as i16,
             10 => self.IR2 = val as i16,
@@ -371,10 +372,12 @@ impl GTE {
 
             29 => (), // Can't write to ORGB
 
-
             30 => self.LZCS = val as i32,
             31 => (), //Can't write lzcr
-            _ => panic!("Tried to write unknown GTE data register {} ({} RAW)", DATA_REG_NAME[reg], reg)
+            _ => panic!(
+                "Tried to write unknown GTE data register {} ({} RAW)",
+                DATA_REG_NAME[reg], reg
+            ),
         }
     }
 
@@ -387,18 +390,14 @@ impl GTE {
             4 => ((self.VY2 as u32) << 16 | (self.VX2 as u32 & 0xFFFF)),
             5 => self.VZ2 as u32,
             6 => self.RGBC.word(),
-            
+
             9 => self.IR1 as u32,
             10 => self.IR2 as u32,
             11 => self.IR3 as u32,
 
-            
-           
             7 => self.OTZ as u32,
             8 => self.IR0 as u32,
 
-            
-            
             12 => (self.SY0 as u32) << 16 | self.SX0 as u32 & 0xFFFF,
             13 => (self.SY1 as u32) << 16 | self.SX1 as u32 & 0xFFFF,
             14 => (self.SY2 as u32) << 16 | self.SX2 as u32 & 0xFFFF,
@@ -411,7 +410,7 @@ impl GTE {
             20 => self.RGB0.word(),
             21 => self.RGB1.word(),
             22 => self.RGB2.word(),
-            
+
             23 => self.RES1,
             24 => self.MAC0 as u32,
             25 => self.MAC1 as u32,
@@ -420,7 +419,10 @@ impl GTE {
             28..=29 => self.orgb(),
             30 => self.LZCS as u32,
             31 => self.lzcr(),
-            _ => panic!("Tried to read unknown GTE data register {} ({} RAW)", DATA_REG_NAME[reg], reg)
+            _ => panic!(
+                "Tried to read unknown GTE data register {} ({} RAW)",
+                DATA_REG_NAME[reg], reg
+            ),
         };
         //println!("Reading data reg {} value {:#X}", data_reg_name[reg], val);
         val
@@ -447,14 +449,11 @@ impl GTE {
             13 => self.RBK as u32,
             14 => self.GBK as u32,
             15 => self.BBK as u32,
-            
+
             16 => (self.LR1 as u32) & 0xFFFF | ((self.LR2 as u32) << 16),
             17 => (self.LR3 as u32) & 0xFFFF | ((self.LG1 as u32) << 16),
             18 => (self.LG2 as u32) & 0xFFFF | ((self.LG3 as u32) << 16),
             19 => (self.LB1 as u32) & 0xFFFF | ((self.LB2 as u32) << 16),
-
-          
-
 
             20 => self.LB3 as i32 as u32,
             21 => self.RFC as u32,
@@ -467,13 +466,15 @@ impl GTE {
             28 => self.DQB as u32,
             29 => self.ZSF3 as u32,
             30 => self.ZSF4 as u32,
-            31 => 
-            {
+            31 => {
                 // Handle bit 31 error flag
                 let error = (self.FLAG & 0x7F87E000) != 0;
                 self.FLAG | ((error as u32) << 31)
-            },
-            _ => panic!("Tried to read unknown GTE control register {} ({} RAW)", CTRL_REG_NAME[reg], reg)
+            }
+            _ => panic!(
+                "Tried to read unknown GTE control register {} ({} RAW)",
+                CTRL_REG_NAME[reg], reg
+            ),
         };
         //println!("Reading control reg {} value {:#X}", ctrl_reg_name[reg], val);
         val
@@ -546,19 +547,16 @@ impl GTE {
         let red = self.IR1 / 0x80;
         let green = self.IR2 / 0x80;
         let blue = self.IR3 / 0x80;
-        
-        (blue.clamp(0, 0x1F) << 10) as u32 | (green.clamp(0, 0x1F) << 5) as u32 | red.clamp(0, 0x1F) as u32
 
+        (blue.clamp(0, 0x1F) << 10) as u32
+            | (green.clamp(0, 0x1F) << 5) as u32
+            | red.clamp(0, 0x1F) as u32
     }
-
-    
 }
 
 // Internal GTE commands
 impl GTE {
-
     fn op(&mut self, command: u32) {
-
         let shift = (command.get_bit(19) as usize) * 12;
         let lm = command.get_bit(10);
 
@@ -573,21 +571,38 @@ impl GTE {
         self.truncate_write_ir1(self.MAC1, lm);
         self.truncate_write_ir2(self.MAC2, lm);
         self.truncate_write_ir3(self.MAC3, lm);
-
     }
 
     fn mvmva(&mut self, command: u32) {
-
         let mx = command.get_bits(17..=18);
         let vx = command.get_bits(15..=16);
         let tx = command.get_bits(13..=14);
 
         let (m11, m12, m13, m21, m22, m23, m31, m32, m33) = match mx {
-            0 => (self.RT11, self.RT12, self.RT13, self.RT21, self.RT22, self.RT23, self.RT31, self.RT32, self.RT33),
-            1 => (self.L11, self.L12, self.L13, self.L21, self.L22, self.L23, self.L31, self.L32, self.L33),
-            2 => (self.LR1, self.LR2, self.LR3, self.LG1, self.LG2, self.LG3, self.LB1, self.LB2, self.LB3),
-            3 => (-(((self.RGBC.r as u16) << 4 ) as i16), ((self.RGBC.r as u16) << 4 ) as i16, self.IR0, self.RT13, self.RT13, self.RT13, self.RT22, self.RT22, self.RT22),
-            _ => panic!("Unimplemented/Unknown MVMVA matrix!")
+            0 => (
+                self.RT11, self.RT12, self.RT13, self.RT21, self.RT22, self.RT23, self.RT31,
+                self.RT32, self.RT33,
+            ),
+            1 => (
+                self.L11, self.L12, self.L13, self.L21, self.L22, self.L23, self.L31, self.L32,
+                self.L33,
+            ),
+            2 => (
+                self.LR1, self.LR2, self.LR3, self.LG1, self.LG2, self.LG3, self.LB1, self.LB2,
+                self.LB3,
+            ),
+            3 => (
+                -(((self.RGBC.r as u16) << 4) as i16),
+                ((self.RGBC.r as u16) << 4) as i16,
+                self.IR0,
+                self.RT13,
+                self.RT13,
+                self.RT13,
+                self.RT22,
+                self.RT22,
+                self.RT22,
+            ),
+            _ => panic!("Unimplemented/Unknown MVMVA matrix!"),
         };
 
         let (mvx, mvy, mvz) = match vx {
@@ -595,48 +610,64 @@ impl GTE {
             1 => (self.VX1, self.VY1, self.VZ1),
             2 => (self.VX2, self.VY2, self.VZ2),
             3 => (self.IR1, self.IR2, self.IR3),
-            _ => panic!("Unimplemented/Unknown MVMVA Multiply Vector!")
+            _ => panic!("Unimplemented/Unknown MVMVA Multiply Vector!"),
         };
 
         let (tvx, tvy, tvz) = match tx {
             0 => (self.TRX, self.TRY, self.TRZ),
             1 => (self.RBK, self.GBK, self.BBK),
             2 => (self.RFC, self.GFC, self.BFC),
-            3 => (0,0,0),
-            n => panic!("Unimplemented/Unknown MVMVA translation vector {}!", n)
+            3 => (0, 0, 0),
+            n => panic!("Unimplemented/Unknown MVMVA translation vector {}!", n),
         };
         let shift = (command.get_bit(19) as usize) * 12;
         let lm = command.get_bit(10);
 
-        let x = ((tvx as i64) << 12) + (m11 as i64*mvx as i64) + (m12 as i64*mvy as i64) + (m13 as i64 * mvz as i64);
-        let y = ((tvy as i64) << 12) + (m21 as i64*mvx as i64) + (m22 as i64*mvy as i64) + (m23 as i64 * mvz as i64);
-        let z = ((tvz as i64) << 12) + (m31 as i64*mvx as i64) + (m32 as i64*mvy as i64) + (m33 as i64 * mvz as i64);
-
-        self.truncate_write_mac1(x, shift);
-        self.truncate_write_mac2(y, shift);
-        self.truncate_write_mac3(z, shift);
-
-        self.truncate_write_ir1(self.MAC1, lm);
-        self.truncate_write_ir2(self.MAC2, lm);
-        self.truncate_write_ir3(self.MAC3, lm);
-
         // tx=2 is bugged on original hardware, so we have to do a weird version of the calculation
         if tx == 2 {
-            // let x = ((tvx as i64) << 12) + (m13 as i64 * mvz as i64);
-            // let y = ((tvy as i64) << 12) + (m23 as i64 * mvz as i64);
-            // let z = ((tvz as i64) << 12) + (m33 as i64 * mvz as i64);
 
-            // self.truncate_write_mac1(x, shift);
-            // self.truncate_write_mac2(y, shift);
-            // self.truncate_write_mac3(z, shift);
+            let x = ((tvx as i64) << 12) + (m11 as i64 * mvx as i64);
+            let y = ((tvy as i64) << 12) + (m21 as i64 * mvx as i64);
+            let z = ((tvz as i64) << 12) + (m31 as i64 * mvx as i64);
+            
+            self.truncate_write_mac1(x, shift);
+            self.truncate_write_mac2(y, shift);
+            self.truncate_write_mac3(z, shift);
 
-            // self.truncate_write_ir1(self.MAC1, lm);
-            // self.truncate_write_ir2(self.MAC2, lm);
-            // self.truncate_write_ir3(self.MAC3, lm);
+            self.truncate_write_ir1(self.MAC1, false);
+            self.truncate_write_ir2(self.MAC2, false);
+            self.truncate_write_ir3(self.MAC3, false);
 
-            let x = (m12 as i64*mvy as i64) + (m13 as i64 * mvz as i64);
-            let y = (m22 as i64*mvy as i64) + (m23 as i64 * mvz as i64);
-            let z = (m32 as i64*mvy as i64) + (m33 as i64 * mvz as i64);
+            
+            
+            let x = (m12 as i64 * mvy as i64) + (m13 as i64 * mvz as i64);
+            let y = (m22 as i64 * mvy as i64) + (m23 as i64 * mvz as i64);
+            let z = (m32 as i64 * mvy as i64) + (m33 as i64 * mvz as i64);
+            
+            self.truncate_write_mac1(x, shift);
+            self.truncate_write_mac2(y, shift);
+            self.truncate_write_mac3(z, shift);
+            
+            
+            
+
+            self.truncate_write_ir1(self.MAC1, lm);
+            self.truncate_write_ir2(self.MAC2, lm);
+            self.truncate_write_ir3(self.MAC3, lm);
+        } else {
+            // Otherwise do the correct version
+            let x = ((tvx as i64) << 12)
+                + (m11 as i64 * mvx as i64)
+                + (m12 as i64 * mvy as i64)
+                + (m13 as i64 * mvz as i64);
+            let y = ((tvy as i64) << 12)
+                + (m21 as i64 * mvx as i64)
+                + (m22 as i64 * mvy as i64)
+                + (m23 as i64 * mvz as i64);
+            let z = ((tvz as i64) << 12)
+                + (m31 as i64 * mvx as i64)
+                + (m32 as i64 * mvy as i64)
+                + (m33 as i64 * mvz as i64);
 
             self.truncate_write_mac1(x, shift);
             self.truncate_write_mac2(y, shift);
@@ -646,7 +677,7 @@ impl GTE {
             self.truncate_write_ir2(self.MAC2, lm);
             self.truncate_write_ir3(self.MAC3, lm);
         }
-    } 
+    }
 
     fn rtps(&mut self, command: u32) {
         let shift = (command.get_bit(19) as usize) * 12;
@@ -662,7 +693,6 @@ impl GTE {
         self.do_rtps(self.VX0, self.VY0, self.VZ0, shift, false, lm);
         self.do_rtps(self.VX1, self.VY1, self.VZ1, shift, false, lm);
         self.do_rtps(self.VX2, self.VY2, self.VZ2, shift, true, lm);
-
     }
 
     fn nclip(&mut self) {
@@ -685,9 +715,15 @@ impl GTE {
 
         //  [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (LLM*V0) SAR (sf*12)
 
-        let dot_x_light = (self.L11 as i64* self.VX0 as i64) + (self.L12 as i64*self.VY0 as i64) + (self.L13 as i64 * self.VZ0 as i64);
-        let dot_y_light = (self.L21 as i64* self.VX0 as i64) + (self.L22 as i64*self.VY0 as i64) + (self.L23 as i64 * self.VZ0 as i64);
-        let dot_z_light = (self.L31 as i64* self.VX0 as i64) + (self.L32 as i64*self.VY0 as i64) + (self.L33 as i64 * self.VZ0 as i64);
+        let dot_x_light = (self.L11 as i64 * self.VX0 as i64)
+            + (self.L12 as i64 * self.VY0 as i64)
+            + (self.L13 as i64 * self.VZ0 as i64);
+        let dot_y_light = (self.L21 as i64 * self.VX0 as i64)
+            + (self.L22 as i64 * self.VY0 as i64)
+            + (self.L23 as i64 * self.VZ0 as i64);
+        let dot_z_light = (self.L31 as i64 * self.VX0 as i64)
+            + (self.L32 as i64 * self.VY0 as i64)
+            + (self.L33 as i64 * self.VZ0 as i64);
 
         self.truncate_write_mac1(dot_x_light, shift);
         self.truncate_write_mac2(dot_y_light, shift);
@@ -699,10 +735,18 @@ impl GTE {
 
         // [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (BK*1000h + LCM*IR) SAR (sf*12)
 
-        let dot_x_color = (self.RBK as i64 * 0x1000) + (self.LR1 as i64* self.IR1 as i64) + (self.LR2 as i64*self.IR2 as i64) + (self.LR3 as i64 * self.IR3 as i64);
-        let dot_y_color = (self.GBK as i64 * 0x1000) + (self.LG1 as i64* self.IR1 as i64) + (self.LG2 as i64*self.IR2 as i64) + (self.LG3 as i64 * self.IR3 as i64);
-        let dot_z_color = (self.BBK as i64 * 0x1000) + (self.LB1 as i64* self.IR1 as i64) + (self.LB2 as i64*self.IR2 as i64) + (self.LB3 as i64 * self.IR3 as i64);
-
+        let dot_x_color = (self.RBK as i64 * 0x1000)
+            + (self.LR1 as i64 * self.IR1 as i64)
+            + (self.LR2 as i64 * self.IR2 as i64)
+            + (self.LR3 as i64 * self.IR3 as i64);
+        let dot_y_color = (self.GBK as i64 * 0x1000)
+            + (self.LG1 as i64 * self.IR1 as i64)
+            + (self.LG2 as i64 * self.IR2 as i64)
+            + (self.LG3 as i64 * self.IR3 as i64);
+        let dot_z_color = (self.BBK as i64 * 0x1000)
+            + (self.LB1 as i64 * self.IR1 as i64)
+            + (self.LB2 as i64 * self.IR2 as i64)
+            + (self.LB3 as i64 * self.IR3 as i64);
 
         self.truncate_write_mac1(dot_x_color, shift);
         self.truncate_write_mac2(dot_y_color, shift);
@@ -712,13 +756,13 @@ impl GTE {
         self.truncate_write_ir2(self.MAC2, lm);
         self.truncate_write_ir3(self.MAC3, lm);
 
-        // [MAC1,MAC2,MAC3] = [R*IR1,G*IR2,B*IR3] SHL 4 
+        // [MAC1,MAC2,MAC3] = [R*IR1,G*IR2,B*IR3] SHL 4
 
         self.truncate_write_mac1((self.RGBC.r as i64 * self.IR1 as i64) << 4, 0);
         self.truncate_write_mac2((self.RGBC.g as i64 * self.IR2 as i64) << 4, 0);
         self.truncate_write_mac3((self.RGBC.b as i64 * self.IR3 as i64) << 4, 0);
 
-        // [MAC1,MAC2,MAC3] = MAC+(FC-MAC)*IR0   
+        // [MAC1,MAC2,MAC3] = MAC+(FC-MAC)*IR0
 
         // let cx = self.MAC1 as i64 + (self.RFC as i64 - self.MAC1 as i64) * self.IR0 as i64;
         // let cy = self.MAC2 as i64 + (self.GFC as i64 - self.MAC2 as i64) * self.IR0 as i64;
@@ -740,7 +784,6 @@ impl GTE {
         let cy = (((self.GFC as i32) << 12) - self.MAC2 as i32) >> shift;
         let cz = (((self.BFC as i32) << 12) - self.MAC3 as i32) >> shift;
 
-       
         self.truncate_write_ir1(cx, false);
         self.truncate_write_ir2(cy, false);
         self.truncate_write_ir3(cz, false);
@@ -748,12 +791,13 @@ impl GTE {
         self.truncate_write_mac1(self.IR1 as i64 * self.IR0 as i64 + self.MAC1 as i64, shift);
         self.truncate_write_mac2(self.IR2 as i64 * self.IR0 as i64 + self.MAC2 as i64, shift);
         self.truncate_write_mac3(self.IR3 as i64 * self.IR0 as i64 + self.MAC3 as i64, shift);
-        
+
         self.truncate_write_ir1(self.MAC1, lm);
         self.truncate_write_ir2(self.MAC2, lm);
         self.truncate_write_ir3(self.MAC3, lm);
 
-        let final_color = self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
+        let final_color =
+            self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
 
         self.push_color(final_color);
     }
@@ -768,7 +812,8 @@ impl GTE {
 
         self.interpolate_color(self.MAC1, self.MAC2, self.MAC3, lm, shift);
 
-        let final_color = self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
+        let final_color =
+            self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
 
         self.push_color(final_color);
     }
@@ -783,7 +828,8 @@ impl GTE {
 
         self.interpolate_color(self.MAC1, self.MAC2, self.MAC3, lm, shift);
 
-        let final_color = self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
+        let final_color =
+            self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
 
         self.push_color(final_color);
     }
@@ -808,8 +854,9 @@ impl GTE {
     }
 
     fn avsz4(&mut self) {
-        let result =
-            (self.ZSF3 as i64) * ((self.SZ0 as u32) + (self.SZ1 as u32) + (self.SZ2 as u32) + (self.SZ3 as u32)) as i64;
+        let result = (self.ZSF3 as i64)
+            * ((self.SZ0 as u32) + (self.SZ1 as u32) + (self.SZ2 as u32) + (self.SZ3 as u32))
+                as i64;
 
         self.truncate_write_mac0(result, 0);
 
@@ -819,8 +866,14 @@ impl GTE {
 
 // Command helper functions
 impl GTE {
-
-    fn interpolate_color(&mut self, in_mac1: i32, in_mac2: i32, in_mac3: i32, lm: bool, shift: usize) {
+    fn interpolate_color(
+        &mut self,
+        in_mac1: i32,
+        in_mac2: i32,
+        in_mac3: i32,
+        lm: bool,
+        shift: usize,
+    ) {
         let cx = ((self.RFC as i64) << 12) - in_mac1 as i64;
         let cy = ((self.GFC as i64) << 12) - in_mac2 as i64;
         let cz = ((self.BFC as i64) << 12) - in_mac3 as i64;
@@ -829,7 +882,6 @@ impl GTE {
         self.truncate_write_mac2(cy, shift);
         self.truncate_write_mac3(cz, shift);
 
-       
         self.truncate_write_ir1((cx >> shift) as i32, false);
         self.truncate_write_ir2((cy >> shift) as i32, false);
         self.truncate_write_ir3((cz >> shift) as i32, false);
@@ -837,7 +889,7 @@ impl GTE {
         self.truncate_write_mac1(self.IR1 as i64 * self.IR0 as i64 + in_mac1 as i64, shift);
         self.truncate_write_mac2(self.IR2 as i64 * self.IR0 as i64 + in_mac2 as i64, shift);
         self.truncate_write_mac3(self.IR3 as i64 * self.IR0 as i64 + in_mac3 as i64, shift);
-        
+
         self.truncate_write_ir1(self.MAC1, lm);
         self.truncate_write_ir2(self.MAC2, lm);
         self.truncate_write_ir3(self.MAC3, lm);
@@ -856,11 +908,15 @@ impl GTE {
             self.FLAG.set_bit(19, true);
         }
 
-        return Color::new(clamp(r, 0, 0xFF) as u8, clamp(g, 0, 0xFF) as u8, clamp(b, 0, 0xFF) as u8, c)
+        return Color::new(
+            clamp(r, 0, 0xFF) as u8,
+            clamp(g, 0, 0xFF) as u8,
+            clamp(b, 0, 0xFF) as u8,
+            c,
+        );
     }
 
     fn do_rtps(&mut self, vx: i16, vy: i16, vz: i16, shift: usize, last: bool, lm: bool) {
-        
         let x = self.i64_to_i44((self.TRX as i64) << 12)
             + self.i64_to_i44(
                 ((self.RT11 as i64) * (vx as i64))
@@ -898,15 +954,12 @@ impl GTE {
             (val, _) => val as i16,
         };
 
-       
         self.truncate_push_sz3((z >> 12) as i32);
 
         //println!("sz3 {}", self.SZ3);
 
         let div_val = unr_divide(self.H as u32, self.SZ3 as u32, &mut self.FLAG) as i64;
 
-       
- 
         let sx = div_val * self.IR1 as i64 + self.OFX as i64;
         self.truncate_write_mac0(sx, 0);
         self.saturate_push_sx(sx >> 16);
@@ -968,7 +1021,7 @@ impl GTE {
             }
             v => v,
         };
-        
+
         self.push_sx(new_val as i16);
     }
 
@@ -1091,8 +1144,6 @@ impl GTE {
         }
     }
 
-   
-
     fn i64_to_i44(&mut self, val: i64) -> i64 {
         match val {
             x if x > (0x7ffffffffff) => {
@@ -1127,27 +1178,25 @@ fn unr_divide(lhs: u32, rhs: u32, flag: &mut u32) -> u32 {
     }
 }
 
-
 const UNR_TABLE: [u32; 0x101] = [
-    0xFF,0xFD,0xFB,0xF9,0xF7,0xF5,0xF3,0xF1,0xEF,0xEE,0xEC,0xEA,0xE8,0xE6,0xE4,0xE3,
-    0xE1,0xDF,0xDD,0xDC,0xDA,0xD8,0xD6,0xD5,0xD3,0xD1,0xD0,0xCE,0xCD,0xCB,0xC9,0xC8,
-    0xC6,0xC5,0xC3,0xC1,0xC0,0xBE,0xBD,0xBB,0xBA,0xB8,0xB7,0xB5,0xB4,0xB2,0xB1,0xB0,
-    0xAE,0xAD,0xAB,0xAA,0xA9,0xA7,0xA6,0xA4,0xA3,0xA2,0xA0,0x9F,0x9E,0x9C,0x9B,0x9A, 
-    0x99,0x97,0x96,0x95,0x94,0x92,0x91,0x90,0x8F,0x8D,0x8C,0x8B,0x8A,0x89,0x87,0x86, 
-    0x85,0x84,0x83,0x82,0x81,0x7F,0x7E,0x7D,0x7C,0x7B,0x7A,0x79,0x78,0x77,0x75,0x74,
-    0x73,0x72,0x71,0x70,0x6F,0x6E,0x6D,0x6C,0x6B,0x6A,0x69,0x68,0x67,0x66,0x65,0x64,
-    0x63,0x62,0x61,0x60,0x5F,0x5E,0x5D,0x5D,0x5C,0x5B,0x5A,0x59,0x58,0x57,0x56,0x55, 
-    0x54,0x53,0x53,0x52,0x51,0x50,0x4F,0x4E,0x4D,0x4D,0x4C,0x4B,0x4A,0x49,0x48,0x48, 
-    0x47,0x46,0x45,0x44,0x43,0x43,0x42,0x41,0x40,0x3F,0x3F,0x3E,0x3D,0x3C,0x3C,0x3B,
-    0x3A,0x39,0x39,0x38,0x37,0x36,0x36,0x35,0x34,0x33,0x33,0x32,0x31,0x31,0x30,0x2F,
-    0x2E,0x2E,0x2D,0x2C,0x2C,0x2B,0x2A,0x2A,0x29,0x28,0x28,0x27,0x26,0x26,0x25,0x24, 
-    0x24,0x23,0x22,0x22,0x21,0x20,0x20,0x1F,0x1E,0x1E,0x1D,0x1D,0x1C,0x1B,0x1B,0x1A, 
-    0x19,0x19,0x18,0x18,0x17,0x16,0x16,0x15,0x15,0x14,0x14,0x13,0x12,0x12,0x11,0x11,
-    0x10,0x0F,0x0F,0x0E,0x0E,0x0D,0x0D,0x0C,0x0C,0x0B,0x0A,0x0A,0x09,0x09,0x08,0x08,
-    0x07,0x07,0x06,0x06,0x05,0x05,0x04,0x04,0x03,0x03,0x02,0x02,0x01,0x01,0x00,0x00, 
-    0x00   // one extra table entry (for "(d-7FC0h)/80h"=100h)
+    0xFF, 0xFD, 0xFB, 0xF9, 0xF7, 0xF5, 0xF3, 0xF1, 0xEF, 0xEE, 0xEC, 0xEA, 0xE8, 0xE6, 0xE4, 0xE3,
+    0xE1, 0xDF, 0xDD, 0xDC, 0xDA, 0xD8, 0xD6, 0xD5, 0xD3, 0xD1, 0xD0, 0xCE, 0xCD, 0xCB, 0xC9, 0xC8,
+    0xC6, 0xC5, 0xC3, 0xC1, 0xC0, 0xBE, 0xBD, 0xBB, 0xBA, 0xB8, 0xB7, 0xB5, 0xB4, 0xB2, 0xB1, 0xB0,
+    0xAE, 0xAD, 0xAB, 0xAA, 0xA9, 0xA7, 0xA6, 0xA4, 0xA3, 0xA2, 0xA0, 0x9F, 0x9E, 0x9C, 0x9B, 0x9A,
+    0x99, 0x97, 0x96, 0x95, 0x94, 0x92, 0x91, 0x90, 0x8F, 0x8D, 0x8C, 0x8B, 0x8A, 0x89, 0x87, 0x86,
+    0x85, 0x84, 0x83, 0x82, 0x81, 0x7F, 0x7E, 0x7D, 0x7C, 0x7B, 0x7A, 0x79, 0x78, 0x77, 0x75, 0x74,
+    0x73, 0x72, 0x71, 0x70, 0x6F, 0x6E, 0x6D, 0x6C, 0x6B, 0x6A, 0x69, 0x68, 0x67, 0x66, 0x65, 0x64,
+    0x63, 0x62, 0x61, 0x60, 0x5F, 0x5E, 0x5D, 0x5D, 0x5C, 0x5B, 0x5A, 0x59, 0x58, 0x57, 0x56, 0x55,
+    0x54, 0x53, 0x53, 0x52, 0x51, 0x50, 0x4F, 0x4E, 0x4D, 0x4D, 0x4C, 0x4B, 0x4A, 0x49, 0x48, 0x48,
+    0x47, 0x46, 0x45, 0x44, 0x43, 0x43, 0x42, 0x41, 0x40, 0x3F, 0x3F, 0x3E, 0x3D, 0x3C, 0x3C, 0x3B,
+    0x3A, 0x39, 0x39, 0x38, 0x37, 0x36, 0x36, 0x35, 0x34, 0x33, 0x33, 0x32, 0x31, 0x31, 0x30, 0x2F,
+    0x2E, 0x2E, 0x2D, 0x2C, 0x2C, 0x2B, 0x2A, 0x2A, 0x29, 0x28, 0x28, 0x27, 0x26, 0x26, 0x25, 0x24,
+    0x24, 0x23, 0x22, 0x22, 0x21, 0x20, 0x20, 0x1F, 0x1E, 0x1E, 0x1D, 0x1D, 0x1C, 0x1B, 0x1B, 0x1A,
+    0x19, 0x19, 0x18, 0x18, 0x17, 0x16, 0x16, 0x15, 0x15, 0x14, 0x14, 0x13, 0x12, 0x12, 0x11, 0x11,
+    0x10, 0x0F, 0x0F, 0x0E, 0x0E, 0x0D, 0x0D, 0x0C, 0x0C, 0x0B, 0x0A, 0x0A, 0x09, 0x09, 0x08, 0x08,
+    0x07, 0x07, 0x06, 0x06, 0x05, 0x05, 0x04, 0x04, 0x03, 0x03, 0x02, 0x02, 0x01, 0x01, 0x00, 0x00,
+    0x00, // one extra table entry (for "(d-7FC0h)/80h"=100h)
 ];
-
 
 const DATA_REG_NAME: [&str; 32] = [
     "vxy0", "vz0", "vxy1", "vz1", "vxy2", "vz2", "rgb", "otz", // 00

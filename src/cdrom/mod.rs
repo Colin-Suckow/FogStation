@@ -230,6 +230,9 @@ impl CDDrive {
 
     fn execute_command(&mut self, command: u8) {
         //println!("CDROM: Executing command {:#X}", command);
+        if self.reg_interrupt_flag > 0 {
+            println!("CDERR: Sent command while IRQs are not acked!");
+        }
         //Execute
         {
             let parameters: Vec<u8> = self.parameter_queue.iter().map(|v| v.clone()).collect();
@@ -451,6 +454,7 @@ pub fn step_cycle(cpu: &mut R3000) {
         .extend(packet.response.iter());
 
     cpu.main_bus.cd_drive.reg_interrupt_flag = packet.cause.bitflag();
+    //println!("CD: processed command {:#X}", packet.command);
 
     trace!("flag after {:#X}", cpu.main_bus.cd_drive.reg_interrupt_flag);
 
@@ -461,15 +465,15 @@ pub fn step_cycle(cpu: &mut R3000) {
     //println!("Interrupts {:#X} cause {:#X} command {:#X}", cpu.main_bus.cd_drive.reg_interrupt_enable, packet.cause.bitflag(), packet.command);
     if cpu.main_bus.cd_drive.reg_interrupt_enable & packet.cause.bitflag() == packet.cause.bitflag()
     {
-        trace!("Firing interrupt");
-        trace!(
-            "INT_E {:#X} CAUSE {:?}",
-            cpu.main_bus.cd_drive.reg_interrupt_enable,
-            packet.cause
-        );
+        //println!("Firing interrupt");
+        // println!(
+        //     "INT_E {:#X} CAUSE {:?}",
+        //     cpu.main_bus.cd_drive.reg_interrupt_enable,
+        //     packet.cause
+        // );
         cpu.fire_external_interrupt(InterruptSource::CDROM);
     } else {
-        trace!("Interrupt disabled, not firing");
+        //println!("Interrupt disabled, not firing");
     }
 
     //If the response has an extra response, push that to the front of the line
@@ -534,12 +538,12 @@ pub fn step_cycle(cpu: &mut R3000) {
                 // }
 
                 // Get rid of all the middle sectors, leave only the oldest
-                let sector_size = *cpu.main_bus.cd_drive.sector_size() as usize;
-                if cpu.main_bus.cd_drive.data_queue.len() > sector_size {
-                    cpu.main_bus.cd_drive.data_queue.drain(sector_size..cpu.main_bus.cd_drive.data_queue.len());
-                }
+                // let sector_size = *cpu.main_bus.cd_drive.sector_size() as usize;
+                // if cpu.main_bus.cd_drive.data_queue.len() > sector_size {
+                //     cpu.main_bus.cd_drive.data_queue.drain(sector_size..cpu.main_bus.cd_drive.data_queue.len());
+                // }
 
-                // cpu.main_bus.cd_drive.data_queue.clear();
+                cpu.main_bus.cd_drive.data_queue.clear();
                 cpu.main_bus.cd_drive.data_queue.extend(data.iter());
 
                 trace!(

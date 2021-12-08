@@ -457,7 +457,7 @@ impl R3000 {
                 let test = test ^ is_bgez;
 
                 if is_link {
-                    self.write_reg(31, self.pc);
+                    self.write_reg(31, self.pc + 4);
                 }
 
                 if test != 0 {

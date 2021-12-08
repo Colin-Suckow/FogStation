@@ -52,6 +52,7 @@ impl DiscIndex {
     }
 }
 
+
 pub struct DiscTrack {
     data: Vec<u8>,
 }
@@ -95,7 +96,7 @@ impl Disc {
         };
         //println!("data Byte 0 {:#X}", data[0]);
         //println!("Reading sector from address {}. Sector mode: {} Sector size {:?}", address, track.data[address + 15], sector_size);
-        //println!("According to the sector header, this is M: {:X} ({}) S: {:X} ({}) F: {:X} ({})", track.data[(address - track_offset) + 12], bcd_to_dec(track.data[(address - track_offset) + 12] as usize), track.data[(address - track_offset) + 13], bcd_to_dec(track.data[(address - track_offset) + 13] as usize), track.data[(address - track_offset) + 14], bcd_to_dec(track.data[(address - track_offset) + 14] as usize));
+        //println!("According to the sector header, this is <BCD (DEC)> M: {} ({}) S: {} ({}) F: {} ({})", track.data[(address - track_offset) + 12], bcd_to_dec(track.data[(address - track_offset) + 12] as usize), track.data[(address - track_offset) + 13], bcd_to_dec(track.data[(address - track_offset) + 13] as usize), track.data[(address - track_offset) + 14], bcd_to_dec(track.data[(address - track_offset) + 14] as usize));
         data
     }
 

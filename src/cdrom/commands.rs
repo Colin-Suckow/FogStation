@@ -57,8 +57,9 @@ pub(super) fn get_id(state: &CDDrive) -> Packet {
 }
 
 pub(super) fn init(state: &mut CDDrive) -> Packet {
-    state.motor_state = MotorState::On;
     let mut first_response = stat(state, 0x0a);
+    state.motor_state = MotorState::On;
+    state.drive_mode = 0;
     let mut second_response = stat(state, 0x0a);
     second_response.cause = IntCause::INT2;
     first_response.execution_cycles = 0x13cce;
@@ -70,6 +71,7 @@ pub(super) fn set_loc(state: &mut CDDrive, minutes: u8, seconds: u8, frames: u8)
     state.next_seek_target = DiscIndex::new(minutes as usize, seconds as usize, frames as usize);
     state.seek_complete = false;
     state.data_queue.clear();
+    //println!("set_loc to bcd m {} s {} f {}", minutes, seconds, frames);
 
     //println!("set_loc to {:?}, total sectors: {}", state.seek_target, state.seek_target.as_address() / BYTES_PER_SECTOR as u32);
     let main_response = stat(state, 0x2);
@@ -113,7 +115,7 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
     let cycles = match state.drive_speed() {
         DriveSpeed::Single => 0x6e1cd, // Add some extra time for a seek
         DriveSpeed::Double => 0x36cd2,
-    } + if !state.seek_complete {1000000} else {0}; //Add some extra time if we need to seek
+    }; // + if !state.seek_complete {100} else {0}; //Add some extra time if we need to seek
 
     if !state.seek_complete {
         state.read_offset = 0;
@@ -150,12 +152,12 @@ pub(super) fn pause_read(state: &mut CDDrive) -> Packet {
     };
 
     state.drive_state = DriveState::Idle;
-    //state.read_offset = 0;
+    state.read_offset = 0;
 
     let response_packet = Packet {
         cause: IntCause::INT2,
         response: vec![state.get_stat()],
-        execution_cycles: cycles,
+        execution_cycles: cycles * 6,
         extra_response: None,
         command: 0x9,
     };

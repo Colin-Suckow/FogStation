@@ -494,7 +494,7 @@ impl GTE {
             0x2d => self.avsz3(),
             0x2e => self.avsz4(),
             _ => (),
-            //_ => panic!("Unknown GTE command {:#X}!", command & 0x3F)
+            //_ => println!("Unknown GTE command {:#X}!", command & 0x3F)
         };
     }
 }
@@ -725,13 +725,13 @@ impl GTE {
             + (self.L32 as i64 * self.VY0 as i64)
             + (self.L33 as i64 * self.VZ0 as i64);
 
-        self.truncate_write_mac1(dot_x_light, shift);
-        self.truncate_write_mac2(dot_y_light, shift);
-        self.truncate_write_mac3(dot_z_light, shift);
+        // self.truncate_write_mac1(dot_x_light, shift);
+        // self.truncate_write_mac2(dot_y_light, shift);
+        // self.truncate_write_mac3(dot_z_light, shift);
 
-        self.truncate_write_ir1(self.MAC1, lm);
-        self.truncate_write_ir2(self.MAC2, lm);
-        self.truncate_write_ir3(self.MAC3, lm);
+        self.truncate_write_ir1((dot_x_light >> shift) as i32, lm);
+        self.truncate_write_ir2((dot_y_light >> shift) as i32, lm);
+        self.truncate_write_ir3((dot_z_light >> shift) as i32, lm);
 
         // [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (BK*1000h + LCM*IR) SAR (sf*12)
 
@@ -762,39 +762,7 @@ impl GTE {
         self.truncate_write_mac2((self.RGBC.g as i64 * self.IR2 as i64) << 4, 0);
         self.truncate_write_mac3((self.RGBC.b as i64 * self.IR3 as i64) << 4, 0);
 
-        // [MAC1,MAC2,MAC3] = MAC+(FC-MAC)*IR0
-
-        // let cx = self.MAC1 as i64 + (self.RFC as i64 - self.MAC1 as i64) * self.IR0 as i64;
-        // let cy = self.MAC2 as i64 + (self.GFC as i64 - self.MAC2 as i64) * self.IR0 as i64;
-        // let cz = self.MAC3 as i64 + (self.BFC as i64 - self.MAC3 as i64) * self.IR0 as i64;
-
-        // self.truncate_write_mac1(cx, shift);
-        // self.truncate_write_mac2(cy, shift);
-        // self.truncate_write_mac3(cz, shift);
-
-        // self.truncate_write_ir1(self.MAC1, lm);
-        // self.truncate_write_ir2(self.MAC2, lm);
-        // self.truncate_write_ir3(self.MAC3 as i64, lm);
-
-        self.truncate_write_mac1(((self.RGBC.r as u64) << 16) as i64, 0);
-        self.truncate_write_mac2(((self.RGBC.g as u64) << 16) as i64, 0);
-        self.truncate_write_mac3(((self.RGBC.b as u64) << 16) as i64, 0);
-
-        let cx = (((self.RFC as i32) << 12) - self.MAC1 as i32) >> shift;
-        let cy = (((self.GFC as i32) << 12) - self.MAC2 as i32) >> shift;
-        let cz = (((self.BFC as i32) << 12) - self.MAC3 as i32) >> shift;
-
-        self.truncate_write_ir1(cx, false);
-        self.truncate_write_ir2(cy, false);
-        self.truncate_write_ir3(cz, false);
-
-        self.truncate_write_mac1(self.IR1 as i64 * self.IR0 as i64 + self.MAC1 as i64, shift);
-        self.truncate_write_mac2(self.IR2 as i64 * self.IR0 as i64 + self.MAC2 as i64, shift);
-        self.truncate_write_mac3(self.IR3 as i64 * self.IR0 as i64 + self.MAC3 as i64, shift);
-
-        self.truncate_write_ir1(self.MAC1, lm);
-        self.truncate_write_ir2(self.MAC2, lm);
-        self.truncate_write_ir3(self.MAC3, lm);
+        self.interpolate_color(self.MAC1, self.MAC2, self.MAC3, lm, shift);
 
         let final_color =
             self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);

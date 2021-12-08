@@ -24,6 +24,7 @@ impl Cop0 {
     /// Sets register to given value. Prevents setting R0, which should always be zero. Will panic if register_number > 31
     pub fn write_reg(&mut self, register_number: u8, value: u32) {
         self.gen_registers[register_number as usize] = value;
+       
     }
 
     pub fn cache_isolated(&self) -> bool {

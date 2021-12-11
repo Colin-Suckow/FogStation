@@ -156,7 +156,7 @@ impl R3000 {
                         for i in 0..len {
                             let char = self.read_bus_byte(base + i);
                             print!("{}",
-                            std::str::from_utf8(&[char]).unwrap()
+                            unsafe { std::str::from_utf8_unchecked(&[char]) }
                             );
                         }
                     }
@@ -165,7 +165,7 @@ impl R3000 {
                 0x3D => {
                     print!(
                     "{}",
-                    std::str::from_utf8(&[self.read_reg(4) as u8]).unwrap());
+                    unsafe {std::str::from_utf8_unchecked(&[self.read_reg(4) as u8])} )
                 },
                 _ => ()
             }

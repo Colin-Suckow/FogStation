@@ -216,8 +216,15 @@ impl CDDrive {
             0x1F801801 => match self.status_index {
                 0 => panic!("CD: 0x1F801801 read byte unknown index 0"),
                 1 => self.pop_response(),
-                2 => panic!("CD: 0x1F801803 read byte unknown index 2"),
+                2 => panic!("CD: 0x1F801801 read byte unknown index 2"),
                 3 => panic!("CD: 0x1F801801 read byte unknown index 3"),
+                _ => unreachable!(),
+            },
+            0x1F801802 => match self.status_index {
+                0 => self.pop_data(),
+                1 => panic!("CD: 0x1F801802 read byte unknown index 1"),
+                2 => panic!("CD: 0x1F801802 read byte unknown index 2"),
+                3 => panic!("CD: 0x1F801802 read byte unknown index 3"),
                 _ => unreachable!(),
             },
             0x1F801803 => {
@@ -267,6 +274,7 @@ impl CDDrive {
                 0xB => mute(self),
                 0xD => set_filter(self),
                 0xE => set_mode(self, parameters[0]),
+                0x10 => set_filter(self), //This is actually GetlocL. But I'm lazy right now. TODO: Implement this
                 0x11 => set_filter(self), //This is actually GetlocP. But I'm lazy right now. TODO: Implement this
                 0x13 => get_tn(self),
                 0x14 => get_td(self, parameters[0]),

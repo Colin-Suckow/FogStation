@@ -94,8 +94,9 @@ pub struct CDDrive {
     disc: Option<Disc>,
 
     parameter_queue: VecDeque<u8>,
-    data_queue: Vec<u8>,
     response_queue: VecDeque<u8>,
+    data_queue: Vec<Sector>,
+    response_data_queue: Vec<u8>,
 
     want_data: bool,
 
@@ -126,6 +127,7 @@ impl CDDrive {
             parameter_queue: VecDeque::new(),
             data_queue: Vec::new(),
             response_queue: VecDeque::new(),
+            response_data_queue: Vec::new(),
 
             status_index: 0,
 
@@ -136,8 +138,8 @@ impl CDDrive {
             motor_state: MotorState::On,
             drive_mode: 0,
 
-            next_seek_target: DiscIndex::new(0, 0, 0),
-            current_seek_target: DiscIndex::new(0, 0, 0),
+            next_seek_target: DiscIndex::new_dec(0, 0, 0),
+            current_seek_target: DiscIndex::new_dec(0, 0, 0),
             seek_complete: false,
             read_offset: 0,
 
@@ -148,6 +150,7 @@ impl CDDrive {
 
             //Probably useless registers
             reg_sound_map_data_out: 0,
+        
         }
     }
 
@@ -171,7 +174,24 @@ impl CDDrive {
             },
             0x1F801803 => match self.status_index {
                 0 => {
-                    self.want_data = val.get_bit(7); //Only handle want_data. This will probably bite me later
+                    if val.get_bit(5) {
+                        panic!("CD INT10 requested");
+                    }
+                    if val.get_bit(7) {
+                        // Try to load latest sector from buffer
+                        let sector_size = *self.sector_size() as usize;
+                        if self.data_queue.len() > 0 {
+                            let sector = self.data_queue.remove(0);
+                            // println!("Loaded a sector!");
+                            // println!("Sector index is {}, sector # {}", sector.index(), sector.index().sector_number());
+                            // println!("Filling buffer with sector size {:?}", self.sector_size());
+                            self.response_data_queue.extend(sector.consume(self.sector_size()));
+                        } else {
+                            //println!("Game requested sector load, but the input buffer was empty!");
+                        }
+                    } else {
+                        self.response_data_queue.clear();
+                    }
                 }
                 1 => self.write_interrupt_flag_register(val),
                 2 => trace!("CD: Wrote Left-CD-Out Left SPU volume"),
@@ -245,7 +265,9 @@ impl CDDrive {
                 0x9 => pause_read(self),
                 0xA => init(self),
                 0xB => mute(self),
+                0xD => set_filter(self),
                 0xE => set_mode(self, parameters[0]),
+                0x11 => set_filter(self), //This is actually GetlocP. But I'm lazy right now. TODO: Implement this
                 0x13 => get_tn(self),
                 0x14 => get_td(self, parameters[0]),
                 0x15 => seek_data(self),
@@ -284,7 +306,7 @@ impl CDDrive {
         //5 RSLRRDY
         status |= (!self.response_queue.is_empty() as u8) << 5;
         //6 DRQSTS
-        status |= (!self.data_queue.is_empty() as u8) << 6;
+        status |= (!self.response_data_queue.is_empty() as u8) << 6;
         // 7 BUSYSTS
         status |= (self.busy() as u8) << 7;
 
@@ -336,42 +358,13 @@ impl CDDrive {
     }
 
     pub fn data_queue(&mut self) -> &mut Vec<u8> {
-        // if self.data_queue.is_empty() {
-        //     //Out of data, get some more
-        //     //println!("Fetching more data!");
-        //     let data = self.disc.as_ref().expect("Tried to read nonexistant disc!").read_sector(
-        //                 self.seek_target.plus_sector_offset(self.read_offset),
-        //                 self.sector_size()
-        //             );
-
-        //     self.read_offset += 1;
-        //     self.data_queue.extend(data.iter());
-        //     //println!("Fetched {} bytes!", self.data_queue.len())
-        // }
-        trace!("data_queue len {}", self.data_queue.len());
-        &mut self.data_queue
+        &mut self.response_data_queue
     }
+
 
     pub fn pop_data(&mut self) -> u8 {
-        //trace!("Popping data");
-        self.data_queue().remove(0) // This is slow, but whatever for now. Using a proper deque is a bit difficult here
+        self.response_data_queue.remove(0) // This is slow, but whatever for now. Using a proper deque is a bit difficult here
     }
-
-    // pub fn sector_data_take(&mut self) -> &[u8] {
-    //     //println!("Fetching more data!");
-    //     let data = self
-    //         .disc
-    //         .as_ref()
-    //         .expect("Tried to read nonexistant disc!")
-    //         .read_sector(
-    //             self.current_seek_target
-    //                 .plus_sector_offset(self.read_offset),
-    //             self.sector_size(),
-    //         );
-
-    //     //self.read_offset += 1;
-    //     data
-    // }
 
     fn write_interrupt_flag_register(&mut self, val: u8) {
         //println!("Writing flag with val {:#X}   pre flag val {:#X}", val, self.reg_interrupt_flag);
@@ -517,7 +510,7 @@ pub fn step_cycle(cpu: &mut R3000) {
 
             if cpu.main_bus.cd_drive.read_enabled && packet.cause == IntCause::INT1 {
 
-                let data = cpu
+                let new_sector = cpu
                     .main_bus
                     .cd_drive
                     .disc
@@ -527,8 +520,7 @@ pub fn step_cycle(cpu: &mut R3000) {
                         cpu.main_bus
                             .cd_drive
                             .next_seek_target
-                            .plus_sector_offset(cpu.main_bus.cd_drive.read_offset),
-                        cpu.main_bus.cd_drive.sector_size(),
+                            .plus_sector_offset(cpu.main_bus.cd_drive.read_offset)
                     );
 
                 cpu.main_bus.cd_drive.read_offset += 1;
@@ -539,18 +531,13 @@ pub fn step_cycle(cpu: &mut R3000) {
 
                 // Get rid of all the middle sectors, leave only the oldest
                 // let sector_size = *cpu.main_bus.cd_drive.sector_size() as usize;
-                // if cpu.main_bus.cd_drive.data_queue.len() > sector_size {
-                //     cpu.main_bus.cd_drive.data_queue.drain(sector_size..cpu.main_bus.cd_drive.data_queue.len());
-                // }
+                if cpu.main_bus.cd_drive.data_queue.len() > 0 {
+                    cpu.main_bus.cd_drive.data_queue.drain(1..cpu.main_bus.cd_drive.data_queue.len());
+                }
 
-                cpu.main_bus.cd_drive.data_queue.clear();
-                cpu.main_bus.cd_drive.data_queue.extend(data.iter());
+                //cpu.main_bus.cd_drive.data_queue.clear();
+                cpu.main_bus.cd_drive.data_queue.insert(0, new_sector);
 
-                trace!(
-                    "buf len {} data len {}",
-                    data.len(),
-                    cpu.main_bus.cd_drive.data_queue.len()
-                );
 
                 trace!("Inserting next ReadN");
                 let cycles = match cpu.main_bus.cd_drive.drive_speed() {

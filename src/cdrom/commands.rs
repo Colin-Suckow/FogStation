@@ -68,7 +68,7 @@ pub(super) fn init(state: &mut CDDrive) -> Packet {
 }
 
 pub(super) fn set_loc(state: &mut CDDrive, minutes: u8, seconds: u8, frames: u8) -> Packet {
-    state.next_seek_target = DiscIndex::new(minutes as usize, seconds as usize, frames as usize);
+    state.next_seek_target = DiscIndex::new_bcd(minutes as usize, seconds as usize, frames as usize);
     state.seek_complete = false;
     state.data_queue.clear();
     //println!("set_loc to bcd m {} s {} f {}", minutes, seconds, frames);
@@ -203,7 +203,7 @@ pub(super) fn play(state: &mut CDDrive) -> Packet {
 }
 
 pub(super) fn mute(state: &mut CDDrive) -> Packet {
-    stat(state, 0x3)
+    stat(state, 0xB)
 }
 
 
@@ -217,4 +217,9 @@ pub(super) fn stop(state: &mut CDDrive) -> Packet {
     second_packet.cause = IntCause::INT2;
     pre_stop_packet.extra_response = Some(Box::new(second_packet));
     pre_stop_packet
+}
+
+// Filters out some sectors for playing music. We don't care about that here
+pub(super) fn set_filter(state: &mut CDDrive) -> Packet {
+    stat(state, 0xD)
 }

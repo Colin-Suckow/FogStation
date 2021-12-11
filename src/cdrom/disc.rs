@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use super::SectorSize;
 
 pub(super) const SECTORS_PER_SECOND: usize = 75;
@@ -20,7 +22,7 @@ pub fn dec_to_bcd(dec: usize) -> usize {
 }
 
 impl DiscIndex {
-    pub fn new(minutes: usize, seconds: usize, sectors: usize) -> Self {
+    pub fn new_bcd(minutes: usize, seconds: usize, sectors: usize) -> Self {
         Self {
             minutes: bcd_to_dec(minutes),
             seconds: bcd_to_dec(seconds),
@@ -36,11 +38,13 @@ impl DiscIndex {
         }
     }
 
-    pub fn as_address(&self) -> u32 {
+    pub fn sector_number(&self) -> usize {
         let total_seconds = (self.minutes * 60) +self.seconds;
-        let total_frames = ((total_seconds * SECTORS_PER_SECOND) + self.sectors) - 150;
-        //println!(">>>>>>> Self {:?} SECTOR {}", self, total_frames);
-        (total_frames * BYTES_PER_SECTOR) as u32
+        ((total_seconds * SECTORS_PER_SECOND) + self.sectors) - 150
+    }
+
+    pub fn as_address(&self) -> u32 {
+        (self.sector_number() * BYTES_PER_SECTOR) as u32
     }
 
     pub fn plus_sector_offset(&self, offset_sectors: usize) -> DiscIndex {
@@ -49,6 +53,12 @@ impl DiscIndex {
         let seconds = raw_seconds % 60;
         let minutes = self.minutes + (raw_seconds / 60);
         DiscIndex::new_dec(minutes, seconds, sectors)
+    }
+}
+
+impl Display for DiscIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "M: {} ({}) S: {} ({}) F: {} ({}) - dec (bcd)", self.minutes, dec_to_bcd(self.minutes), self.seconds, dec_to_bcd(self.seconds), self.sectors, dec_to_bcd(self.sectors))
     }
 }
 
@@ -86,18 +96,12 @@ impl Disc {
         self.tracks.push(track);
     }
 
-    pub fn read_sector(&self, location: DiscIndex, sector_size: &SectorSize) -> &[u8] {
+    pub fn read_sector(&self, location: DiscIndex) -> Sector {
         let address = location.as_address() as usize;
         let (track, track_offset) = self.track_of_offset(address as usize);
         let sector_address = address - track_offset;
-        let data = match sector_size {
-            SectorSize::DataOnly => &track.data[(sector_address + 24)..sector_address + 24 + *sector_size as usize],
-            SectorSize::WholeSector => &track.data[sector_address..sector_address + *sector_size as usize],
-        };
-        //println!("data Byte 0 {:#X}", data[0]);
-        //println!("Reading sector from address {}. Sector mode: {} Sector size {:?}", address, track.data[address + 15], sector_size);
-        //println!("According to the sector header, this is <BCD (DEC)> M: {} ({}) S: {} ({}) F: {} ({})", track.data[(address - track_offset) + 12], bcd_to_dec(track.data[(address - track_offset) + 12] as usize), track.data[(address - track_offset) + 13], bcd_to_dec(track.data[(address - track_offset) + 13] as usize), track.data[(address - track_offset) + 14], bcd_to_dec(track.data[(address - track_offset) + 14] as usize));
-        data
+        let data = &track.data[sector_address..sector_address + SectorSize::WholeSector as usize];
+        Sector::new(data.to_vec())
     }
 
     fn track_of_offset(&self, offset: usize) -> (&DiscTrack, usize) {
@@ -116,3 +120,33 @@ impl Disc {
     }
 }
 
+pub struct Sector {
+    data: Vec<u8>,
+}
+
+impl Sector {
+    pub fn new(data: Vec<u8>) -> Self {
+        Self {
+            data,
+        }
+    }
+
+    pub fn index(&self) -> DiscIndex {
+        DiscIndex::new_bcd(self.data[12].into(), self.data[13].into(), self.data[14].into())
+    }
+
+    pub fn full_sector_data(&self) -> &[u8] {
+        &self.data[0xC..]
+    }
+
+    pub fn data_only(&self) -> &[u8] {
+        &self.data[24..24 + 0x800]
+    }
+
+    pub fn consume(self, sector_size: &SectorSize) -> Vec<u8> {
+        match sector_size {
+            SectorSize::DataOnly =>  self.data[24..24 + 0x800].to_vec(),
+            SectorSize::WholeSector => self.data[0xC..].to_vec(),
+        }
+    }
+}

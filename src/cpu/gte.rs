@@ -725,13 +725,13 @@ impl GTE {
             + (self.L32 as i64 * self.VY0 as i64)
             + (self.L33 as i64 * self.VZ0 as i64);
 
-        // self.truncate_write_mac1(dot_x_light, shift);
-        // self.truncate_write_mac2(dot_y_light, shift);
-        // self.truncate_write_mac3(dot_z_light, shift);
+        self.truncate_write_mac1(dot_x_light, shift);
+        self.truncate_write_mac2(dot_y_light, shift);
+        self.truncate_write_mac3(dot_z_light, shift);
 
-        self.truncate_write_ir1((dot_x_light >> shift) as i32, lm);
-        self.truncate_write_ir2((dot_y_light >> shift) as i32, lm);
-        self.truncate_write_ir3((dot_z_light >> shift) as i32, lm);
+        self.truncate_write_ir1(self.MAC1, lm);
+        self.truncate_write_ir2(self.MAC2, lm);
+        self.truncate_write_ir3(self.MAC3, lm);
 
         // [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (BK*1000h + LCM*IR) SAR (sf*12)
 

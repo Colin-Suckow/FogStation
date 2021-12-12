@@ -383,6 +383,7 @@ impl Gpu {
                         ];
 
                         trace!("points {:?}", points);
+                        
 
                         for point in &mut points {
                             point.x += self.draw_offset.x;
@@ -1568,16 +1569,17 @@ impl Gpu {
                 self.vram[addr]
             }
             TextureColorMode::EightBit => {
-                let tex_x = (page_x * 64) as u32 + (x / 2) as u32;
-                let tex_y = (page_y * 256) as u32 + y as u32;
-                let (masked_x, masked_y) = self.apply_texture_mask(tex_x, tex_y);
-                let value = self.vram[min(point_to_address(masked_x, masked_y) as usize, 524287)];
-                let clut_index = (value >> (x % 2) * 8) & 0xF;
-                self.vram[min(
-                    point_to_address((clut_x * 16 + clut_index as u32) as u32, clut_y as u32)
-                        as usize,
-                    524287,
-                )]
+                // let tex_x = (page_x * 64) as u32 + (x / 2) as u32;
+                // let tex_y = (page_y * 256) as u32 + y as u32;
+                // let (masked_x, masked_y) = self.apply_texture_mask(tex_x, tex_y);
+                // let value = self.vram[min(point_to_address(masked_x, masked_y) as usize, 524287)];
+                // let clut_index = (value >> (x % 2) * 8) & 0xF;
+                // self.vram[min(
+                //     point_to_address((clut_x * 16 + clut_index as u32) as u32, clut_y as u32)
+                //         as usize,
+                //     524287,
+                // )]
+                0xFF
             }
             TextureColorMode::FourBit => {
                 let tex_x = (page_x * 64) as u32 + (x / 4) as u32;
@@ -1594,12 +1596,12 @@ impl Gpu {
                 ) as usize]
             }
         };
-        if self.blend_enabled {
-            pixel_val & self.blend_color
-        } else {
-            pixel_val
-        }
-        //pixel_val
+        // if self.blend_enabled {
+        //     pixel_val & self.blend_color
+        // } else {
+        //     pixel_val
+        // }
+        pixel_val
     }
 }
 

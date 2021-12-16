@@ -19,6 +19,12 @@ enum TextureColorMode {
     FifteenBit,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+enum TextureDraw {
+    Flat,
+    Shaded,
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct Resolution {
     pub height: u32,
@@ -77,6 +83,16 @@ impl Point {
             x: sign_extend((word & 0x7FF) as i32, 11),
             y: sign_extend(((word >> 16) & 0x7FF) as i32, 11),
             color: 0,
+            tex_x,
+            tex_y,
+        }
+    }
+
+    fn new_textured_point_with_color(word: u32, tex_y: i16, tex_x: i16, color: u16) -> Self {
+        Self {
+            x: sign_extend((word & 0x7FF) as i32, 11),
+            y: sign_extend(((word >> 16) & 0x7FF) as i32, 11),
+            color,
             tex_x,
             tex_y,
         }
@@ -360,25 +376,29 @@ impl Gpu {
                         trace!("Tried to try draw texture blended quad!");
 
                         let mut points: Vec<Point> = vec![
-                            Point::new_textured_point(
+                            Point::new_textured_point_with_color(
                                 self.gp0_buffer[1],
                                 ((self.gp0_buffer[2] >> 8) & 0xFF) as i16,
                                 (self.gp0_buffer[2] & 0xFF) as i16,
+                                fill,
                             ),
-                            Point::new_textured_point(
+                            Point::new_textured_point_with_color(
                                 self.gp0_buffer[4],
                                 ((self.gp0_buffer[5] >> 8) & 0xFF) as i16,
                                 (self.gp0_buffer[5] & 0xFF) as i16,
+                                b24color_to_b15color(self.gp0_buffer[3] & 0x1FFFFFF)
                             ),
-                            Point::new_textured_point(
+                            Point::new_textured_point_with_color(
                                 self.gp0_buffer[7],
                                 ((self.gp0_buffer[8] >> 8) & 0xFF) as i16,
                                 (self.gp0_buffer[8] & 0xFF) as i16,
+                                b24color_to_b15color(self.gp0_buffer[6] & 0x1FFFFFF)
                             ),
-                            Point::new_textured_point(
+                            Point::new_textured_point_with_color(
                                 self.gp0_buffer[10],
                                 ((self.gp0_buffer[11] >> 8) & 0xFF) as i16,
                                 (self.gp0_buffer[11] & 0xFF) as i16,
+                                b24color_to_b15color(self.gp0_buffer[9] & 0x1FFFFFF)
                             ),
                         ];
 
@@ -412,6 +432,7 @@ impl Gpu {
                                 page_y,
                                 clut_x,
                                 clut_y,
+                                TextureDraw::Shaded,
                             );
                         }
                     } else if is_textured {
@@ -469,6 +490,7 @@ impl Gpu {
                                 page_y,
                                 clut_x,
                                 clut_y,
+                                TextureDraw::Flat,
                             );
                         }
                     } else if is_gouraud {
@@ -543,20 +565,23 @@ impl Gpu {
                         );
 
                         let mut points: Vec<Point> = vec![
-                            Point::new_textured_point(
+                            Point::new_textured_point_with_color(
                                 self.gp0_buffer[1],
                                 ((self.gp0_buffer[2] >> 8) & 0xFF) as i16,
                                 (self.gp0_buffer[2] & 0xFF) as i16,
+                                fill
                             ),
-                            Point::new_textured_point(
+                            Point::new_textured_point_with_color(
                                 self.gp0_buffer[4],
                                 ((self.gp0_buffer[5] >> 8) & 0xFF) as i16,
                                 (self.gp0_buffer[5] & 0xFF) as i16,
+                                b24color_to_b15color(self.gp0_buffer[3] & 0x1FFFFFF)
                             ),
-                            Point::new_textured_point(
+                            Point::new_textured_point_with_color(
                                 self.gp0_buffer[7],
                                 ((self.gp0_buffer[8] >> 8) & 0xFF) as i16,
                                 (self.gp0_buffer[8] & 0xFF) as i16,
+                                b24color_to_b15color(self.gp0_buffer[6] & 0x1FFFFFF)
                             ),
                         ];
 
@@ -590,6 +615,7 @@ impl Gpu {
                                 page_y,
                                 clut_x,
                                 clut_y,
+                                TextureDraw::Shaded,
                             );
                         }
                     } else if is_textured {
@@ -640,6 +666,7 @@ impl Gpu {
                                 page_y,
                                 clut_x,
                                 clut_y,
+                                TextureDraw::Flat
                             );
                         }
                     } else if is_gouraud {
@@ -1453,6 +1480,7 @@ impl Gpu {
         page_y: u32,
         clut_x: u32,
         clut_y: u32,
+        draw_type: TextureDraw,
     ) {
         fn edge_function(a: &Point, b: &Point, c: &Vector2<i32>) -> isize {
             (c.x as isize - a.x as isize) * (b.y as isize - a.y as isize)
@@ -1502,10 +1530,29 @@ impl Gpu {
 
                     //println!("tex_x {} tex_y {}", tex_x, tex_y);
 
-                    let fill =
+                    let tex_fill =
                         self.get_texel(tex_x as i32, tex_y as i32, page_x, page_y, clut_x, clut_y);
 
-                    self.composite_and_place_pixel(addr as usize, fill, transparent);
+                    let final_fill = if draw_type == TextureDraw::Shaded {
+                        let c1 = b15_to_rgb(points[0].color);
+                        let c2 = b15_to_rgb(points[1].color);
+                        let c3 = b15_to_rgb(points[2].color);
+
+                        let shaded_red = ((w0 * c1.0 as f32) + (w1 * c2.0 as f32) + (w2 * c3.0 as f32)) as u16;
+                        let shaded_green = ((w0 * c1.1 as f32) + (w1 * c2.1 as f32) + (w2 * c3.1 as f32)) as u16;
+                        let shaded_blue = ((w0 * c1.2 as f32) + (w1 * c2.2 as f32) + (w2 * c3.2 as f32)) as u16;
+
+                        let tex_colors = b15_to_rgb(tex_fill);
+
+                        let final_red = clamp((((tex_colors.0 as u16) << 3) * shaded_red) >> 7, 0, 255);
+                        let final_green = clamp((((tex_colors.1 as u16) << 3) * shaded_green) >> 7, 0, 255);
+                        let final_blue = clamp((((tex_colors.2 as u16) << 3) * shaded_blue) >> 7, 0, 255);
+                        rgb_to_b15(final_red as u8, final_green as u8, final_blue as u8)
+                    } else {
+                        tex_fill
+                    };
+
+                    self.composite_and_place_pixel(addr as usize, final_fill, transparent);
                 }
             }
         }
@@ -1529,6 +1576,7 @@ impl Gpu {
         page_y: u32,
         clut_x: u32,
         clut_y: u32,
+        draw_type: TextureDraw,
     ) {
         self.draw_textured_triangle(
             &[points[0], points[2], points[1]],
@@ -1537,6 +1585,7 @@ impl Gpu {
             page_y,
             clut_x,
             clut_y,
+            draw_type
         );
         self.draw_textured_triangle(
             &[points[1], points[2], points[3]],
@@ -1545,6 +1594,7 @@ impl Gpu {
             page_y,
             clut_x,
             clut_y,
+            draw_type
         );
     }
 
@@ -1574,7 +1624,7 @@ impl Gpu {
                 let value = self.vram[min(point_to_address(masked_x, masked_y) as usize, 524287)];
                 let clut_index = (value >> (x % 2) * 8) & 0xF;
                 self.vram[min(
-                    point_to_address((clut_x * 16 + clut_index as u32) as u32, clut_y as u32)
+                    point_to_address((clut_x * 16 + (clut_index & 0xF) as u32) as u32, clut_y as u32)
                         as usize,
                     524287,
                 )]
@@ -1594,12 +1644,7 @@ impl Gpu {
                 ) as usize]
             }
         };
-        if self.blend_enabled {
-            pixel_val & self.blend_color
-        } else {
-            pixel_val
-        }
-        //pixel_val
+        pixel_val
     }
 }
 
@@ -1616,16 +1661,16 @@ fn b24color_to_b15color(color: u32) -> u16 {
 
 fn b15_to_rgb(color: u16) -> (u8, u8, u8) {
     (
-        ((color >> 10) & 0x1F) as u8,
-        ((color >> 5) & 0x1F) as u8,
-        (color & 0x1F) as u8,
+        ((color >> 10) & 0x1F) as u8,  //red
+        ((color >> 5) & 0x1F) as u8,   //green
+        (color & 0x1F) as u8,          //blue
     )
 }
 
 fn rgb_to_b15(r: u8, g: u8, b: u8) -> u16 {
-    ((clamp(r, 0, 0xFF) as u16) << 10)
-        | ((clamp(g, 0, 0xFF) as u16) << 5)
-        | (clamp(b, 0, 0xFF) as u16)
+    (((r & 0x1F) as u16) << 10)
+        | (((g & 0x1F) as u16) << 5)
+        | ((b & 0x1F) as u16)
 }
 
 fn lerp_color(y0: u16, y1: u16, x0: i32, x1: i32, x: i32) -> u16 {

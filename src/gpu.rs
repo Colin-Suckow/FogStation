@@ -935,7 +935,8 @@ impl Gpu {
                 if height == 0 {
                     height = 512
                 };
-                let length = ((width * height) / 2) + if width % 2 != 0 { 1 } else { 0 } + 3;
+                let extra_word = if (width * height) % 2 != 0 {1} else {0};
+                let length = ((width * height + extra_word) / 2)  + 3;
                 if self.gp0_buffer.len() < length as usize {
                     //Not enough commands
                     return;
@@ -1455,9 +1456,9 @@ impl Gpu {
 
                     let blue = (w0 * c1.2 as f32) + (w1 * c2.2 as f32) + (w2 * c3.2 as f32);
 
-                    let mut fill = (((red as u8 as u16) & 0x1f) << 10)
+                    let mut fill = (((blue as u8 as u16) & 0x1f) << 10)
                         | ((green as u8 as u16) << 5)
-                        | (blue as u8 as u16);
+                        | (red as u8 as u16);
 
                     if points[0].color.get_bit(15)
                         || points[1].color.get_bit(15)
@@ -1653,24 +1654,24 @@ fn point_to_address(x: u32, y: u32) -> u32 {
 }
 
 fn b24color_to_b15color(color: u32) -> u16 {
-    let r = ((color >> 16) & 0xFF) / 8;
+    let b = ((color >> 16) & 0xFF) / 8;
     let g = ((color >> 8) & 0xFF) / 8;
-    let b = (color & 0xFF) / 8;
-    ((r << 10) | (g << 5) | b) as u16
+    let r = (color & 0xFF) / 8;
+    (((b & 0x1F) << 10) | ((g & 0x1F) << 5) | r & 0x1F) as u16
 }
 
 fn b15_to_rgb(color: u16) -> (u8, u8, u8) {
     (
-        ((color >> 10) & 0x1F) as u8,  //red
+        (color & 0x1F) as u8,          //red
         ((color >> 5) & 0x1F) as u8,   //green
-        (color & 0x1F) as u8,          //blue
+        ((color >> 10) & 0x1F) as u8,  //blue
     )
 }
 
 fn rgb_to_b15(r: u8, g: u8, b: u8) -> u16 {
-    (((r & 0x1F) as u16) << 10)
+    (((b & 0x1F) as u16) << 10)
         | (((g & 0x1F) as u16) << 5)
-        | ((b & 0x1F) as u16)
+        | ((r & 0x1F) as u16)
 }
 
 fn lerp_color(y0: u16, y1: u16, x0: i32, x1: i32, x: i32) -> u16 {

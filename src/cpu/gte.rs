@@ -735,15 +735,15 @@ impl GTE {
 
         // [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (BK*1000h + LCM*IR) SAR (sf*12)
 
-        let dot_x_color = (self.RBK as i64 * 0x1000)
+        let dot_x_color = ((self.RBK as i64) << 12)
             + (self.LR1 as i64 * self.IR1 as i64)
             + (self.LR2 as i64 * self.IR2 as i64)
             + (self.LR3 as i64 * self.IR3 as i64);
-        let dot_y_color = (self.GBK as i64 * 0x1000)
+        let dot_y_color = ((self.GBK as i64) << 12)
             + (self.LG1 as i64 * self.IR1 as i64)
             + (self.LG2 as i64 * self.IR2 as i64)
             + (self.LG3 as i64 * self.IR3 as i64);
-        let dot_z_color = (self.BBK as i64 * 0x1000)
+        let dot_z_color = ((self.BBK as i64) << 12)
             + (self.LB1 as i64 * self.IR1 as i64)
             + (self.LB2 as i64 * self.IR2 as i64)
             + (self.LB3 as i64 * self.IR3 as i64);

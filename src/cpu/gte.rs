@@ -896,7 +896,7 @@ impl GTE {
     }
 
     fn avsz4(&mut self) {
-        let result = (self.ZSF3 as i64)
+        let result = (self.ZSF4 as i64)
             * ((self.SZ0 as u32) + (self.SZ1 as u32) + (self.SZ2 as u32) + (self.SZ3 as u32))
                 as i64;
 

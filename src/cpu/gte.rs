@@ -498,6 +498,7 @@ impl GTE {
             0x1c => self.cc(command),
             0x1e => self.ncs(command),
             0x20 => self.nct(command),
+            0x28 => self.sqr(command),
             0x30 => self.rtpt(command),
             0x2d => self.avsz3(),
             0x2e => self.avsz4(),
@@ -847,15 +848,18 @@ impl GTE {
         self.do_nccs(self.VX2, self.VY2, self.VZ2, shift, lm);
     }
 
-    // fn nct(&mut self) {
-    //     warn!("Stubbing colors for now");
-    //     self.RGB2 = self.RGBC.clone();
-    // }
+    fn sqr(&mut self, command: u32) {
+        let shift = (command.get_bit(19) as usize) * 12;
+        let lm = command.get_bit(10);
 
-    // fn ncs(&mut self) {
-    //     warn!("Stubbing colors for now");
-    //     self.RGB2 = self.RGBC.clone();
-    // }
+        self.truncate_write_mac1((self.IR1 as i64).pow(2), shift);
+        self.truncate_write_mac2((self.IR2 as i64).pow(2), shift);
+        self.truncate_write_mac3((self.IR3 as i64).pow(2), shift);
+
+        self.truncate_write_ir1(self.MAC1, lm);
+        self.truncate_write_ir2(self.MAC2, lm);
+        self.truncate_write_ir3(self.MAC3, lm);
+    }
 
     fn avsz3(&mut self) {
         let result =

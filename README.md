@@ -32,7 +32,7 @@ A toy playstation 1 emulator written in rust. Capable of emulating most of the p
 | Puzzle Bobble 2 | :heavy_check_mark: | Minor color issues, but completely playable otherwise                                           |
 | Bust a Move 2   | :x:                | US version of Puzzle Bobble 2. Halts on exception after loading                                 |
 | Crash Bandicoot | :question:         | Moderate texture issues, but playable otherwise                                                 |
-| Ridge Racer     | :eyes:             | Playable, but with major vertex explosions. Do not play if you are sensitive to flashing images |
+| Ridge Racer     | :heavy_check_mark: | Playable with only minor texture issues                                                         |
 
 ## Building
 

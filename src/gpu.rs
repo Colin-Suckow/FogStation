@@ -312,7 +312,7 @@ impl Gpu {
                             //Not enough commands
                             return;
                         }
-                        trace!("Quick rec");
+                        trace!("Quick rect");
 
                         let mut p1 = Point::from_components(
                             (self.gp0_buffer[1] & 0x3F0) as i32,
@@ -335,8 +335,9 @@ impl Gpu {
                             p1.y as u32,
                             p2.x as u32,
                             p2.y as u32,
-                            b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF) + 1,
+                            b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
                             false,
+                            true,
                             true,
                         );
                     }
@@ -772,7 +773,7 @@ impl Gpu {
 
                         let address = point_to_address(point.x as u32, point.y as u32) as usize;
                         let fill = b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF);
-                        self.composite_and_place_pixel(address, fill, false);
+                        self.composite_and_place_pixel(address, fill, false, false);
                     }
 
                     0b0 => {
@@ -810,6 +811,7 @@ impl Gpu {
                                 b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
                                 command.get_bit(25),
                                 true,
+                                false,
                             );
                         }
                     }
@@ -845,6 +847,7 @@ impl Gpu {
                                 b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
                                 command.get_bit(25),
                                 true,
+                                false
                             );
                         }
                     }
@@ -880,6 +883,7 @@ impl Gpu {
                                 b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
                                 command.get_bit(25),
                                 true,
+                                false,
                             );
                         }
                     }
@@ -1271,13 +1275,14 @@ impl Gpu {
         fill: u16,
         transparent: bool,
         clip: bool,
+        is_quick_fill: bool
     ) {
         for x in x1..x2 {
             if clip && self.out_of_draw_area(&Point::from_components(x as i32, y as i32, 0)) {
                 continue;
             }
             let address = point_to_address(x, y) as usize;
-            self.composite_and_place_pixel(address, fill, transparent);
+            self.composite_and_place_pixel(address, fill, transparent, is_quick_fill);
         }
     }
 
@@ -1317,19 +1322,20 @@ impl Gpu {
                 self.palette_y as u32,
             );
 
-            self.composite_and_place_pixel(address, fill, transparent);
+            self.composite_and_place_pixel(address, fill, transparent, false);
         }
     }
 
-    fn composite_and_place_pixel(&mut self, addr: usize, fill: u16, transparent: bool) {
+    fn composite_and_place_pixel(&mut self, addr: usize, fill: u16, transparent: bool, allow_black: bool) {
         let color = if transparent && fill.get_bit(15) {
             alpha_composite(self.vram[addr], fill, &self.blend_mode)
         } else {
             fill
         };
-        if color != 0 {
-            self.vram[min(addr, 524287)] = color;
+        if (!allow_black && color == 0) && !(color == 0x8000 && !transparent) {
+            return;
         }
+        self.vram[min(addr, 524287)] = color;
     }
 
     fn draw_solid_box(
@@ -1341,9 +1347,10 @@ impl Gpu {
         fill: u16,
         transparent: bool,
         clip: bool,
+        is_quick_fill: bool,
     ) {
         for y in y1..y2 {
-            self.draw_horizontal_line(x1, x2, y, fill, transparent, clip);
+            self.draw_horizontal_line(x1, x2, y, fill, transparent, clip, is_quick_fill);
         }
     }
 
@@ -1391,22 +1398,6 @@ impl Gpu {
     }
 
     fn draw_shaded_triangle(&mut self, in_points: &[Point], transparent: bool) {
-        // let mut sp = points.to_vec();
-        // sp.sort_by_key(|p| p.y);
-
-        // if sp[1].y == sp[2].y {
-        //     self.draw_shaded_flat_bottom_triangle(sp[0], sp[1], sp[2], transparent);
-        // } else if sp[0].y == sp[1].y {
-        //     self.draw_shaded_flat_top_triangle(sp[0], sp[1], sp[2], transparent);
-        // } else {
-        //     let bound_x = (sp[0].x
-        //         + ((sp[1].y - sp[0].y) as f32 / (sp[2].y - sp[0].y) as f32) as i32
-        //             * (sp[2].x - sp[0].x)) as i32;
-        //     let bound_point = Point::from_components(bound_x, sp[1].y, sp[2].color);
-        //     self.draw_shaded_flat_bottom_triangle(sp[0], bound_point, sp[1], transparent);
-        //     self.draw_shaded_flat_top_triangle(sp[1], bound_point, sp[2], transparent);
-        // }
-
         fn edge_function(a: &Point, b: &Point, c: &Vector2<i32>) -> isize {
             (c.x as isize - a.x as isize) * (b.y as isize - a.y as isize)
                 - (c.y as isize - a.y as isize) * (b.x as isize - a.x as isize)
@@ -1467,7 +1458,7 @@ impl Gpu {
                         fill.set_bit(15, true);
                     }
 
-                    self.composite_and_place_pixel(addr as usize, fill, transparent);
+                    self.composite_and_place_pixel(addr as usize, fill, transparent, false);
                 }
             }
         }
@@ -1534,6 +1525,7 @@ impl Gpu {
                     let tex_fill =
                         self.get_texel(tex_x as i32, tex_y as i32, page_x, page_y, clut_x, clut_y);
 
+
                     let final_fill = if draw_type == TextureDraw::Shaded {
                         let c1 = b15_to_rgb(points[0].color);
                         let c2 = b15_to_rgb(points[1].color);
@@ -1548,12 +1540,12 @@ impl Gpu {
                         let final_red = clamp((((tex_colors.0 as u16) << 3) * shaded_red) >> 7, 0, 255);
                         let final_green = clamp((((tex_colors.1 as u16) << 3) * shaded_green) >> 7, 0, 255);
                         let final_blue = clamp((((tex_colors.2 as u16) << 3) * shaded_blue) >> 7, 0, 255);
-                        rgb_to_b15(final_red as u8, final_green as u8, final_blue as u8)
+                        rgb_to_b15(final_red as u8, final_green as u8, final_blue as u8) | (tex_fill & 0x8000)
                     } else {
                         tex_fill
                     };
-
-                    self.composite_and_place_pixel(addr as usize, final_fill, transparent);
+                    
+                    self.composite_and_place_pixel(addr as usize, final_fill, transparent, false);
                 }
             }
         }

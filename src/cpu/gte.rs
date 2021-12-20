@@ -499,6 +499,7 @@ impl GTE {
             0x1e => self.ncs(command),
             0x20 => self.nct(command),
             0x28 => self.sqr(command),
+            0x29 => self.dpcl(command),
             0x30 => self.rtpt(command),
             0x2d => self.avsz3(),
             0x2e => self.avsz4(),
@@ -807,6 +808,23 @@ impl GTE {
         self.truncate_write_mac1(((self.RGBC.r as u64) << 16) as i64, 0);
         self.truncate_write_mac2(((self.RGBC.g as u64) << 16) as i64, 0);
         self.truncate_write_mac3(((self.RGBC.b as u64) << 16) as i64, 0);
+
+        self.interpolate_color(self.MAC1, self.MAC2, self.MAC3, lm, shift);
+
+        let final_color =
+            self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
+
+        self.push_color(final_color);
+    }
+
+    fn dpcl(&mut self, command: u32) {
+        let shift = (command.get_bit(19) as usize) * 12;
+        let lm = command.get_bit(10);
+
+        // [MAC1,MAC2,MAC3] = [R*IR1,G*IR2,B*IR3] SHL 4
+        self.truncate_write_mac1((self.RGBC.r as u64 as i64 * self.IR1 as i64) << 4, 0);
+        self.truncate_write_mac2((self.RGBC.g as u64 as i64 * self.IR2 as i64) << 4, 0);
+        self.truncate_write_mac3((self.RGBC.b as u64 as i64 * self.IR3 as i64) << 4, 0);
 
         self.interpolate_color(self.MAC1, self.MAC2, self.MAC3, lm, shift);
 

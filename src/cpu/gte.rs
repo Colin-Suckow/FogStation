@@ -494,9 +494,11 @@ impl GTE {
             0x13 => self.ncds(command),
             0x14 => self.cdp(command),
             0x16 => self.ncdt(command),
+            0x1b => self.nccs(command),
             0x30 => self.rtpt(command),
             0x2d => self.avsz3(),
             0x2e => self.avsz4(),
+            0x3f => self.ncct(command),
             _ => (),
             //_ => println!("Unknown GTE command {:#X}!", command & 0x3F)
         };
@@ -701,7 +703,6 @@ impl GTE {
         let lm = command.get_bit(10);
 
         self.do_ncds(self.VX0, self.VY0, self.VZ0, shift, lm);
-       
     }
 
     fn ncdt(&mut self, command: u32) {
@@ -711,16 +712,15 @@ impl GTE {
         self.do_ncds(self.VX0, self.VY0, self.VZ0, shift, lm);
         self.do_ncds(self.VX1, self.VY1, self.VZ1, shift, lm);
         self.do_ncds(self.VX2, self.VY2, self.VZ2, shift, lm);
-
     }
 
     fn cdp(&mut self, command: u32) {
         let shift = (command.get_bit(19) as usize) * 12;
         let lm = command.get_bit(10);
 
-         // [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (BK*1000h + LCM*IR) SAR (sf*12)
+        // [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (BK*1000h + LCM*IR) SAR (sf*12)
 
-         let (dot_x_color, dot_y_color, dot_z_color) = self.mul_matrix_color_with_offset(
+        let (dot_x_color, dot_y_color, dot_z_color) = self.mul_matrix_color_with_offset(
             self.IR1, self.IR2, self.IR3, self.RBK, self.GBK, self.BBK,
         );
 
@@ -739,6 +739,36 @@ impl GTE {
         self.truncate_write_mac3((self.RGBC.b as u64 as i64 * self.IR3 as i64) << 4, 0);
 
         self.interpolate_color(self.MAC1, self.MAC2, self.MAC3, lm, shift);
+
+        let final_color =
+            self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
+
+        self.push_color(final_color);
+    }
+
+    fn cc(&mut self, command: u32) {
+        let shift = (command.get_bit(19) as usize) * 12;
+        let lm = true; // lm is always true for cc
+
+        // [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (BK*1000h + LCM*IR) SAR (sf*12)
+
+        let (dot_x_color, dot_y_color, dot_z_color) = self.mul_matrix_color_with_offset(
+            self.IR1, self.IR2, self.IR3, self.RBK, self.GBK, self.BBK,
+        );
+
+        self.truncate_write_mac1(dot_x_color, shift);
+        self.truncate_write_mac2(dot_y_color, shift);
+        self.truncate_write_mac3(dot_z_color, shift);
+
+        self.truncate_write_ir1((dot_x_color >> shift) as i32, lm);
+        self.truncate_write_ir2((dot_y_color >> shift) as i32, lm);
+        self.truncate_write_ir3((dot_z_color >> shift) as i32, lm);
+
+        // [MAC1,MAC2,MAC3] = [R*IR1,G*IR2,B*IR3] SHL 4
+
+        self.truncate_write_mac1((self.RGBC.r as u64 as i64 * self.IR1 as i64) << 4, 0);
+        self.truncate_write_mac2((self.RGBC.g as u64 as i64 * self.IR2 as i64) << 4, 0);
+        self.truncate_write_mac3((self.RGBC.b as u64 as i64 * self.IR3 as i64) << 4, 0);
 
         let final_color =
             self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
@@ -776,6 +806,22 @@ impl GTE {
             self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
 
         self.push_color(final_color);
+    }
+
+    fn nccs(&mut self, command: u32) {
+        let shift = (command.get_bit(19) as usize) * 12;
+        let lm = command.get_bit(10);
+
+        self.do_nccs(self.VX0, self.VY0, self.VZ0, shift, lm);
+    }
+
+    fn ncct(&mut self, command: u32) {
+        let shift = (command.get_bit(19) as usize) * 12;
+        let lm = command.get_bit(10);
+
+        self.do_nccs(self.VX0, self.VY0, self.VZ0, shift, lm);
+        self.do_nccs(self.VX1, self.VY1, self.VZ1, shift, lm);
+        self.do_nccs(self.VX2, self.VY2, self.VZ2, shift, lm);
     }
 
     // fn nct(&mut self) {
@@ -912,10 +958,9 @@ impl GTE {
     }
 
     fn do_ncds(&mut self, vx: i16, vy: i16, vz: i16, shift: usize, lm: bool) {
-         //  [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (LLM*V0) SAR (sf*12)
+        //  [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (LLM*V0) SAR (sf*12)
 
-         let (dot_x_light, dot_y_light, dot_z_light) =
-         self.mul_matrix_light(vx, vy, vz);
+        let (dot_x_light, dot_y_light, dot_z_light) = self.mul_matrix_light(vx, vy, vz);
 
         self.truncate_write_mac1(dot_x_light, shift);
         self.truncate_write_mac2(dot_y_light, shift);
@@ -946,6 +991,48 @@ impl GTE {
         self.truncate_write_mac3((self.RGBC.b as u64 as i64 * self.IR3 as i64) << 4, 0);
 
         self.interpolate_color(self.MAC1, self.MAC2, self.MAC3, lm, shift);
+
+        let final_color =
+            self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
+
+        self.push_color(final_color);
+    }
+
+    fn do_nccs(&mut self, vx: i16, vy: i16, vz: i16, shift: usize, lm: bool) {
+        //  [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (LLM*V0) SAR (sf*12)
+        let (dot_x_light, dot_y_light, dot_z_light) = self.mul_matrix_light(vx, vy, vz);
+
+        self.truncate_write_mac1(dot_x_light, shift);
+        self.truncate_write_mac2(dot_y_light, shift);
+        self.truncate_write_mac3(dot_z_light, shift);
+
+        self.truncate_write_ir1((dot_x_light >> shift) as i32, lm);
+        self.truncate_write_ir2((dot_y_light >> shift) as i32, lm);
+        self.truncate_write_ir3((dot_z_light >> shift) as i32, lm);
+
+        // [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (BK*1000h + LCM*IR) SAR (sf*12)
+
+        let (dot_x_color, dot_y_color, dot_z_color) = self.mul_matrix_color_with_offset(
+            self.IR1, self.IR2, self.IR3, self.RBK, self.GBK, self.BBK,
+        );
+
+        self.truncate_write_mac1(dot_x_color, shift);
+        self.truncate_write_mac2(dot_y_color, shift);
+        self.truncate_write_mac3(dot_z_color, shift);
+
+        self.truncate_write_ir1((dot_x_color >> shift) as i32, lm);
+        self.truncate_write_ir2((dot_y_color >> shift) as i32, lm);
+        self.truncate_write_ir3((dot_z_color >> shift) as i32, lm);
+
+        // [MAC1,MAC2,MAC3] = [R*IR1,G*IR2,B*IR3] SHL 4
+
+        self.truncate_write_mac1((self.RGBC.r as i64 * self.IR1 as i64) << 4, shift);
+        self.truncate_write_mac2((self.RGBC.g as i64 * self.IR2 as i64) << 4, shift);
+        self.truncate_write_mac3((self.RGBC.b as i64 * self.IR3 as i64) << 4, shift);
+
+        self.truncate_write_ir1(self.MAC1, lm);
+        self.truncate_write_ir2(self.MAC2, lm);
+        self.truncate_write_ir3(self.MAC3, lm);
 
         let final_color =
             self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
@@ -1029,7 +1116,7 @@ impl GTE {
             }
             _ => (),
         };
-        self.MAC1 = (val >> shift) as i32;
+        self.MAC1 = (val >> shift) as u64 as i32;
     }
 
     fn truncate_write_mac2(&mut self, val: i64, shift: usize) {
@@ -1042,7 +1129,7 @@ impl GTE {
             }
             _ => (),
         };
-        self.MAC2 = (val >> shift) as i32;
+        self.MAC2 = (val >> shift) as u64 as i32;
     }
 
     fn truncate_write_mac3(&mut self, val: i64, shift: usize) {
@@ -1055,7 +1142,7 @@ impl GTE {
             }
             _ => (),
         };
-        self.MAC3 = (val >> shift) as i32;
+        self.MAC3 = (val >> shift) as u64 as i32;
     }
 
     fn truncate_write_ir1(&mut self, val: i32, lm_set: bool) {

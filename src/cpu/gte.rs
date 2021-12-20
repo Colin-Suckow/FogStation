@@ -229,22 +229,22 @@ impl GTE {
         // );
         match reg {
             0 => {
-                self.RT11 = val as i16;
-                self.RT12 = (val >> 16) as u16 as i16;
+                self.RT11 = (val & 0xFFFF) as i16;
+                self.RT12 = (val >> 16) as i16;
             }
             1 => {
-                self.RT13 = val as i16;
+                self.RT13 = (val & 0xFFFF) as i16;
                 self.RT21 = (val >> 16) as i16;
             }
             2 => {
-                self.RT22 = val as i16;
+                self.RT22 = (val & 0xFFFF) as i16;
                 self.RT23 = (val >> 16) as i16;
             }
             3 => {
-                self.RT31 = val as i16;
+                self.RT31 = (val & 0xFFFF) as i16;
                 self.RT32 = (val >> 16) as i16;
             }
-            4 => self.RT33 = val as i16,
+            4 => self.RT33 = (val & 0xFFFF) as i16,
             5 => self.TRX = val as i32,
             6 => self.TRY = val as i32,
             7 => self.TRZ = val as i32,
@@ -312,17 +312,17 @@ impl GTE {
         // );
         match reg {
             0 => {
-                self.VX0 = val as i16;
+                self.VX0 = (val & 0xFFFF) as i16;
                 self.VY0 = (val >> 16) as i16;
             }
             1 => self.VZ0 = val as i16,
             2 => {
-                self.VX1 = val as i16;
+                self.VX1 = (val & 0xFFFF) as i16;
                 self.VY1 = (val >> 16) as i16;
             }
             3 => self.VZ1 = val as i16,
             4 => {
-                self.VX2 = val as i16;
+                self.VX2 = (val & 0xFFFF) as i16;
                 self.VY2 = (val >> 16) as i16;
             }
             5 => self.VZ2 = val as i16,
@@ -334,17 +334,17 @@ impl GTE {
             10 => self.IR2 = val as i16,
             11 => self.IR3 = val as i16,
             12 => {
-                self.SX0 = val as i16;
+                self.SX0 = (val & 0xFFFF) as i16;
                 self.SY0 = (val >> 16) as i16;
             }
 
             13 => {
-                self.SX1 = val as i16;
+                self.SX1 = (val & 0xFFFF) as i16;
                 self.SY1 = (val >> 16) as i16;
             }
 
             14 => {
-                self.SX2 = val as i16;
+                self.SX2 = (val & 0xFFFF) as i16;
                 self.SY2 = (val >> 16) as i16;
             }
 
@@ -504,6 +504,8 @@ impl GTE {
             0x30 => self.rtpt(command),
             0x2d => self.avsz3(),
             0x2e => self.avsz4(),
+            0x3d => self.gpf(command),
+            0x3e => self.gpl(command),
             0x3f => self.ncct(command),
             _ => (),
             //_ => println!("Unknown GTE command {:#X}!", command & 0x3F)
@@ -686,7 +688,6 @@ impl GTE {
     fn rtpt(&mut self, command: u32) {
         let shift = (command.get_bit(19) as usize) * 12;
         let lm = command.get_bit(10);
-
         self.do_rtps(self.VX0, self.VY0, self.VZ0, shift, false, lm);
         self.do_rtps(self.VX1, self.VY1, self.VZ1, shift, false, lm);
         self.do_rtps(self.VX2, self.VY2, self.VZ2, shift, true, lm);
@@ -886,6 +887,42 @@ impl GTE {
         self.truncate_write_ir3(self.MAC3, lm);
     }
 
+    fn gpf(&mut self, command: u32) {
+        let shift = (command.get_bit(19) as usize) * 12;
+        let lm = command.get_bit(10);
+
+        self.truncate_write_mac1(self.IR1 as i64 * self.IR0 as i64, shift);
+        self.truncate_write_mac2(self.IR2 as i64 * self.IR0 as i64, shift);
+        self.truncate_write_mac3(self.IR3 as i64 * self.IR0 as i64, shift);
+
+        self.truncate_write_ir1(self.MAC1, lm);
+        self.truncate_write_ir2(self.MAC2, lm);
+        self.truncate_write_ir3(self.MAC3, lm);
+
+        let final_color =
+            self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
+
+        self.push_color(final_color);
+    }
+
+    fn gpl(&mut self, command: u32) {
+        let shift = (command.get_bit(19) as usize) * 12;
+        let lm = command.get_bit(10);
+
+        self.truncate_write_mac1((self.IR1 as i64 * self.IR0 as i64) + ((self.MAC1 as i64) << shift), shift);
+        self.truncate_write_mac2((self.IR2 as i64 * self.IR0 as i64) + ((self.MAC2 as i64) << shift), shift);
+        self.truncate_write_mac3((self.IR3 as i64 * self.IR0 as i64) + ((self.MAC3 as i64) << shift), shift);
+
+        self.truncate_write_ir1(self.MAC1, lm);
+        self.truncate_write_ir2(self.MAC2, lm);
+        self.truncate_write_ir3(self.MAC3, lm);
+
+        let final_color =
+            self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
+
+        self.push_color(final_color);
+    }
+
     fn avsz3(&mut self) {
         let result =
             (self.ZSF3 as i64) * ((self.SZ1 as u32) + (self.SZ2 as u32) + (self.SZ3 as u32)) as i64;
@@ -978,7 +1015,7 @@ impl GTE {
             (val, _) => val as i16,
         };
 
-        self.truncate_push_sz3((z >> 12) as i32);
+        self.truncate_push_sz3(z >> 12);
 
         //println!("sz3 {}", self.SZ3);
 
@@ -1192,15 +1229,16 @@ impl GTE {
         self.push_sy(new_val as i16);
     }
 
-    fn truncate_push_sz3(&mut self, val: i32) {
-        let (new_val, error) = match val {
+    fn truncate_push_sz3(&mut self, val: i64) {
+        let (new_val, saturated) = match val {
             x if x > 0xFFFF => (0xFFFF, true),
             x if x < 0 => (0, true),
             x => (x as u16, false),
         };
-
         self.push_sz(new_val);
-        self.FLAG.set_bit(18, error);
+        if saturated {
+            self.FLAG.set_bit(18, true);
+        }
     }
 
     fn truncate_write_mac1(&mut self, val: i64, shift: usize) {

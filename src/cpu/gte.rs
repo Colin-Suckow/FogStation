@@ -500,6 +500,7 @@ impl GTE {
             0x20 => self.nct(command),
             0x28 => self.sqr(command),
             0x29 => self.dpcl(command),
+            0x2a => self.dpct(command),
             0x30 => self.rtpt(command),
             0x2d => self.avsz3(),
             0x2e => self.avsz4(),
@@ -804,17 +805,23 @@ impl GTE {
     fn dpcs(&mut self, command: u32) {
         let shift = (command.get_bit(19) as usize) * 12;
         let lm = command.get_bit(10);
+        let in_color = self.RGBC;
+        self.do_dpcs(&in_color, shift, lm);
+    }
 
-        self.truncate_write_mac1(((self.RGBC.r as u64) << 16) as i64, 0);
-        self.truncate_write_mac2(((self.RGBC.g as u64) << 16) as i64, 0);
-        self.truncate_write_mac3(((self.RGBC.b as u64) << 16) as i64, 0);
+    fn dpct(&mut self, command: u32) {
+        let shift = (command.get_bit(19) as usize) * 12;
+        let lm = command.get_bit(10);
 
-        self.interpolate_color(self.MAC1, self.MAC2, self.MAC3, lm, shift);
+        // The color FIFO is getting updated, so doing this three times actually makes sense
+        let in_color = self.RGB0;
+        self.do_dpcs(&in_color, shift, lm);
 
-        let final_color =
-            self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
+        let in_color = self.RGB0;
+        self.do_dpcs(&in_color, shift, lm);
 
-        self.push_color(final_color);
+        let in_color = self.RGB0;
+        self.do_dpcs(&in_color, shift, lm);
     }
 
     fn dpcl(&mut self, command: u32) {
@@ -1110,6 +1117,19 @@ impl GTE {
         self.truncate_write_ir1((dot_x_color >> shift) as i32, lm);
         self.truncate_write_ir2((dot_y_color >> shift) as i32, lm);
         self.truncate_write_ir3((dot_z_color >> shift) as i32, lm);
+
+        let final_color =
+            self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
+
+        self.push_color(final_color);
+    }
+
+    fn do_dpcs(&mut self, in_color: &Color, shift: usize, lm: bool) {
+        self.truncate_write_mac1(((in_color.r as u64) << 16) as i64, 0);
+        self.truncate_write_mac2(((in_color.g as u64) << 16) as i64, 0);
+        self.truncate_write_mac3(((in_color.b as u64) << 16) as i64, 0);
+
+        self.interpolate_color(self.MAC1, self.MAC2, self.MAC3, lm, shift);
 
         let final_color =
             self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);

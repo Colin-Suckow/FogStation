@@ -210,6 +210,8 @@ impl R3000 {
         //Check for vblank
         if self.main_bus.gpu.consume_vblank() {
             self.fire_external_interrupt(InterruptSource::VBLANK);
+            // throw in an spu interrupt too because that thing isn't implemented yet
+            self.fire_external_interrupt(InterruptSource::SPU);
         };
 
         let instruction = self.main_bus.read_word(self.pc);

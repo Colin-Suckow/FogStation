@@ -495,6 +495,7 @@ impl GTE {
             0x14 => self.cdp(command),
             0x16 => self.ncdt(command),
             0x1b => self.nccs(command),
+            0x1c => self.cc(command),
             0x30 => self.rtpt(command),
             0x2d => self.avsz3(),
             0x2e => self.avsz4(),
@@ -748,7 +749,7 @@ impl GTE {
 
     fn cc(&mut self, command: u32) {
         let shift = (command.get_bit(19) as usize) * 12;
-        let lm = true; // lm is always true for cc
+        let lm = command.get_bit(10);
 
         // [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (BK*1000h + LCM*IR) SAR (sf*12)
 
@@ -766,9 +767,13 @@ impl GTE {
 
         // [MAC1,MAC2,MAC3] = [R*IR1,G*IR2,B*IR3] SHL 4
 
-        self.truncate_write_mac1((self.RGBC.r as u64 as i64 * self.IR1 as i64) << 4, 0);
-        self.truncate_write_mac2((self.RGBC.g as u64 as i64 * self.IR2 as i64) << 4, 0);
-        self.truncate_write_mac3((self.RGBC.b as u64 as i64 * self.IR3 as i64) << 4, 0);
+        self.truncate_write_mac1((self.RGBC.r as i64 * self.IR1 as i64) << 4, shift);
+        self.truncate_write_mac2((self.RGBC.g as i64 * self.IR2 as i64) << 4, shift);
+        self.truncate_write_mac3((self.RGBC.b as i64 * self.IR3 as i64) << 4, shift);
+
+        self.truncate_write_ir1(self.MAC1, lm);
+        self.truncate_write_ir2(self.MAC2, lm);
+        self.truncate_write_ir3(self.MAC3, lm);
 
         let final_color =
             self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);

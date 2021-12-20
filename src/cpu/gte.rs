@@ -492,6 +492,7 @@ impl GTE {
             0x11 => self.intpl(command),
             0x12 => self.mvmva(command),
             0x13 => self.ncds(command),
+            0x14 => self.cdp(command),
             0x30 => self.rtpt(command),
             0x2d => self.avsz3(),
             0x2e => self.avsz4(),
@@ -716,6 +717,38 @@ impl GTE {
         // [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (BK*1000h + LCM*IR) SAR (sf*12)
 
         let (dot_x_color, dot_y_color, dot_z_color) = self.mul_matrix_color_with_offset(
+            self.IR1, self.IR2, self.IR3, self.RBK, self.GBK, self.BBK,
+        );
+
+        self.truncate_write_mac1(dot_x_color, shift);
+        self.truncate_write_mac2(dot_y_color, shift);
+        self.truncate_write_mac3(dot_z_color, shift);
+
+        self.truncate_write_ir1((dot_x_color >> shift) as i32, lm);
+        self.truncate_write_ir2((dot_y_color >> shift) as i32, lm);
+        self.truncate_write_ir3((dot_z_color >> shift) as i32, lm);
+
+        // [MAC1,MAC2,MAC3] = [R*IR1,G*IR2,B*IR3] SHL 4
+
+        self.truncate_write_mac1((self.RGBC.r as u64 as i64 * self.IR1 as i64) << 4, 0);
+        self.truncate_write_mac2((self.RGBC.g as u64 as i64 * self.IR2 as i64) << 4, 0);
+        self.truncate_write_mac3((self.RGBC.b as u64 as i64 * self.IR3 as i64) << 4, 0);
+
+        self.interpolate_color(self.MAC1, self.MAC2, self.MAC3, lm, shift);
+
+        let final_color =
+            self.make_color(self.MAC1 >> 4, self.MAC2 >> 4, self.MAC3 >> 4, self.RGBC.c);
+
+        self.push_color(final_color);
+    }
+
+    fn cdp(&mut self, command: u32) {
+        let shift = (command.get_bit(19) as usize) * 12;
+        let lm = command.get_bit(10);
+
+         // [IR1,IR2,IR3] = [MAC1,MAC2,MAC3] = (BK*1000h + LCM*IR) SAR (sf*12)
+
+         let (dot_x_color, dot_y_color, dot_z_color) = self.mul_matrix_color_with_offset(
             self.IR1, self.IR2, self.IR3, self.RBK, self.GBK, self.BBK,
         );
 

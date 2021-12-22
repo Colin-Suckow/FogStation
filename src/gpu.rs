@@ -946,7 +946,7 @@ impl Gpu {
                     //Not enough commands
                     return;
                 }
-                
+
                 trace!(
                     "GPU: CPU to VRAM length: {} ({} x {})",
                     length,
@@ -1618,9 +1618,9 @@ impl Gpu {
                 let tex_y = (page_y * 256) as u32 + y as u32;
                 let (masked_x, masked_y) = self.apply_texture_mask(tex_x, tex_y);
                 let value = self.vram[min(point_to_address(masked_x, masked_y) as usize, 524287)];
-                let clut_index = (value >> (x % 2) * 8) & 0xF;
+                let clut_index = (value >> (x % 2) * 8) & 0xFF;
                 self.vram[min(
-                    point_to_address((clut_x * 16 + (clut_index & 0xF) as u32) as u32, clut_y as u32)
+                    point_to_address((clut_x * 16 + clut_index as u32) as u32, clut_y as u32)
                         as usize,
                     524287,
                 )]

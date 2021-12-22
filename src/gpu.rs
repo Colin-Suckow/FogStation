@@ -939,12 +939,14 @@ impl Gpu {
                 if height == 0 {
                     height = 512
                 };
-                let extra_word = if (width * height) % 2 != 0 {1} else {0};
-                let length = ((width * height + extra_word) / 2)  + 3;
+                let extra_half_word = if (width * height) % 2 != 0 {1} else {0};
+                
+                let length = (((width * height) + extra_half_word) / 2)  + 3;
                 if self.gp0_buffer.len() < length as usize {
                     //Not enough commands
                     return;
                 }
+                
                 trace!(
                     "GPU: CPU to VRAM length: {} ({} x {})",
                     length,
@@ -955,14 +957,15 @@ impl Gpu {
                 let base_x = (self.gp0_buffer[1] & 0xFFFF) as u32;
                 let base_y = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as u32;
 
-                for index in 3..(length) {
-                    let p2 = ((self.gp0_buffer[index as usize] >> 16) & 0xFFFF) as u16;
-                    let p1 = (self.gp0_buffer[index as usize] & 0xFFFF) as u16;
-                    let x = base_x + (((index - 3) * 2) % (width));
-                    let y = base_y + (((index - 3) * 2) / (width));
-                    let addr = point_to_address(x, y);
-                    self.vram[addr as usize] = p1;
-                    self.vram[(addr + 1) as usize] = p2;
+                for index in 0..(width*height) {
+                    let val = if index % 2 == 0 {
+                        (self.gp0_buffer[((index / 2) + 3) as usize] & 0xFFFF) as u16
+                    } else {
+                        (self.gp0_buffer[((index / 2) + 3) as usize] >> 16) as u16
+                    };
+                    let x = base_x + (index % width);
+                    let y = base_y + (index / width);
+                    self.vram[point_to_address(x,y) as usize] = val;
                 }
             }
 
@@ -1627,10 +1630,10 @@ impl Gpu {
                 let tex_y = (page_y * 256) as u32 + y as u32;
                 let (masked_x, masked_y) = self.apply_texture_mask(tex_x, tex_y);
                 let value = self.vram[min(point_to_address(masked_x, masked_y) as usize, 524287)];
-                let clut_index = (value >> (x % 4) * 4) & 0xF;
+                let clut_index = (value >> ((x % 4) * 4)) & 0xF;
                 self.vram[min(
                     point_to_address(
-                        (clut_x * 16 + (clut_index & 0xF) as u32) as u32,
+                        (clut_x * 16 + clut_index as u32) as u32,
                         clut_y as u32,
                     ),
                     524287,

@@ -1,7 +1,7 @@
 use std::{
     borrow::Borrow,
     cmp::{max, min, Ordering},
-    mem::size_of_val,
+    mem::{size_of_val, self},
 };
 
 use bit_field::BitField;
@@ -98,6 +98,43 @@ impl Point {
         }
     }
 }
+pub enum DrawOperation {
+    QuickFill,
+    Quad,
+    Triangle,
+    RectangleDynamic,
+    Rectangle16,
+    Rectangle8,
+    Pixel,
+    PolyLine,
+    Line,
+    CpuBlit,
+}
+
+pub enum Shading {
+    Gouraud,
+    Flat
+}
+
+pub enum Surface {
+    Textured,
+    Flat,
+}
+
+pub enum Transparency {
+    SemiTransparent,
+    Solid
+}
+
+pub struct DrawCall {
+    operation: DrawOperation,
+    shading: Option<Shading>,
+    surface: Option<Surface>,
+    transparency: Option<Transparency>,
+    points: Option<Vec<Point>>,
+    blending_enabled: bool,
+    call_dropped: bool,
+}
 
 struct VramTransfer {
     base_x: usize,
@@ -193,6 +230,9 @@ pub struct Gpu {
 
     display_origin_x: usize,
     display_origin_y: usize,
+
+    draw_logging_enabled: bool,
+    draw_log: Vec<DrawCall>
 }
 
 impl Gpu {
@@ -242,6 +282,9 @@ impl Gpu {
 
             display_origin_x: 0,
             display_origin_y: 0,
+
+            draw_logging_enabled: false,
+            draw_log: vec!(),
         }
     }
 
@@ -251,6 +294,14 @@ impl Gpu {
         self.status_reg = 0x1C000000;
         self.gp0_buffer = Vec::new();
         self.pixel_count = 0;
+    }
+
+    pub fn take_call_log(&mut self) -> Vec<DrawCall> {
+        mem::take(&mut self.draw_log)
+    }
+
+    pub fn set_call_logging(&mut self, enabled: bool) {
+        self.draw_logging_enabled = enabled;
     }
 
     pub fn read_status_register(&mut self) -> u32 {
@@ -330,6 +381,19 @@ impl Gpu {
 
                         // println!("quick fill p1 {:?}  p2 {:?}", p1, p2);
 
+                        if self.draw_logging_enabled {
+                            let call = DrawCall {
+                                operation: DrawOperation::QuickFill,
+                                shading: None,
+                                surface: None,
+                                transparency: None,
+                                points: Some(vec!(p1.clone(), p2.clone())),
+                                blending_enabled: false,
+                                call_dropped: false,
+                            };
+                            self.draw_log.push(call);
+                        }
+
                         self.draw_solid_box(
                             p1.x as u32,
                             p1.y as u32,
@@ -369,12 +433,13 @@ impl Gpu {
                 }
 
                 let fill = b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF);
+                // TODO: Actually use this blend_enabled variable. It also doesn't need to be part of gpu state
                 self.blend_enabled = self.gp0_buffer[0].get_bit(24);
+                // TODO: This is also wrong. There is no such thing as a gpu wide blend color
                 self.blend_color = fill;
                 if is_quad {
                     if is_textured && is_gouraud {
-                        //Should be blending in colors. Do that later
-                        trace!("Tried to try draw texture blended quad!");
+                        trace!("Drawing texture blended quad!");
 
                         let mut points: Vec<Point> = vec![
                             Point::new_textured_point_with_color(
@@ -422,8 +487,22 @@ impl Gpu {
 
                         let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
                         let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
+                        let should_drop = max_x - min_x > 1023 || max_y - min_y > 511;
 
-                        if max_x - min_x > 1023 || max_y - min_y > 511 {
+                        if self.draw_logging_enabled {
+                            let call = DrawCall {
+                                operation: DrawOperation::Quad,
+                                shading: Some(Shading::Gouraud),
+                                surface: Some(Surface::Textured),
+                                transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                points: Some(points.clone()),
+                                blending_enabled: self.blend_enabled,
+                                call_dropped: should_drop,
+                            };
+                            self.draw_log.push(call);
+                        }
+
+                        if should_drop {
                             trace!("Quad too big, dropping");
                         } else {
                             self.draw_textured_quad(
@@ -480,8 +559,22 @@ impl Gpu {
 
                         let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
                         let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
+                        let should_drop = max_x - min_x > 1023 || max_y - min_y > 511;
 
-                        if max_x - min_x > 1023 || max_y - min_y > 511 {
+                        if self.draw_logging_enabled {
+                            let call = DrawCall {
+                                operation: DrawOperation::Quad,
+                                shading: Some(Shading::Flat),
+                                surface: Some(Surface::Textured),
+                                transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                points: Some(points.clone()),
+                                blending_enabled: self.blend_enabled,
+                                call_dropped: should_drop,
+                            };
+                            self.draw_log.push(call);
+                        }
+
+                        if should_drop {
                             trace!("Quad too big, dropping");
                         } else {
                             self.draw_textured_quad(
@@ -522,8 +615,22 @@ impl Gpu {
 
                         let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
                         let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
+                        let should_drop = max_x - min_x > 1023 || max_y - min_y > 511;
 
-                        if max_x - min_x > 1023 || max_y - min_y > 511 {
+                        if self.draw_logging_enabled {
+                            let call = DrawCall {
+                                operation: DrawOperation::Quad,
+                                shading: Some(Shading::Gouraud),
+                                surface: Some(Surface::Flat),
+                                transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                points: Some(points.clone()),
+                                blending_enabled: self.blend_enabled,
+                                call_dropped: should_drop,
+                            };
+                            self.draw_log.push(call);
+                        }
+
+                        if should_drop {
                             trace!("Quad too big, dropping");
                         } else {
                             self.draw_shaded_quad(&points, command.get_bit(25));
@@ -536,19 +643,35 @@ impl Gpu {
                             Point::from_word(self.gp0_buffer[3], 0),
                             Point::from_word(self.gp0_buffer[4], 0),
                         ];
+                        for point in &mut points {
+                            point.x += self.draw_offset.x;
+                            point.y += self.draw_offset.y;
+                        }
 
                         let min_x = points.iter().min_by_key(|v| v.x).unwrap().x;
                         let max_x = points.iter().max_by_key(|v| v.x).unwrap().x;
 
                         let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
                         let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
+                        
 
-                        for point in &mut points {
-                            point.x += self.draw_offset.x;
-                            point.y += self.draw_offset.y;
+
+                        let should_drop = max_x - min_x > 1023 || max_y - min_y > 511;
+
+                        if self.draw_logging_enabled {
+                            let call = DrawCall {
+                                operation: DrawOperation::Quad,
+                                shading: Some(Shading::Flat),
+                                surface: Some(Surface::Flat),
+                                transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                points: Some(points.clone()),
+                                blending_enabled: self.blend_enabled,
+                                call_dropped: should_drop,
+                            };
+                            self.draw_log.push(call);
                         }
 
-                        if max_x - min_x > 1023 || max_y - min_y > 511 {
+                        if should_drop {
                             trace!("Quad too big, dropping");
                         } else {
                             self.draw_solid_quad(&points, fill, command.get_bit(25));
@@ -605,9 +728,23 @@ impl Gpu {
 
                         let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
                         let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
+                        let should_drop = max_x - min_x > 1023 || max_y - min_y > 511;
 
-                        if max_x - min_x > 1023 || max_y - min_y > 511 {
-                            trace!("Quad too big, dropping");
+                        if self.draw_logging_enabled {
+                            let call = DrawCall {
+                                operation: DrawOperation::Triangle,
+                                shading: Some(Shading::Gouraud),
+                                surface: Some(Surface::Textured),
+                                transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                points: Some(points.clone()),
+                                blending_enabled: self.blend_enabled,
+                                call_dropped: should_drop,
+                            };
+                            self.draw_log.push(call);
+                        }
+
+                        if should_drop {
+                            trace!("Tri too big, dropping");
                         } else {
                             self.draw_textured_triangle(
                                 &points,
@@ -656,9 +793,23 @@ impl Gpu {
 
                         let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
                         let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
+                        let should_drop = max_x - min_x > 1023 || max_y - min_y > 511;
 
-                        if max_x - min_x > 1023 || max_y - min_y > 511 {
-                            trace!("Quad too big, dropping");
+                        if self.draw_logging_enabled {
+                            let call = DrawCall {
+                                operation: DrawOperation::Triangle,
+                                shading: Some(Shading::Flat),
+                                surface: Some(Surface::Textured),
+                                transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                points: Some(points.clone()),
+                                blending_enabled: self.blend_enabled,
+                                call_dropped: should_drop,
+                            };
+                            self.draw_log.push(call);
+                        }
+
+                        if should_drop {
+                            trace!("Tri too big, dropping");
                         } else {
                             self.draw_textured_triangle(
                                 &points,
@@ -694,9 +845,23 @@ impl Gpu {
 
                         let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
                         let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
+                        let should_drop = max_x - min_x > 1023 || max_y - min_y > 511;
 
-                        if max_x - min_x > 1023 || max_y - min_y > 511 {
-                            trace!("Quad too big, dropping");
+                        if self.draw_logging_enabled {
+                            let call = DrawCall {
+                                operation: DrawOperation::Triangle,
+                                shading: Some(Shading::Gouraud),
+                                surface: Some(Surface::Flat),
+                                transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                points: Some(points.clone()),
+                                blending_enabled: self.blend_enabled,
+                                call_dropped: should_drop,
+                            };
+                            self.draw_log.push(call);
+                        }
+
+                        if should_drop {
+                            trace!("Tri too big, dropping");
                         } else {
                             self.draw_shaded_triangle(&points, command.get_bit(25));
                         }
@@ -720,9 +885,23 @@ impl Gpu {
 
                         let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
                         let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
+                        let should_drop = max_x - min_x > 1023 || max_y - min_y > 511;
 
-                        if max_x - min_x > 1023 || max_y - min_y > 511 {
-                            trace!("Quad too big, dropping");
+                        if self.draw_logging_enabled {
+                            let call = DrawCall {
+                                operation: DrawOperation::Triangle,
+                                shading: Some(Shading::Flat),
+                                surface: Some(Surface::Flat),
+                                transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                points: Some(points.clone()),
+                                blending_enabled: self.blend_enabled,
+                                call_dropped: should_drop,
+                            };
+                            self.draw_log.push(call);
+                        }
+
+                        if should_drop {
+                            trace!("Tri too big, dropping");
                         } else {
                             self.draw_solid_triangle(&points, fill, command.get_bit(25));
                         }
@@ -771,6 +950,20 @@ impl Gpu {
                         //Draw single pixel
                         let point = Point::from_word(self.gp0_buffer[1], 0);
 
+
+                        if self.draw_logging_enabled {
+                            let call = DrawCall {
+                                operation: DrawOperation::Pixel,
+                                shading: None,
+                                surface: None,
+                                transparency: None,
+                                points: Some(vec!(point.clone())),
+                                blending_enabled: false,
+                                call_dropped: false,
+                            };
+                            self.draw_log.push(call);
+                        }
+
                         let address = point_to_address(point.x as u32, point.y as u32) as usize;
                         let fill = b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF);
                         self.composite_and_place_pixel(address, fill, false, false);
@@ -794,6 +987,24 @@ impl Gpu {
                             self.palette_x = ((self.gp0_buffer[2] >> 16) & 0x3F) as u16;
                             self.palette_y = ((self.gp0_buffer[2] >> 22) & 0x1FF) as u16;
 
+                            if self.draw_logging_enabled {
+                                // Calculate coordinates of bottom right point
+                                let mut br_point = tl_point.clone();
+                                br_point.x += size.x;
+                                br_point.y += size.y;
+
+                                let call = DrawCall {
+                                    operation: DrawOperation::RectangleDynamic,
+                                    shading: None,
+                                    surface: Some(Surface::Textured),
+                                    transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                    points: Some(vec!(tl_point.clone(), br_point)),
+                                    blending_enabled: false,
+                                    call_dropped: false,
+                                };
+                                self.draw_log.push(call);
+                            }
+
                             self.draw_textured_box(&tl_point, size.x, size.y, command.get_bit(25));
                         } else {
                             trace!("GPU: solid box");
@@ -802,6 +1013,19 @@ impl Gpu {
                                 Point::from_word_with_offset(self.gp0_buffer[2], 0, &tl_point);
 
                             trace!("tl: {:?} br: {:?}", tl_point, br_point);
+
+                            if self.draw_logging_enabled {                                
+                                let call = DrawCall {
+                                    operation: DrawOperation::RectangleDynamic,
+                                    shading: None,
+                                    surface: Some(Surface::Flat),
+                                    transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                    points: Some(vec!(tl_point.clone(), br_point.clone())),
+                                    blending_enabled: false,
+                                    call_dropped: false,
+                                };
+                                self.draw_log.push(call);
+                            }
 
                             self.draw_solid_box(
                                 (tl_point.x + self.draw_offset.x) as u32,
@@ -834,11 +1058,48 @@ impl Gpu {
                             tl_point.x += self.draw_offset.x;
                             tl_point.y += self.draw_offset.y;
 
+                            if self.draw_logging_enabled {
+                                // Calculate coordinates of bottom right point
+                                let mut br_point = tl_point.clone();
+                                br_point.x += size.x;
+                                br_point.y += size.y;
+
+                                let call = DrawCall {
+                                    operation: DrawOperation::Rectangle8,
+                                    shading: None,
+                                    surface: Some(Surface::Textured),
+                                    transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                    points: Some(vec!(tl_point.clone(), br_point)),
+                                    blending_enabled: false,
+                                    call_dropped: false,
+                                };
+                                self.draw_log.push(call);
+                            }
+
                             self.draw_textured_box(&tl_point, size.x, size.y, command.get_bit(25));
                         } else {
                             let tl_point = Point::from_word(self.gp0_buffer[1], 0);
                             let x1 = tl_point.x + self.draw_offset.x;
                             let y1 = tl_point.y + self.draw_offset.y;
+
+                            if self.draw_logging_enabled {
+                                // Calculate coordinates of bottom right point
+                                let mut br_point = tl_point.clone();
+                                br_point.x += 8;
+                                br_point.y += 8;
+
+                                let call = DrawCall {
+                                    operation: DrawOperation::Rectangle8,
+                                    shading: None,
+                                    surface: Some(Surface::Flat),
+                                    transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                    points: Some(vec!(tl_point.clone(), br_point)),
+                                    blending_enabled: false,
+                                    call_dropped: false,
+                                };
+                                self.draw_log.push(call);
+                            }
+
                             self.draw_solid_box(
                                 x1 as u32,
                                 y1 as u32,
@@ -870,11 +1131,48 @@ impl Gpu {
                             tl_point.x += self.draw_offset.x;
                             tl_point.y += self.draw_offset.y;
 
+                            if self.draw_logging_enabled {
+                                // Calculate coordinates of bottom right point
+                                let mut br_point = tl_point.clone();
+                                br_point.x += size.x;
+                                br_point.y += size.y;
+
+                                let call = DrawCall {
+                                    operation: DrawOperation::Rectangle16,
+                                    shading: None,
+                                    surface: Some(Surface::Textured),
+                                    transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                    points: Some(vec!(tl_point.clone(), br_point)),
+                                    blending_enabled: false,
+                                    call_dropped: false,
+                                };
+                                self.draw_log.push(call);
+                            }
+
                             self.draw_textured_box(&tl_point, size.x, size.y, command.get_bit(25));
                         } else {
                             let tl_point = Point::from_word(self.gp0_buffer[1], 0);
                             let x1 = tl_point.x + self.draw_offset.x;
                             let y1 = tl_point.y + self.draw_offset.y;
+
+                            if self.draw_logging_enabled {
+                                // Calculate coordinates of bottom right point
+                                let mut br_point = tl_point.clone();
+                                br_point.x += 16;
+                                br_point.y += 16;
+
+                                let call = DrawCall {
+                                    operation: DrawOperation::Rectangle16,
+                                    shading: None,
+                                    surface: Some(Surface::Flat),
+                                    transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                    points: Some(vec!(tl_point.clone(), br_point)),
+                                    blending_enabled: false,
+                                    call_dropped: false,
+                                };
+                                self.draw_log.push(call);
+                            }
+
                             self.draw_solid_box(
                                 x1 as u32,
                                 y1 as u32,
@@ -956,6 +1254,25 @@ impl Gpu {
 
                 let base_x = (self.gp0_buffer[1] & 0xFFFF) as u32;
                 let base_y = ((self.gp0_buffer[1] >> 16) & 0xFFFF) as u32;
+
+                if self.draw_logging_enabled {
+                    // Calculate coordinates of transfer
+                    let tl_point = Point::from_components(base_x as i32, base_y as i32, 0);
+                    let mut br_point = tl_point.clone();
+                    br_point.x += width as i32;
+                    br_point.y += height as i32;
+
+                    let call = DrawCall {
+                        operation: DrawOperation::CpuBlit,
+                        shading: None,
+                        surface: None,
+                        transparency: None,
+                        points: Some(vec!(tl_point, br_point)),
+                        blending_enabled: false,
+                        call_dropped: false,
+                    };
+                    self.draw_log.push(call);
+                }
 
                 for index in 0..(width*height) {
                     let val = if index % 2 == 0 {

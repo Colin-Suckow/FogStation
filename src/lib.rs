@@ -2,7 +2,7 @@ use bios::Bios;
 use bus::MainBus;
 use controller::{ButtonState, controller_execute_cycle};
 use cpu::R3000;
-use gpu::Resolution;
+use gpu::{Resolution, DrawCall};
 use timer::TimerState;
 
 use crate::cdrom::disc::Disc;
@@ -185,6 +185,14 @@ impl PSXEmu {
 
     pub fn frame_ready(&mut self) -> bool {
         self.r3000.main_bus.gpu.take_frame_ready()
+    }
+
+    pub fn set_gpu_logging(&mut self, enabled: bool) {
+        self.r3000.main_bus.gpu.set_call_logging(enabled);
+    }
+
+    pub fn take_gpu_call_log(&mut self) -> Vec<DrawCall> {
+        self.r3000.main_bus.gpu.take_call_log()
     }
 
     pub fn add_watchpoint(&mut self, addr: u32) {

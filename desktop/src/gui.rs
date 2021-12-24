@@ -216,6 +216,7 @@ impl epi::App for VaporstationApp {
                                 ui.label("Shading");
                                 ui.label("Surface");
                                 ui.label("Transparency");
+                                ui.label("CLUT Depth");
                                 ui.label("Highlighted?");
                                 ui.end_row();
                             });
@@ -243,6 +244,9 @@ impl epi::App for VaporstationApp {
                                     } else {
                                         ui.label("N/A");
                                     }
+
+                                    ui.label(command.clut_size.to_string());
+                                  
                                     let mut should_be_highlighted =
                                         self.highlighted_gpu_calls.contains(&i);
                                     ui.checkbox(&mut should_be_highlighted, "");

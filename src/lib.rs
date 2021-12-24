@@ -195,6 +195,10 @@ impl PSXEmu {
         self.r3000.main_bus.gpu.take_call_log()
     }
 
+    pub fn clear_gpu_call_log(&mut self) {
+        self.r3000.main_bus.gpu.clear_call_log();
+    }
+
     pub fn add_watchpoint(&mut self, addr: u32) {
         println!("Adding watchpoint for addr {:#X} ({:#X} masked)", addr, addr & 0x1fffffff);
         self.watchpoints.push(addr & 0x1FFFFFFF);

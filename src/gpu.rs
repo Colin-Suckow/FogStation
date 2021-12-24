@@ -1,10 +1,11 @@
 use std::{
     borrow::Borrow,
     cmp::{max, min, Ordering},
-    mem::{size_of_val, self},
+    mem::{size_of_val, self}, fmt::Display,
 };
 
 use bit_field::BitField;
+use enum_display_derive::Display;
 use log::{error, trace, warn};
 use nalgebra::Vector2;
 use num_traits::clamp;
@@ -13,7 +14,7 @@ const CYCLES_PER_SCANLINE: u32 = 2500;
 const TOTAL_SCANLINES: u32 = 245;
 
 #[derive(Copy, Clone, Debug)]
-enum TextureColorMode {
+pub enum TextureColorMode {
     FourBit,
     EightBit,
     FifteenBit,
@@ -31,13 +32,13 @@ pub struct Resolution {
     pub width: u32,
 }
 
-#[derive(Copy, Clone, Debug)]
-struct Point {
-    x: i32,
-    y: i32,
-    color: u16,
-    tex_x: i16,
-    tex_y: i16,
+#[derive(Clone, Copy, Debug)]
+pub struct Point {
+    pub x: i32,
+    pub y: i32,
+    pub color: u16,
+    pub tex_x: i16,
+    pub tex_y: i16,
 }
 
 #[derive(PartialEq)]
@@ -98,6 +99,7 @@ impl Point {
         }
     }
 }
+#[derive(Clone)]
 pub enum DrawOperation {
     QuickFill,
     Quad,
@@ -111,29 +113,53 @@ pub enum DrawOperation {
     CpuBlit,
 }
 
+impl Display for DrawOperation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DrawOperation::QuickFill => write!(f, "QuickFill"),
+            DrawOperation::Quad => write!(f, "Quad"),
+            DrawOperation::Triangle => write!(f, "Tri"),
+            DrawOperation::RectangleDynamic => write!(f, "VarRect"),
+            DrawOperation::Rectangle16 => write!(f, "Rect16"),
+            DrawOperation::Rectangle8 => write!(f, "Rect8"),
+            DrawOperation::Pixel => write!(f, "Pixel"),
+            DrawOperation::PolyLine => write!(f, "Polyline"),
+            DrawOperation::Line => write!(f, "Line"),
+            DrawOperation::CpuBlit => write!(f, "CpuBlit"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Display)]
 pub enum Shading {
     Gouraud,
     Flat
 }
 
+
+
+#[derive(Clone, Copy, Display)]
 pub enum Surface {
     Textured,
     Flat,
 }
-
+#[derive(Clone, Copy, Display)]
 pub enum Transparency {
     SemiTransparent,
     Solid
 }
-
+#[derive(Clone)]
 pub struct DrawCall {
-    operation: DrawOperation,
-    shading: Option<Shading>,
-    surface: Option<Surface>,
-    transparency: Option<Transparency>,
-    points: Option<Vec<Point>>,
-    blending_enabled: bool,
-    call_dropped: bool,
+    pub operation: DrawOperation,
+    pub shading: Option<Shading>,
+    pub surface: Option<Surface>,
+    pub transparency: Option<Transparency>,
+    pub points: Option<Vec<Point>>,
+    pub blending_enabled: bool,
+    pub call_dropped: bool,
+    pub clut_size: TextureColorMode,
+    pub tex_base_x: u16,
+    pub tex_base_y: u16,
 }
 
 struct VramTransfer {
@@ -283,7 +309,7 @@ impl Gpu {
             display_origin_x: 0,
             display_origin_y: 0,
 
-            draw_logging_enabled: false,
+            draw_logging_enabled: true,
             draw_log: vec!(),
         }
     }
@@ -302,6 +328,10 @@ impl Gpu {
 
     pub fn set_call_logging(&mut self, enabled: bool) {
         self.draw_logging_enabled = enabled;
+    }
+
+    pub fn clear_call_log(&mut self) {
+        self.draw_log.clear();
     }
 
     pub fn read_status_register(&mut self) -> u32 {
@@ -390,9 +420,14 @@ impl Gpu {
                                 points: Some(vec!(p1.clone(), p2.clone())),
                                 blending_enabled: false,
                                 call_dropped: false,
+                                clut_size: self.texmode,
+                                tex_base_x: self.texpage_x_base,
+                                tex_base_y: self.texpage_y_base,
                             };
                             self.draw_log.push(call);
                         }
+
+                        
 
                         self.draw_solid_box(
                             p1.x as u32,
@@ -489,6 +524,9 @@ impl Gpu {
                         let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
                         let should_drop = max_x - min_x > 1023 || max_y - min_y > 511;
 
+                        self.texpage_x_base = page_x as u16;
+                        self.texpage_y_base = page_y as u16;
+
                         if self.draw_logging_enabled {
                             let call = DrawCall {
                                 operation: DrawOperation::Quad,
@@ -498,6 +536,9 @@ impl Gpu {
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
+                                clut_size: self.texmode,
+                                tex_base_x: self.texpage_x_base,
+                                tex_base_y: self.texpage_y_base,
                             };
                             self.draw_log.push(call);
                         }
@@ -551,6 +592,8 @@ impl Gpu {
                         let clut_y = (self.gp0_buffer[2] >> 22) & 0x1FF;
                         let page_x = (self.gp0_buffer[4] >> 16) & 0xF;
                         let page_y = (self.gp0_buffer[4] >> 20) & 0x1;
+                        self.texpage_x_base = page_x as u16;
+                        self.texpage_y_base = page_y as u16;
 
                         self.blend_color = fill;
 
@@ -570,6 +613,9 @@ impl Gpu {
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
+                                clut_size: self.texmode,
+                                tex_base_x: self.texpage_x_base,
+                                tex_base_y: self.texpage_y_base,
                             };
                             self.draw_log.push(call);
                         }
@@ -626,6 +672,9 @@ impl Gpu {
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
+                                clut_size: self.texmode,
+                                tex_base_x: self.texpage_x_base,
+                                tex_base_y: self.texpage_y_base,
                             };
                             self.draw_log.push(call);
                         }
@@ -667,6 +716,9 @@ impl Gpu {
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
+                                clut_size: self.texmode,
+                                tex_base_x: self.texpage_x_base,
+                                tex_base_y: self.texpage_y_base,
                             };
                             self.draw_log.push(call);
                         }
@@ -720,6 +772,8 @@ impl Gpu {
                         let clut_y = (self.gp0_buffer[2] >> 22) & 0x1FF;
                         let page_x = (self.gp0_buffer[5] >> 16) & 0xF;
                         let page_y = (self.gp0_buffer[5] >> 20) & 0x1;
+                        self.texpage_x_base = page_x as u16;
+                        self.texpage_y_base = page_y as u16;
 
                         self.blend_color = fill;
 
@@ -739,6 +793,9 @@ impl Gpu {
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
+                                clut_size: self.texmode,
+                                tex_base_x: self.texpage_x_base,
+                                tex_base_y: self.texpage_y_base,
                             };
                             self.draw_log.push(call);
                         }
@@ -785,6 +842,8 @@ impl Gpu {
                         let clut_y = (self.gp0_buffer[2] >> 22) & 0x1FF;
                         let page_x = (self.gp0_buffer[4] >> 16) & 0xF;
                         let page_y = (self.gp0_buffer[4] >> 20) & 0x1;
+                        self.texpage_x_base = page_x as u16;
+                        self.texpage_y_base = page_y as u16;
 
                         self.blend_color = fill;
 
@@ -804,6 +863,9 @@ impl Gpu {
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
+                                clut_size: self.texmode,
+                                tex_base_x: self.texpage_x_base,
+                                tex_base_y: self.texpage_y_base,
                             };
                             self.draw_log.push(call);
                         }
@@ -856,6 +918,9 @@ impl Gpu {
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
+                                clut_size: self.texmode,
+                                tex_base_x: self.texpage_x_base,
+                                tex_base_y: self.texpage_y_base,
                             };
                             self.draw_log.push(call);
                         }
@@ -896,6 +961,9 @@ impl Gpu {
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
+                                clut_size: self.texmode,
+                                tex_base_x: self.texpage_x_base,
+                                tex_base_y: self.texpage_y_base,
                             };
                             self.draw_log.push(call);
                         }
@@ -960,6 +1028,9 @@ impl Gpu {
                                 points: Some(vec!(point.clone())),
                                 blending_enabled: false,
                                 call_dropped: false,
+                                clut_size: self.texmode,
+                                tex_base_x: self.texpage_x_base,
+                                tex_base_y: self.texpage_y_base,
                             };
                             self.draw_log.push(call);
                         }
@@ -1001,6 +1072,9 @@ impl Gpu {
                                     points: Some(vec!(tl_point.clone(), br_point)),
                                     blending_enabled: false,
                                     call_dropped: false,
+                                    clut_size: self.texmode,
+                                    tex_base_x: self.texpage_x_base,
+                                    tex_base_y: self.texpage_y_base,
                                 };
                                 self.draw_log.push(call);
                             }
@@ -1023,6 +1097,9 @@ impl Gpu {
                                     points: Some(vec!(tl_point.clone(), br_point.clone())),
                                     blending_enabled: false,
                                     call_dropped: false,
+                                    clut_size: self.texmode,
+                                    tex_base_x: self.texpage_x_base,
+                                    tex_base_y: self.texpage_y_base,
                                 };
                                 self.draw_log.push(call);
                             }
@@ -1072,6 +1149,9 @@ impl Gpu {
                                     points: Some(vec!(tl_point.clone(), br_point)),
                                     blending_enabled: false,
                                     call_dropped: false,
+                                    clut_size: self.texmode,
+                                    tex_base_x: self.texpage_x_base,
+                                    tex_base_y: self.texpage_y_base,
                                 };
                                 self.draw_log.push(call);
                             }
@@ -1096,6 +1176,9 @@ impl Gpu {
                                     points: Some(vec!(tl_point.clone(), br_point)),
                                     blending_enabled: false,
                                     call_dropped: false,
+                                    clut_size: self.texmode,
+                                tex_base_x: self.texpage_x_base,
+                                tex_base_y: self.texpage_y_base,
                                 };
                                 self.draw_log.push(call);
                             }
@@ -1145,6 +1228,9 @@ impl Gpu {
                                     points: Some(vec!(tl_point.clone(), br_point)),
                                     blending_enabled: false,
                                     call_dropped: false,
+                                    clut_size: self.texmode,
+                                tex_base_x: self.texpage_x_base,
+                                tex_base_y: self.texpage_y_base,
                                 };
                                 self.draw_log.push(call);
                             }
@@ -1169,6 +1255,9 @@ impl Gpu {
                                     points: Some(vec!(tl_point.clone(), br_point)),
                                     blending_enabled: false,
                                     call_dropped: false,
+                                    clut_size: self.texmode,
+                                tex_base_x: self.texpage_x_base,
+                                tex_base_y: self.texpage_y_base,
                                 };
                                 self.draw_log.push(call);
                             }
@@ -1270,6 +1359,9 @@ impl Gpu {
                         points: Some(vec!(tl_point, br_point)),
                         blending_enabled: false,
                         call_dropped: false,
+                        clut_size: self.texmode,
+                                tex_base_x: self.texpage_x_base,
+                                tex_base_y: self.texpage_y_base,
                     };
                     self.draw_log.push(call);
                 }

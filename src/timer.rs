@@ -26,14 +26,13 @@ impl Timer {
 
     pub fn increment(&mut self, cpu: &mut R3000) {
         // Crash Bandicoot hack to get it running faster
-        if self.timer_number == 2 {
-           self.value += 2;
-        } else {
+        // if self.timer_number == 2 {
+           //self.value += 2;
+        //} else {
             self.value += 1;
-        }
+        //}
         
-        // Check the value after target to make sure we don't miss when incrementing by two
-        if self.value == self.target || self.value == self.target + 1{
+        if self.value == self.target {
             self.trigger(cpu, Cause::Target);
         }
 

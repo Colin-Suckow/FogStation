@@ -65,7 +65,7 @@ pub struct R3000 {
     pub main_bus: MainBus,
     delay_slot: u32,
     pub cop0: Cop0,
-    load_delays: Vec<LoadDelay>,
+    load_delay: Option<LoadDelay>,
     i_mask: u32,
     pub i_status: u32,
     pub log: bool,
@@ -89,7 +89,7 @@ impl R3000 {
             main_bus: bus,
             delay_slot: 0,
             cop0: Cop0::new(),
-            load_delays: Vec::new(),
+            load_delay: None,
             i_mask: 0,
             i_status: 0,
             log: false,
@@ -112,7 +112,7 @@ impl R3000 {
         self.pc = 0xBFC00000; // Points to the bios entry point
         self.cop0
             .write_reg(12, self.cop0.read_reg(12).set_bit(23, true).clone());
-        self.load_delays = Vec::new();
+        self.load_delay = None;
     }
 
     #[allow(dead_code)]
@@ -222,12 +222,7 @@ impl R3000 {
 
         self.exec_delay = false;
         self.last_was_branch = false;
-        for i in (0..self.load_delays.len()).rev() {
-            if self.load_delays[i].cycle_loaded != self.cycle_count {
-                self.write_reg(self.load_delays[i].register, self.load_delays[i].value);
-                self.load_delays.remove(i);
-            }
-        }
+        
         if self.log  {
             self.log_instruction(instruction);
         }
@@ -250,18 +245,19 @@ impl R3000 {
             //self.trace_file.write(format!("{:08x}: {:08x}\n", self.delay_slot, delay_instruction).as_bytes());
             //println!("{:08x}: {:08x}", self.delay_slot, delay_instruction);
             self.exec_delay = true;
-            for i in (0..self.load_delays.len()).rev() {
-                if self.load_delays[i].cycle_loaded != self.cycle_count {
-                    self.write_reg(self.load_delays[i].register, self.load_delays[i].value);
-                    self.load_delays.remove(i);
-                }
-            }
             self.cycle_count = self.cycle_count.wrapping_add(1);
             self.execute_instruction(delay_instruction, timers);
             self.exec_delay = false;
             self.delay_slot = 0;    
         }
         
+    }
+
+
+    fn flush_load_delay(&mut self) {
+        if let Some(delay) = self.load_delay.take() {
+            self.write_reg(delay.register, delay.value);
+        }
     }
 
     fn log_instruction(&self, instruction: u32) {
@@ -447,7 +443,6 @@ impl R3000 {
 
             0x1 => {
                 // Wacky branch instructions. Copied from rustation
-                let i = instruction.immediate_sign_extended();
                 let s = instruction.rs();
 
                 let is_bgez = instruction.get_bit(16) as u32;
@@ -457,6 +452,8 @@ impl R3000 {
                 let test = (v < 0) as u32;
 
                 let test = test ^ is_bgez;
+
+                self.flush_load_delay();
 
                 if is_link {
                     self.write_reg(31, self.pc + 4);
@@ -579,24 +576,26 @@ impl R3000 {
                         0x0 => {
                             //MFC2
                             let val = self.gte.data_register(instruction.rd() as usize);
-                            self.write_reg(instruction.rt(), val);
+                            self.delayed_load(instruction.rt(), val);
                         }
     
                         0x6 => {
                             //CTC2
                             let val = self.read_reg(instruction.rt());
+                            self.flush_load_delay();
                             self.gte.set_control_register(instruction.rd() as usize, val);
                         }
     
                         0x4 => {
                             //MTC2
                             let val = self.read_reg(instruction.rt());
+                            self.flush_load_delay();
                             self.gte.set_data_register(instruction.rd() as usize, val);
                         }
     
                         0x2 => {
                             //CFC2
-                            self.write_reg(instruction.rt(), self.gte.control_register(instruction.rd() as usize));
+                            self.delayed_load(instruction.rt(), self.gte.control_register(instruction.rd() as usize));
                         }
     
                         _ => panic!(
@@ -677,6 +676,7 @@ impl R3000 {
                     .immediate_sign_extended()
                     .wrapping_add(self.read_reg(instruction.rs()));
                 let val = self.read_bus_word(addr, timers);
+                self.flush_load_delay();
                 self.gte.set_data_register(instruction.rt() as usize, val);
 
             }
@@ -691,6 +691,7 @@ impl R3000 {
                 } else {
                     self.gte.data_register(instruction.rt() as usize)
                 };
+                self.flush_load_delay();
                 self.write_bus_word(addr, val, timers);
 
             }
@@ -709,13 +710,15 @@ impl R3000 {
         let addr = instruction
             .immediate_sign_extended()
             .wrapping_add(self.read_reg(instruction.rs()));
+            let val = self.read_reg(instruction.rt());
+            
+        self.flush_load_delay();
 
         if addr % 4 != 0 {
             //unaligned address
             trace!("AdES fired by op_sw");
             self.fire_exception(Exception::AdES);
         } else {
-            let val = self.read_reg(instruction.rt());
             self.write_bus_word(addr, val, timers);
         };
     }
@@ -726,6 +729,7 @@ impl R3000 {
             .wrapping_add(self.read_reg(instruction.rs()));
         let word = self.read_bus_word(addr & !3, timers);
         let reg_val = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         self.write_bus_word(
             addr & !3,
             match addr & 3 {
@@ -745,6 +749,7 @@ impl R3000 {
             .wrapping_add(self.read_reg(instruction.rs()));
         let word = self.read_bus_word(addr & !3, timers);
         let reg_val = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         self.write_bus_word(
             addr & !3,
             match addr & 3 {
@@ -759,7 +764,6 @@ impl R3000 {
     }
 
     fn op_lwr(&mut self, instruction: u32, timers: &mut TimerState) {
-
         let addr = instruction
             .immediate_sign_extended()
             .wrapping_add(self.read_reg(instruction.rs()));
@@ -770,13 +774,13 @@ impl R3000 {
         // from there if it exists
         let mut reg_val = self.read_reg(instruction.rt());
 
-        for ld in &self.load_delays {
-            if ld.register == instruction.rt() {
-                reg_val = ld.value;
+        if let Some(delay) = &self.load_delay {
+            if delay.register == instruction.rt() {
+                reg_val = delay.value;
             }
         }
 
-        self.delay_write_reg(
+        self.delayed_load(
             instruction.rt(),
             match addr & 3 {
                 3 => (reg_val & 0xffffff00) | (word >> 24),
@@ -790,23 +794,22 @@ impl R3000 {
 
     fn op_lwl(&mut self, instruction: u32, timers: &mut TimerState) {
         let addr = instruction
-            .immediate_sign_extended()
-            .wrapping_add(self.read_reg(instruction.rs()));
-
+        .immediate_sign_extended()
+        .wrapping_add(self.read_reg(instruction.rs()));
+        
         let word = self.read_bus_word(addr & !3, timers);
         
         // LWL can ignore the load delay, so check if theres an existing load delay and fetch the rt value
         // from there if it exists
         let mut reg_val = self.read_reg(instruction.rt());
-
-        for ld in &self.load_delays {
-            if ld.register == instruction.rt() {
-                reg_val = ld.value;
+        
+        if let Some(delay) = &self.load_delay {
+            if delay.register == instruction.rt() {
+                reg_val = delay.value;
             }
         }
-        
 
-        self.delay_write_reg(
+        self.delayed_load(
             instruction.rt(),
             match addr & 3 {
                 0 => (reg_val & 0x00ffffff) | (word << 24),
@@ -828,6 +831,7 @@ impl R3000 {
             self.fire_exception(Exception::AdES);
         } else {
             let val = (self.read_reg(instruction.rt()) & 0xFFFF) as u16;
+            self.flush_load_delay();
             self.write_bus_half_word(addr, val, timers);
         };
     }
@@ -837,6 +841,7 @@ impl R3000 {
             .immediate_sign_extended()
             .wrapping_add(self.read_reg(instruction.rs()));
         let val = (self.read_reg(instruction.rt()) & 0xFF) as u8;
+        self.flush_load_delay();
         self.write_bus_byte(addr, val);
     }
 
@@ -845,10 +850,11 @@ impl R3000 {
             (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         if addr % 2 != 0 {
             trace!("AdEl fired by op_lhu");
+            self.flush_load_delay();
             self.fire_exception(Exception::AdEL);
         } else {
             let val = self.read_bus_half_word(addr, timers).zero_extended();
-            self.delay_write_reg(instruction.rt(), val);
+            self.delayed_load(instruction.rt(), val);
         };
     }
 
@@ -856,7 +862,7 @@ impl R3000 {
         let addr =
             (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         let val = self.main_bus.read_byte(addr).zero_extended();
-        self.delay_write_reg(instruction.rt(), val);
+        self.delayed_load(instruction.rt(), val);
     }
 
     fn op_lw(&mut self, instruction: u32, timers: &mut TimerState) {
@@ -871,7 +877,7 @@ impl R3000 {
            
             //println!("lw addr {:08x} val {:08x} reg {}", addr, val, instruction.rt());
             
-            self.delay_write_reg(instruction.rt(), val);
+            self.delayed_load(instruction.rt(), val);
         };
     }
 
@@ -883,7 +889,7 @@ impl R3000 {
             self.fire_exception(Exception::AdEL);
         } else {
             let val = self.read_bus_half_word(addr, timers).sign_extended();
-            self.delay_write_reg(instruction.rt(), val as u32);
+            self.delayed_load(instruction.rt(), val as u32);
         };
     }
 
@@ -891,75 +897,95 @@ impl R3000 {
         let addr =
             (instruction.immediate_sign_extended()).wrapping_add(self.read_reg(instruction.rs()));
         let val = self.main_bus.read_byte(addr).sign_extended();
-        self.delay_write_reg(instruction.rt(), val as u32);
+        self.delayed_load(instruction.rt(), val as u32);
     }
 
     fn op_rfe(&mut self) {
+        self.flush_load_delay();
         let mode = self.cop0.read_reg(12) & 0x3f;
         let status = self.cop0.read_reg(12);
         self.cop0.write_reg(12, (status & !0xf) | (mode >> 2));
     }
 
     fn op_mfc0(&mut self, instruction: u32) {
-        self.write_reg(instruction.rt(), self.cop0.read_reg(instruction.rd()));
+        let val = self.cop0.read_reg(instruction.rd());
+        self.flush_load_delay();
+        self.delayed_load(instruction.rt(), val);
     }
 
     fn op_mtc0(&mut self, instruction: u32) {
+        let val = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         self.cop0
-            .write_reg(instruction.rd(), self.read_reg(instruction.rt()));
+            .write_reg(instruction.rd(), val);
     }
 
     fn op_lui(&mut self, instruction: u32) {
+        self.flush_load_delay();
         self.write_reg(instruction.rt(), (instruction.immediate().zero_extended() << 16) as u32);
     }
 
     fn op_xori(&mut self, instruction: u32) {
+        let val = self.read_reg(instruction.rs());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rt(),
-            self.read_reg(instruction.rs()) ^ instruction.immediate().zero_extended(),
+            val ^ instruction.immediate().zero_extended(),
         );
     }
 
     fn op_ori(&mut self, instruction: u32) {
+        let val = self.read_reg(instruction.rs());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rt(),
-            self.read_reg(instruction.rs()) | instruction.immediate().zero_extended(),
+            val | instruction.immediate().zero_extended(),
         );
     }
 
     fn op_andi(&mut self, instruction: u32) {
+        let val = self.read_reg(instruction.rs());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rt(),
-            instruction.immediate().zero_extended() & self.read_reg(instruction.rs()),
+            instruction.immediate().zero_extended() & val,
         );
     }
 
     fn op_sltiu(&mut self, instruction: u32) {
+        let val = self.read_reg(instruction.rs());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rt(),
-            (self.read_reg(instruction.rs()) < instruction.immediate_sign_extended() as u32) as u32,
+            (val < instruction.immediate_sign_extended() as u32) as u32,
         );
     }
 
     fn op_slti(&mut self, instruction: u32) {
+        let val = self.read_reg(instruction.rs());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rt(),
-            ((self.read_reg(instruction.rs()) as i32)
+            ((val as i32)
                 < instruction.immediate_sign_extended() as i32) as u32,
         );
     }
 
     fn op_addiu(&mut self, instruction: u32) {
+        let val = self.read_reg(instruction.rs());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rt(),
-            (self.read_reg(instruction.rs())).wrapping_add(instruction.immediate_sign_extended()) as u32,
+            val.wrapping_add(instruction.immediate_sign_extended()) as u32,
         );
     }
 
     fn op_addi(&mut self, instruction: u32) {
+        let val = self.read_reg(instruction.rs());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rt(),
-            match (self.read_reg(instruction.rs()) as i32)
+            match (val as i32)
                 .checked_add(instruction.immediate_sign_extended() as i32)
             {
                 Some(val) => val as u32,
@@ -976,6 +1002,7 @@ impl R3000 {
             self.delay_slot = self.pc;
             self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
         };
+        self.flush_load_delay();
     }
 
     fn op_blez(&mut self, instruction: u32) {
@@ -983,6 +1010,7 @@ impl R3000 {
             self.delay_slot = self.pc;
             self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
         };
+        self.flush_load_delay();
     }
 
     fn op_bne(&mut self, instruction: u32) {
@@ -990,6 +1018,7 @@ impl R3000 {
             self.delay_slot = self.pc;
             self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
         };
+        self.flush_load_delay();
     }
 
     fn op_beq(&mut self, instruction: u32) {
@@ -997,10 +1026,12 @@ impl R3000 {
             self.delay_slot = self.pc;
             self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
         };
+        self.flush_load_delay();
     }
 
     fn op_jal(&mut self, instruction: u32) {
         self.delay_slot = self.pc;
+        self.flush_load_delay();
         self.write_reg(31, self.delay_slot + 4);
         self.pc = (instruction.address() << 2) | (self.delay_slot & 0xF0000000);
     }
@@ -1008,117 +1039,120 @@ impl R3000 {
     fn op_j(&mut self, instruction: u32) {
         self.delay_slot = self.pc;
         self.pc = (instruction.address() << 2) | ((self.delay_slot) & 0xF0000000);
+        self.flush_load_delay();
     }
 
-    // fn op_bgezal(&mut self, instruction: u32) {
-    //     let og_pc = self.pc;
-    //     if self.read_reg(instruction.rs()) as i32 >= 0 {
-    //         self.delay_slot = self.pc;
-    //         self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
-    //     }
-    //     self.write_reg(31, og_pc + 4);
-    // }
-
-    // fn op_bltzal(&mut self, instruction: u32) {
-    //     let og_pc = self.pc;
-    //     if (self.read_reg(instruction.rs()) as i32) < 0 {
-    //         self.delay_slot = self.pc;
-    //         self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
-    //     }
-    //     self.write_reg(31, og_pc + 4);
-    // }
-
-    // fn op_bgez(&mut self, instruction: u32) {
-    //     if self.read_reg(instruction.rs()) as i32 >= 0 {
-    //         self.delay_slot = self.pc;
-    //         self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
-    //     }
-    // }
-
-    // fn op_bltz(&mut self, instruction: u32) {
-    //     if (self.read_reg(instruction.rs()) as i32) < 0 {
-    //         self.delay_slot = self.pc;
-    //         self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
-    //     }
-    // }
-
     fn op_slt(&mut self, instruction: u32) {
+        let t_val = self.read_reg(instruction.rt()) as i32;
+        let s_val = self.read_reg(instruction.rs()) as i32;
+        self.flush_load_delay();
         self.write_reg(
             instruction.rd(),
-            ((self.read_reg(instruction.rs()) as i32) < (self.read_reg(instruction.rt()) as i32))
+            (s_val < t_val)
                 as u32,
         );
     }
 
     fn op_multu(&mut self, instruction: u32) {
+        let m1 = self.read_reg(instruction.rs());
+        let m2 = self.read_reg(instruction.rt());
+        self.flush_load_delay();
+
         let result =
-            (self.read_reg(instruction.rs()) as u64) * (self.read_reg(instruction.rt()) as u64);
+            (m1 as u64) * (m2 as u64);
         self.lo = result as u32;
         self.hi = (result >> 32) as u32;
     }
 
     fn op_mult(&mut self, instruction: u32) {
-        let result = ((self.read_reg(instruction.rs()) as i32) as i64
-            * (self.read_reg(instruction.rt()) as i32) as i64) as u64;
+        let m1 = self.read_reg(instruction.rs());
+        let m2 = self.read_reg(instruction.rt());
+        self.flush_load_delay();
+        let result = ((m1 as i32) as i64
+            * (m2 as i32) as i64) as u64;
         self.lo = result as u32;
         self.hi = (result >> 32) as u32;
     }
 
     fn op_addu(&mut self, instruction: u32) {
+        let rs = self.read_reg(instruction.rs());
+        let rt = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rd(),
-            (self.read_reg(instruction.rt())).wrapping_add(self.read_reg(instruction.rs())) as u32,
+            rt.wrapping_add(rs) as u32,
         );
     }
 
     fn op_nor(&mut self, instruction: u32) {
+        let rs = self.read_reg(instruction.rs());
+        let rt = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rd(),
-            !(self.read_reg(instruction.rt()) | self.read_reg(instruction.rs())),
+            !(rt | rs),
         );
     }
 
     fn op_xor(&mut self, instruction: u32) {
+        let rs = self.read_reg(instruction.rs());
+        let rt = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rd(),
-            self.read_reg(instruction.rs()) ^ self.read_reg(instruction.rt()),
+            rs ^ rt,
         );
     }
 
     fn op_or(&mut self, instruction: u32) {
+        let rs = self.read_reg(instruction.rs());
+        let rt = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rd(),
-            self.read_reg(instruction.rs()) | self.read_reg(instruction.rt()),
+            rs | rt,
         );
         //println!("or ${}({:08x}) | ${}({:08x}) = ${}({:08x})", instruction.rs(), self.read_reg(instruction.rs()), instruction.rt(), self.read_reg(instruction.rt()), instruction.rd(), self.read_reg(instruction.rd()))
     }
 
     fn op_and(&mut self, instruction: u32) {
+        let rs = self.read_reg(instruction.rs());
+        let rt = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rd(),
-            self.read_reg(instruction.rs()) & self.read_reg(instruction.rt()),
+            rs & rt,
         );
     }
 
     fn op_subu(&mut self, instruction: u32) {
+        let rs = self.read_reg(instruction.rs());
+        let rt = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rd(),
-            (self.read_reg(instruction.rs())).wrapping_sub(self.read_reg(instruction.rt())),
+            rs.wrapping_sub(rt),
         );
     }
 
     fn op_sltu(&mut self, instruction: u32) {
+        let rs = self.read_reg(instruction.rs());
+        let rt = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rd(),
-            (self.read_reg(instruction.rs()) < self.read_reg(instruction.rt())) as u32,
+            (rs < rt) as u32,
         );
     }
 
     fn op_sub(&mut self, instruction: u32) {
+        let rs = self.read_reg(instruction.rs());
+        let rt = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rd(),
-            match (self.read_reg(instruction.rs()) as i32)
-                .checked_sub(self.read_reg(instruction.rt()) as i32)
+            match (rs as i32)
+                .checked_sub(rt as i32)
             {
                 Some(val) => val as u32,
                 None => {
@@ -1130,8 +1164,11 @@ impl R3000 {
     }
 
     fn op_add(&mut self, instruction: u32) {
-        let val = match (self.read_reg(instruction.rs()) as i32)
-            .checked_add(self.read_reg(instruction.rt()) as i32)
+        let rs = self.read_reg(instruction.rs());
+        let rt = self.read_reg(instruction.rt());
+        self.flush_load_delay();
+        let val = match (rs as i32)
+            .checked_add(rt as i32)
         {
             Some(val) => val as u32,
             None => {
@@ -1145,6 +1182,7 @@ impl R3000 {
     fn op_divu(&mut self, instruction: u32) {
         let rs = self.read_reg(instruction.rs());
         let rt = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         match rs.checked_div(rt) {
             Some(lo) => {
                 self.lo = lo;
@@ -1162,6 +1200,7 @@ impl R3000 {
     fn op_div(&mut self, instruction: u32) {
         let rs = self.read_reg(instruction.rs()) as i32;
         let rt = self.read_reg(instruction.rt()) as i32;
+        self.flush_load_delay();
         match rs.checked_div(rt) {
             Some(lo) => {
                 self.lo = lo as u32;
@@ -1185,26 +1224,32 @@ impl R3000 {
 
     fn op_mtlo(&mut self, instruction: u32) {
         self.lo = self.read_reg(instruction.rs());
+        self.flush_load_delay();
     }
 
     fn op_mflo(&mut self, instruction: u32) {
+        self.flush_load_delay();
         self.write_reg(instruction.rd(), self.lo);
     }
 
     fn op_mthi(&mut self, instruction: u32) {
         self.hi = self.read_reg(instruction.rs());
+        self.flush_load_delay();
     }
 
     fn op_mfhi(&mut self, instruction: u32) {
+        self.flush_load_delay();
         self.write_reg(instruction.rd(), self.hi);
     }
 
     fn op_syscall(&mut self) {
+        self.flush_load_delay();
         self.fire_exception(Exception::Sys);
     }
 
     fn op_jalr(&mut self, instruction: u32) {
         let target = self.read_reg(instruction.rs());
+        self.flush_load_delay();
         self.write_reg(instruction.rd(), self.pc + 4);
         if target % 4 != 0 {
             trace!("AdEl fired by op_jalr");
@@ -1217,6 +1262,7 @@ impl R3000 {
 
     fn op_jr(&mut self, instruction: u32) {
         let target = self.read_reg(instruction.rs());
+        self.flush_load_delay();
         if target % 4 != 0 {
             trace!("AdEl fired by op_jr");
             self.fire_exception(Exception::AdEL);
@@ -1227,56 +1273,71 @@ impl R3000 {
     }
 
     fn op_srav(&mut self, instruction: u32) {
+        let rs = self.read_reg(instruction.rs());
+        let rt = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rd(),
-            ((self.read_reg(instruction.rt()) as i32) >> (self.read_reg(instruction.rs()) & 0x1F))
+            ((rt as i32) >> (rs & 0x1F))
                 as u32,
         );
     }
 
     fn op_srlv(&mut self, instruction: u32) {
+        let rs = self.read_reg(instruction.rs());
+        let rt = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rd(),
-            ((self.read_reg(instruction.rt())) >> (self.read_reg(instruction.rs()) & 0x1F)) as u32,
+            ((rt) >> (rs & 0x1F)) as u32,
         );
     }
 
     fn op_sllv(&mut self, instruction: u32) {
+        let rs = self.read_reg(instruction.rs());
+        let rt = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rd(),
-            ((self.read_reg(instruction.rt())) << (self.read_reg(instruction.rs()) & 0x1F)) as u32,
+            ((rt) << (rs & 0x1F)) as u32,
         );
     }
 
     fn op_sra(&mut self, instruction: u32) {
+        let rt = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rd(),
-            ((self.read_reg(instruction.rt()) as i32) >> instruction.shamt()) as u32,
+            ((rt as i32) >> instruction.shamt()) as u32,
         );
     }
 
     fn op_srl(&mut self, instruction: u32) {
+        let rt = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rd(),
-            self.read_reg(instruction.rt()) >> instruction.shamt(),
+            rt >> instruction.shamt(),
         );
     }
 
     fn op_sll(&mut self, instruction: u32) {
+        let rt = self.read_reg(instruction.rt());
+        self.flush_load_delay();
         self.write_reg(
             instruction.rd(),
-            self.read_reg(instruction.rt()) << instruction.shamt(),
+            rt << instruction.shamt(),
         );
     }
 
     fn op_break(&mut self) {
+        self.flush_load_delay();
         self.fire_exception(Exception::Bp);
     }
 
     pub fn fire_exception(&mut self, exception: Exception) {
-        println!("CPU EXCEPTION: Type: {:?} PC: {:#X}", exception, self.current_pc);
-        self.cop0.set_cause_execode(&exception);
-
+        //println!("CPU EXCEPTION: Type: {:?} PC: {:#X}", exception, self.current_pc);
+        self.flush_load_delay();
 
         if self.delay_slot != 0 {
             self.cop0.write_reg(13, self.cop0.read_reg(13) | (1 << 31));
@@ -1425,20 +1486,17 @@ impl R3000 {
         }
     }
 
-    fn delay_write_reg(&mut self, register_number: u8, value: u32) {
-        self.write_reg(register_number, value);
-        // if register_number != 0 {
-        //     //Get rid of old writes to the same register
-        //     for i in (0..self.load_delays.len()).rev() {
-        //         if self.load_delays[i].register == register_number {
-        //             self.load_delays.remove(i);
-        //         }
-        //     }
-        //     self.load_delays.push(LoadDelay {
-        //         register: register_number,
-        //         value: value,
-        //         cycle_loaded: self.cycle_count,
-        //     });
-        // }
+    /// Processes the current load delay and replaces it with a new one
+    fn delayed_load(&mut self, register_number: u8, value: u32) {
+        if let Some(current_delay) = self.load_delay.take() {
+            if current_delay.register != register_number {
+                self.write_reg(current_delay.register, current_delay.value);
+            }
+        }
+        self.load_delay = Some(LoadDelay{
+            register: register_number,
+            value: value,
+            cycle_loaded: self.cycle_count,
+        });
     }
 }

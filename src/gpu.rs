@@ -504,6 +504,7 @@ impl Gpu {
                         ];
 
                         trace!("points {:?}", points);
+                        
 
                         for point in &mut points {
                             point.x += self.draw_offset.x;
@@ -2025,6 +2026,7 @@ impl Gpu {
                 self.vram[addr]
             }
             TextureColorMode::EightBit => {
+
                 let tex_x = (page_x * 64) as u32 + (x / 2) as u32;
                 let tex_y = (page_y * 256) as u32 + y as u32;
                 let (masked_x, masked_y) = self.apply_texture_mask(tex_x, tex_y);

@@ -1339,6 +1339,8 @@ impl R3000 {
         //println!("CPU EXCEPTION: Type: {:?} PC: {:#X}", exception, self.current_pc);
         self.flush_load_delay();
 
+        self.cop0.set_cause_execode(&exception);
+
         if self.delay_slot != 0 {
             self.cop0.write_reg(13, self.cop0.read_reg(13) | (1 << 31));
             self.cop0.write_reg(14, self.pc - 8);

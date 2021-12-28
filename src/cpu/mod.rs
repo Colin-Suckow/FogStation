@@ -1029,9 +1029,9 @@ impl R3000 {
 
     fn op_jal(&mut self, instruction: u32) {
         self.delay_slot = self.pc;
+        self.flush_load_delay();
         self.write_reg(31, self.delay_slot + 4);
         self.pc = (instruction.address() << 2) | (self.delay_slot & 0xF0000000);
-        self.flush_load_delay();
     }
 
     fn op_j(&mut self, instruction: u32) {

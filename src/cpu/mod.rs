@@ -1274,7 +1274,7 @@ impl R3000 {
     }
 
     pub fn fire_exception(&mut self, exception: Exception) {
-        //println!("CPU EXCEPTION: Type: {:?} PC: {:#X}", exception, self.current_pc);
+        println!("CPU EXCEPTION: Type: {:?} PC: {:#X}", exception, self.current_pc);
         self.cop0.set_cause_execode(&exception);
 
 

@@ -515,19 +515,7 @@ impl Gpu {
                         let page_x = (self.gp0_buffer[5] >> 16) & 0xF;
                         let page_y = (self.gp0_buffer[5] >> 20) & 0x1;
 
-                        let clut_mode = match (self.gp0_buffer[5] >> 23) & 0x3 {
-                            0 => TextureColorMode::FourBit,
-                            1 => TextureColorMode::EightBit,
-                            2 => TextureColorMode::FifteenBit,
-                            3 => TextureColorMode::FifteenBit, // This one is FifteenBit, for some reason
-                            mode => panic!("Unknown texture color mode {}", mode),
-                        };
-                        let blend_mode = match self.gp0_buffer[5].get_bits(21..=22) {
-                            0 => BlendMode::B2F2,
-                            1 => BlendMode::BAF,
-                            2 => BlendMode::BSF,
-                            _ => BlendMode::BF4,
-                        };
+                        self.update_draw_settings(self.gp0_buffer[5] >> 16);
 
                         self.blend_color = fill;
 
@@ -547,7 +535,7 @@ impl Gpu {
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
-                                clut_size: clut_mode,
+                                clut_size: self.texmode,
                                 tex_base_x: page_x as u16,
                                 tex_base_y: page_y as u16,
                             };
@@ -565,7 +553,6 @@ impl Gpu {
                                 clut_x,
                                 clut_y,
                                 TextureDraw::Shaded,
-                                clut_mode
                             );
                         }
                     } else if is_textured {
@@ -605,19 +592,7 @@ impl Gpu {
                         let page_x = (self.gp0_buffer[4] >> 16) & 0xF;
                         let page_y = (self.gp0_buffer[4] >> 20) & 0x1;
                         
-                        let clut_mode = match (self.gp0_buffer[4] >> 23) & 0x3 {
-                            0 => TextureColorMode::FourBit,
-                            1 => TextureColorMode::EightBit,
-                            2 => TextureColorMode::FifteenBit,
-                            3 => TextureColorMode::FifteenBit, // This one is FifteenBit, for some reason
-                            mode => panic!("Unknown texture color mode {}", mode),
-                        };
-                        let blend_mode = match self.gp0_buffer[4].get_bits(21..=22) {
-                            0 => BlendMode::B2F2,
-                            1 => BlendMode::BAF,
-                            2 => BlendMode::BSF,
-                            _ => BlendMode::BF4,
-                        };
+                        self.update_draw_settings(self.gp0_buffer[4] >> 16);
 
                         self.blend_color = fill;
 
@@ -637,7 +612,7 @@ impl Gpu {
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
-                                clut_size: clut_mode,
+                                clut_size: self.texmode,
                                 tex_base_x: page_x as u16,
                                 tex_base_y: page_y as u16,
                             };
@@ -655,7 +630,6 @@ impl Gpu {
                                 clut_x,
                                 clut_y,
                                 TextureDraw::Flat,
-                                clut_mode,
                             );
                         }
                     } else if is_gouraud {
@@ -798,19 +772,7 @@ impl Gpu {
                         let page_x = (self.gp0_buffer[5] >> 16) & 0xF;
                         let page_y = (self.gp0_buffer[5] >> 20) & 0x1;
                         
-                        let clut_mode = match (self.gp0_buffer[5] >> 23) & 0x3 {
-                            0 => TextureColorMode::FourBit,
-                            1 => TextureColorMode::EightBit,
-                            2 => TextureColorMode::FifteenBit,
-                            3 => TextureColorMode::FifteenBit, // This one is FifteenBit, for some reason
-                            mode => panic!("Unknown texture color mode {}", mode),
-                        };
-                        let blend_mode = match self.gp0_buffer[5].get_bits(21..=22) {
-                            0 => BlendMode::B2F2,
-                            1 => BlendMode::BAF,
-                            2 => BlendMode::BSF,
-                            _ => BlendMode::BF4,
-                        };
+                        self.update_draw_settings(self.gp0_buffer[5] >> 16);
 
                         self.blend_color = fill;
 
@@ -830,7 +792,7 @@ impl Gpu {
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
-                                clut_size: clut_mode,
+                                clut_size: self.texmode,
                                 tex_base_x: page_x as u16,
                                 tex_base_y: page_y as u16,
                             };
@@ -848,7 +810,6 @@ impl Gpu {
                                 clut_x,
                                 clut_y,
                                 TextureDraw::Shaded,
-                                clut_mode,
                             );
                         }
                     } else if is_textured {
@@ -881,19 +842,7 @@ impl Gpu {
                         let page_x = (self.gp0_buffer[4] >> 16) & 0xF;
                         let page_y = (self.gp0_buffer[4] >> 20) & 0x1;
                         
-                        let clut_mode = match (self.gp0_buffer[4] >> 23) & 0x3 {
-                            0 => TextureColorMode::FourBit,
-                            1 => TextureColorMode::EightBit,
-                            2 => TextureColorMode::FifteenBit,
-                            3 => TextureColorMode::FifteenBit, // This one is FifteenBit, for some reason
-                            mode => panic!("Unknown texture color mode {}", mode),
-                        };
-                        let blend_mode = match self.gp0_buffer[4].get_bits(21..=22) {
-                            0 => BlendMode::B2F2,
-                            1 => BlendMode::BAF,
-                            2 => BlendMode::BSF,
-                            _ => BlendMode::BF4,
-                        };
+                        self.update_draw_settings(self.gp0_buffer[4] >> 16);
 
                         self.blend_color = fill;
 
@@ -913,7 +862,7 @@ impl Gpu {
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
-                                clut_size: clut_mode,
+                                clut_size: self.texmode,
                                 tex_base_x: page_x as u16,
                                 tex_base_y: page_y as u16,
                             };
@@ -931,7 +880,6 @@ impl Gpu {
                                 clut_x,
                                 clut_y,
                                 TextureDraw::Flat,
-                                clut_mode,
                             );
                         }
                     } else if is_gouraud {
@@ -1453,21 +1401,7 @@ impl Gpu {
                 match command.command() {
                     0xE1 => {
                         //Draw Mode Setting
-                        self.texpage_x_base = (command & 0xF) as u16;
-                        self.texpage_y_base = if command.get_bit(4) { 1 } else { 0 };
-                        self.texmode = match (command >> 7) & 0x3 {
-                            0 => TextureColorMode::FourBit,
-                            1 => TextureColorMode::EightBit,
-                            2 => TextureColorMode::FifteenBit,
-                            3 => TextureColorMode::FifteenBit, // This one is FifteenBit, for some reason
-                            _ => panic!("Unknown texture color mode {}", (command >> 7) & 0x3),
-                        };
-                        self.blend_mode = match command.get_bits(5..=6) {
-                            0 => BlendMode::B2F2,
-                            1 => BlendMode::BAF,
-                            2 => BlendMode::BSF,
-                            _ => BlendMode::BF4,
-                        };
+                        self.update_draw_settings(command);
                     }
 
                     0xE2 => {
@@ -1521,6 +1455,24 @@ impl Gpu {
         trace!("Command was {:#X}", command);
         //Made it to the end, so the command must have been executed
         self.gp0_clear();
+    }
+
+    fn update_draw_settings(&mut self, command: u32) {
+        self.texpage_x_base = (command & 0xF) as u16;
+        self.texpage_y_base = if command.get_bit(4) { 1 } else { 0 };
+        self.texmode = match (command >> 7) & 0x3 {
+            0 => TextureColorMode::FourBit,
+            1 => TextureColorMode::EightBit,
+            2 => TextureColorMode::FifteenBit,
+            3 => TextureColorMode::FifteenBit, // This one is FifteenBit, for some reason
+            _ => panic!("Unknown texture color mode {}", (command >> 7) & 0x3),
+        };
+        self.blend_mode = match command.get_bits(5..=6) {
+            0 => BlendMode::B2F2,
+            1 => BlendMode::BAF,
+            2 => BlendMode::BSF,
+            _ => BlendMode::BF4,
+        };
     }
 
     pub fn send_gp1_command(&mut self, command: u32) {
@@ -1704,7 +1656,7 @@ impl Gpu {
         width: u32,
     ) {
         for x_offset in 0..=width {
-            let val = self.vram[(point_to_address(x_source + x_offset, y_source) as usize)];
+            let val = self.vram[min(point_to_address(x_source + x_offset, y_source) as usize, 524287)];
             let addr = point_to_address(x_dest + x_offset, y_dest) as usize;
             self.vram[addr] = val;
         }
@@ -1782,9 +1734,7 @@ impl Gpu {
                 self.texpage_x_base as u32,
                 self.texpage_y_base as u32,
                 self.palette_x as u32,
-                self.palette_y as u32,
-                self.texmode
-            );
+                self.palette_y as u32            );
 
             self.composite_and_place_pixel(address, fill, transparent, false);
         }
@@ -1937,7 +1887,6 @@ impl Gpu {
         clut_x: u32,
         clut_y: u32,
         draw_type: TextureDraw,
-        clut_size: TextureColorMode,
     ) {
         fn edge_function(a: &Point, b: &Point, c: &Vector2<i32>) -> isize {
             (c.x as isize - a.x as isize) * (b.y as isize - a.y as isize)
@@ -1988,7 +1937,7 @@ impl Gpu {
                     //println!("tex_x {} tex_y {}", tex_x, tex_y);
 
                     let tex_fill =
-                        self.get_texel(tex_x as i32, tex_y as i32, page_x, page_y, clut_x, clut_y, clut_size);
+                        self.get_texel(tex_x as i32, tex_y as i32, page_x, page_y, clut_x, clut_y);
 
 
                     let final_fill = if draw_type == TextureDraw::Shaded {
@@ -2035,7 +1984,6 @@ impl Gpu {
         clut_x: u32,
         clut_y: u32,
         draw_type: TextureDraw,
-        clut_size: TextureColorMode,
     ) {
         self.draw_textured_triangle(
             &[points[0], points[2], points[1]],
@@ -2045,7 +1993,6 @@ impl Gpu {
             clut_x,
             clut_y,
             draw_type,
-            clut_size
         );
         self.draw_textured_triangle(
             &[points[1], points[2], points[3]],
@@ -2055,7 +2002,6 @@ impl Gpu {
             clut_x,
             clut_y,
             draw_type,
-            clut_size
         );
     }
 
@@ -2066,8 +2012,8 @@ impl Gpu {
         // (new_x, new_y)
     }
 
-    fn get_texel(&self, x: i32, y: i32, page_x: u32, page_y: u32, clut_x: u32, clut_y: u32, clut_size: TextureColorMode) -> u16 {
-        let size = clut_size;
+    fn get_texel(&self, x: i32, y: i32, page_x: u32, page_y: u32, clut_x: u32, clut_y: u32) -> u16 {
+        let size = self.texmode;
 
         let pixel_val = match size {
             TextureColorMode::FifteenBit => {

@@ -210,6 +210,8 @@ impl R3000 {
         //Check for vblank
         if self.main_bus.gpu.consume_vblank() {
             self.fire_external_interrupt(InterruptSource::VBLANK);
+            // throw in an spu interrupt too because that thing isn't implemented yet
+            self.fire_external_interrupt(InterruptSource::SPU);
         };
 
         let instruction = self.main_bus.read_word(self.pc);
@@ -1336,9 +1338,6 @@ impl R3000 {
     pub fn fire_exception(&mut self, exception: Exception) {
         //println!("CPU EXCEPTION: Type: {:?} PC: {:#X}", exception, self.current_pc);
         self.flush_load_delay();
-
-        self.cop0.set_cause_execode(&exception);
-
 
         if self.delay_slot != 0 {
             self.cop0.write_reg(13, self.cop0.read_reg(13) | (1 << 31));

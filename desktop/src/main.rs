@@ -4,6 +4,7 @@ use eframe::epi::RepaintSignal;
 use gdbstub::{DisconnectReason, GdbStub, GdbStubError};
 use getopts::Options;
 use psx_emu::controller::ButtonState;
+use psx_emu::gpu::DrawCall;
 use psx_emu::gpu::Resolution;
 use psx_emu::PSXEmu;
 use std::env;
@@ -47,6 +48,7 @@ struct EmuState {
     redraw_signal: Option<Arc<dyn RepaintSignal>>,
     frame_limited: bool,
     current_origin: (usize, usize),
+    latest_draw_log: Vec<DrawCall>
 }
 
 fn main() {
@@ -146,6 +148,7 @@ fn main() {
         redraw_signal: None,
         frame_limited: START_FRAME_LIMITED,
         current_origin: (0, 0),
+        latest_draw_log: vec!(),
     };
 
     let emu_thread = start_emu_thread(emu_state);
@@ -201,6 +204,7 @@ enum EmuMessage {
     StartFrame,
     RequestDrawCallback(Arc<dyn RepaintSignal>),
     SetFrameLimiter(bool),
+    ClearGpuLog,
 }
 
 enum ClientMessage {
@@ -212,6 +216,7 @@ enum ClientMessage {
     Halted,
     Continuing,
     DisplayOriginChanged((usize, usize)),
+    LatestGPULog(Vec<DrawCall>),
 }
 
 struct EmuComms {
@@ -274,6 +279,7 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
             EmuMessage::Halt => {
                 state.halted = true;
                 state.comm.tx.send(ClientMessage::LatestPC(state.emu.pc())).unwrap();
+                state.comm.tx.send(ClientMessage::LatestGPULog(state.latest_draw_log.clone())).unwrap();
             },
             EmuMessage::Continue => {
                 state.halted = false;
@@ -290,6 +296,7 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
             EmuMessage::StartFrame => state.waiting_for_client = false,
             EmuMessage::RequestDrawCallback(signal) => state.redraw_signal = Some(signal),
             EmuMessage::SetFrameLimiter(val) => state.frame_limited = val,
+            EmuMessage::ClearGpuLog => state.emu.clear_gpu_call_log(),
         }
     }
 
@@ -343,6 +350,8 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
             if let Some(redraw_signal) = &state.redraw_signal {
                 redraw_signal.request_repaint();
             }
+
+            state.latest_draw_log = state.emu.take_gpu_call_log();
 
             //state.waiting_for_client = true; // Wait until next frame is ready
             state.last_frame_time = SystemTime::now();

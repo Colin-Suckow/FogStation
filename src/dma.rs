@@ -380,7 +380,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                             }
                         }
                     },
-                    control => panic!("Unknown SPU DMA transfer! {:#X}", control)
+                    control => println!("Unknown SPU DMA transfer! {:#X}", control)
                 }
 
 

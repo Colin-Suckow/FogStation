@@ -570,6 +570,7 @@ impl R3000 {
                 if instruction.get_bit(25) {
                     //COP2 imm25
                     // Execute immediate GTE command
+                    self.flush_load_delay();
                     self.gte.execute_command(instruction & 0x1FFFFFF);
                 } else {
                     match instruction.rs() {
@@ -710,7 +711,7 @@ impl R3000 {
         let addr = instruction
             .immediate_sign_extended()
             .wrapping_add(self.read_reg(instruction.rs()));
-            let val = self.read_reg(instruction.rt());
+        let val = self.read_reg(instruction.rt());
             
         self.flush_load_delay();
 
@@ -825,13 +826,13 @@ impl R3000 {
         let base = instruction.immediate_sign_extended();
         let offset = self.read_reg(instruction.rs());
         let addr = base.wrapping_add(offset);
+        let val = (self.read_reg(instruction.rt()) & 0xFFFF) as u16;
+        self.flush_load_delay();
         if addr % 2 != 0 {
             //unaligned address
             trace!("AdES fired by op_sh pc {:#X}  addr {:#X}   s_reg  {}   s_reg_val  {:#X}   offset   {:#X}", self.current_pc, addr, instruction.rs(), offset , base);
             self.fire_exception(Exception::AdES);
         } else {
-            let val = (self.read_reg(instruction.rt()) & 0xFFFF) as u16;
-            self.flush_load_delay();
             self.write_bus_half_word(addr, val, timers);
         };
     }

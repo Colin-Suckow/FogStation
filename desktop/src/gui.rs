@@ -225,7 +225,12 @@ impl epi::App for VaporstationApp {
                         egui::ScrollArea::vertical().show(ui, |ui| {
                             egui::Grid::new("draw_element_grid").show(ui, |ui| {
                                 for (i, command) in self.latest_gpu_log.iter().enumerate() {
-                                    ui.label(format!("{}", i));
+                                    if command.call_dropped {
+                                        ui.label(format!("{}x", i));
+                                    } else {
+                                        ui.label(format!("{} ", i));
+                                    }
+
                                     ui.label(command.operation.to_string());
                                     if let Some(shading) = command.shading {
                                         ui.label(shading.to_string());

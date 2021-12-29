@@ -507,8 +507,7 @@ impl GTE {
             0x3d => self.gpf(command),
             0x3e => self.gpl(command),
             0x3f => self.ncct(command),
-            _ => (),
-            //_ => println!("Unknown GTE command {:#X}!", command & 0x3F)
+            _ => panic!("Unknown GTE command {:#X}!", command & 0x3F)
         };
     }
 }

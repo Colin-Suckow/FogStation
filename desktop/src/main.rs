@@ -2,6 +2,7 @@ use byteorder::{ByteOrder, LittleEndian};
 use disc::*;
 use eframe::epi::RepaintSignal;
 use gdbstub::{DisconnectReason, GdbStub, GdbStubError};
+use getopts::Matches;
 use getopts::Options;
 use psx_emu::controller::ButtonState;
 use psx_emu::gpu::DrawCall;
@@ -71,56 +72,6 @@ fn main() {
         }
     };
 
-    let bios_path = if let Some(new_path) = matches.opt_str("b") {
-        println!("Using alternate bios file: {}", new_path);
-        new_path
-    } else {
-        println!("Using defualt bios file: {}", DEFAULT_BIOS_PATH);
-        DEFAULT_BIOS_PATH.to_string()
-    };
-
-    let bios_data = match fs::read(&bios_path) {
-        Ok(data) => data,
-        _ => {
-            println!("Unable to read bios file!");
-            return;
-        }
-    };
-
-    let mut emu = PSXEmu::new(bios_data);
-    emu.reset();
-
-    if matches.opt_present("l") {
-        SimpleLogger::new().init().unwrap();
-    }
-
-    if matches.opt_present("h") {
-        headless = true;
-    }
-
-   
-
-    //Loads entire disc into memory (Don't worry about it)
-    if let Some(disc_path) = matches.opt_str("c") {
-        println!("Loading CUE: {}", disc_path);
-        let disc = load_disc_from_cuesheet(Path::new(&disc_path).to_path_buf());
-        emu.load_disc(disc);
-    }
-
-    if let Some(exe_path) = matches.opt_str("e") {
-        println!("Loading executable: {}", exe_path);
-        let exe = fs::read(exe_path).unwrap();
-        let exe_data = exe[0x800..].to_vec();
-        let destination = LittleEndian::read_u32(&exe[0x18..0x1C]);
-        let entrypoint = LittleEndian::read_u32(&exe[0x10..0x14]);
-        let init_sp = LittleEndian::read_u32(&exe[0x30..0x34]);
-        println!(
-            "Destination is {:#X}\nEntrypoint is {:#X}\nSP is {:#X}",
-            destination, entrypoint, init_sp
-        );
-        emu.load_executable(destination, entrypoint, init_sp, &exe_data);
-    }
-
     let (emu_sender, client_receiver) = channel();
     let (client_sender, emu_receiver) = channel();
 
@@ -134,24 +85,7 @@ fn main() {
         tx: client_sender,
     };
 
-    let emu_state = EmuState {
-        emu: emu,
-        comm: emu_comm,
-        halted: START_HALTED,
-        current_resolution: Resolution {
-            width: 640,
-            height: 480,
-        },
-        debugging: matches.opt_present("g"),
-        last_frame_time: SystemTime::now(),
-        waiting_for_client: false,
-        redraw_signal: None,
-        frame_limited: START_FRAME_LIMITED,
-        current_origin: (0, 0),
-        latest_draw_log: vec!(),
-    };
-
-    let emu_thread = start_emu_thread(emu_state);
+    let emu_thread = start_emu_thread(matches, emu_comm);
 
     let state = ClientState {
         emu_thread,
@@ -189,6 +123,75 @@ fn wait_for_gdb_connection(port: u16) -> std::io::Result<TcpStream> {
 
     eprintln!("Debugger connected from {}", addr);
     Ok(stream)
+}
+
+fn create_emu(matches: Matches, emu_comm: EmuComms) -> EmuState {
+    let mut headless = false;
+    let bios_path = if let Some(new_path) = matches.opt_str("b") {
+        println!("Using alternate bios file: {}", new_path);
+        new_path
+    } else {
+        println!("Using defualt bios file: {}", DEFAULT_BIOS_PATH);
+        DEFAULT_BIOS_PATH.to_string()
+    };
+
+    let bios_data = match fs::read(&bios_path) {
+        Ok(data) => data,
+        _ => {
+            panic!("Unable to read bios file!");
+        }
+    };
+
+    let mut emu = PSXEmu::new(bios_data);
+    emu.reset();
+
+    if matches.opt_present("l") {
+        SimpleLogger::new().init().unwrap();
+    }
+
+    if matches.opt_present("h") {
+        headless = true;
+    }
+
+   
+
+    //Loads entire disc into memory (Don't worry about it)
+    if let Some(disc_path) = matches.opt_str("c") {
+        println!("Loading CUE: {}", disc_path);
+        let disc = load_disc_from_cuesheet(Path::new(&disc_path).to_path_buf());
+        emu.load_disc(disc);
+    }
+
+    if let Some(exe_path) = matches.opt_str("e") {
+        println!("Loading executable: {}", exe_path);
+        let exe = fs::read(exe_path).unwrap();
+        let exe_data = exe[0x800..].to_vec();
+        let destination = LittleEndian::read_u32(&exe[0x18..0x1C]);
+        let entrypoint = LittleEndian::read_u32(&exe[0x10..0x14]);
+        let init_sp = LittleEndian::read_u32(&exe[0x30..0x34]);
+        println!(
+            "Destination is {:#X}\nEntrypoint is {:#X}\nSP is {:#X}",
+            destination, entrypoint, init_sp
+        );
+        emu.load_executable(destination, entrypoint, init_sp, &exe_data);
+    }
+
+    EmuState {
+        emu: emu,
+        comm: emu_comm,
+        halted: START_HALTED,
+        current_resolution: Resolution {
+            width: 640,
+            height: 480,
+        },
+        debugging: matches.opt_present("g"),
+        last_frame_time: SystemTime::now(),
+        waiting_for_client: false,
+        redraw_signal: None,
+        frame_limited: START_FRAME_LIMITED,
+        current_origin: (0, 0),
+        latest_draw_log: vec!(),
+    }
 }
 
 #[allow(dead_code)]
@@ -230,10 +233,11 @@ struct ClientComms {
 }
 
 fn start_emu_thread(
-    mut state: EmuState,
+    matches: Matches,
+    emu_comm: EmuComms
 ) -> JoinHandle<()> {
     thread::spawn(move || {
-
+        let mut state = create_emu(matches, emu_comm);
         let mut debugger = if state.debugging {
             state.comm.tx.send(ClientMessage::AwaitingGDBClient).unwrap();
             let gdb_conn = wait_for_gdb_connection(DEFAULT_GDB_PORT).unwrap();

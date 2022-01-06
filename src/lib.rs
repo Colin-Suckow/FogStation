@@ -21,6 +21,7 @@ pub mod gpu;
 mod memory;
 mod spu;
 mod timer;
+mod mdec;
 
 static mut LOGGING: bool = false;
 

@@ -8,6 +8,7 @@ use crate::dma::DMAState;
 use crate::gpu::Gpu;
 use crate::memory::Memory;
 use crate::spu::SPU;
+use crate::mdec::MDEC;
 
 pub struct MainBus {
     pub bios: Bios,
@@ -18,6 +19,7 @@ pub struct MainBus {
     pub cd_drive: CDDrive,
     scratchpad: Memory,
     pub(super) controllers: Controllers,
+    pub(crate) mdec: MDEC,
 
     pub last_touched_addr: u32,
 }
@@ -33,6 +35,7 @@ impl MainBus {
             cd_drive: CDDrive::new(),
             scratchpad: Memory::new_scratchpad(),
             controllers: Controllers::new(),
+            mdec: MDEC::new(),
 
             last_touched_addr: 0,
         }
@@ -61,7 +64,7 @@ impl MainBus {
             0x1F800000..=0x1F8003FF => self.scratchpad.read_word(addr - 0x1F800000),
             0x1F801014 => 0x200931E1, //SPU_DELAY
             0x1F801060 => 0x00000B88, //RAM_SIZE
-            0x1F801824 => 0, //MDEC_IN
+            0x1F801820..=0x1F801824 => self.mdec.bus_read_word(addr),
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_word(addr - 0x1fc0_0000),
             _ => panic!(
                 "Invalid word read at address {:#X}! This address is not mapped to any device.",
@@ -102,6 +105,7 @@ impl MainBus {
             0x1F80100C => info!("Expansion 3 Delay/size write"),
             0x1F801810 => self.gpu.send_gp0_command(word),
             0x1F801814 => self.gpu.send_gp1_command(word),
+            0x1F801820..=0x1F801824 => self.mdec.bus_write_word(addr, word),
             0x1F800000..=0x1F8003FF => self.scratchpad.write_word(addr - 0x1F800000, word),
             0x1f80_1000..=0x1f80_2fff => warn!("Something tried to write to the hardware control registers. These are not currently emulated. The address was {:#X}. Value {:#X}", addr, word),
             0x1FFE0000..=0x1FFE0200 => warn!("Something tried to write to the cache control registers. These are not currently emulated. The address was {:#X}", addr),

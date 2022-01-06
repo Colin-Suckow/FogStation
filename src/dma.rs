@@ -33,11 +33,11 @@ impl Channel {
     }
 
     fn enabled(&self) -> bool {
-        self.control.get_bit(24) && if self.channel_num == 0 || self.channel_num == 3 {
+        self.control.get_bit(24) /*&& if self.channel_num == 0 || self.channel_num == 3 {
             self.control.get_bit(28)
         } else {
             true
-        }
+        } */
     }
 
     fn complete(&mut self) {
@@ -209,12 +209,70 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
     }
     //Execute dma copy for each channel
     for num in channels_to_run {
-        //println!("Executing DMA {}", num);
         cpu.main_bus.dma.channels[num].print_stats();
         match num {
 
-            1 => {
+            0 => {
                 //MDEC_in
+
+                let mut entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
+                let mut block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
+                let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
+
+                if entries == 0 {entries = 0x10000};
+                if block_size == 0 {block_size = 0x10000};
+
+                match cpu.main_bus.dma.channels[num].control {
+                    0x01000201 => {
+                        for i in 0..entries {
+                            for j in 0..block_size {
+                                let word = cpu
+                                    .main_bus
+                                    .read_word(base_addr + ((i * block_size) * 4) + (j * 4));
+                                cpu.main_bus.mdec.bus_write_word(0x1f801820, word);
+                            }
+                        }
+                    },
+                    control => panic!("Unknown MDEC DMA transfer! {:#X}", control)
+                }
+
+                
+                cpu.main_bus.dma.channels[num].complete();
+                cpu.main_bus.dma.raise_irq(num);
+                if cpu.main_bus.dma.irq_channel_enabled(num) {
+                    cpu.fire_external_interrupt(InterruptSource::DMA);
+                } else {
+                    trace!("DMA IRQ Rejected");
+                    trace!("DICR: {:#X}", cpu.main_bus.dma.interrupt);
+                }
+            },
+
+            1 => {
+                //MDEC_out
+
+                let mut entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
+                let mut block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
+                let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
+
+                if entries == 0 {entries = 0x10000};
+                if block_size == 0 {block_size = 0x10000};
+
+                match cpu.main_bus.dma.channels[num].control {
+                    0x01000200 => {
+                        println!("MDEC DMA OUT entries {} block size {}", entries, block_size);
+                        for i in 0..entries {
+                            for j in 0..block_size {
+                                let word =  cpu.main_bus.mdec.bus_read_word(0x1f801820);
+                                //println!("MDEC_out DMA pushing word {:#X}", word);
+                                cpu
+                                    .main_bus
+                                    .write_word(base_addr + ((i * block_size) * 4) + (j * 4), word);
+                               
+                            }
+                        }
+                    },
+                    control => println!("Unknown MDEC DMA transfer! {:#X}", control)
+                }
 
                 
                 cpu.main_bus.dma.channels[num].complete();
@@ -274,9 +332,11 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                     0x01000201 => {
                         //VramWrite
                         trace!("DMA: Starting VramWrite");
-                        let entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
-                        let block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
+                        let mut entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
+                        let mut block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                         let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
+                        if entries == 0 {entries = 0x10000};
+                        if block_size == 0 {block_size = 0x10000};
                         trace!("Block size {} Num blocks {} base {:#X}", block_size, entries, base_addr);
                         for i in 0..entries {
                             for j in 0..block_size {
@@ -302,9 +362,11 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                         //TODO: Implement properly
                         trace!("VRAM read");
 
-                        let entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
-                        let block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
+                        let mut entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
+                        let mut block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                         let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
+                        if entries == 0 {entries = 0x10000};
+                        if block_size == 0 {block_size = 0x10000};
                         for i in 0..entries {
                             for j in 0..block_size {
                                 let val = cpu.main_bus.gpu.read_word_gp0();
@@ -331,9 +393,13 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
             }
 
             3 => {
-                let words = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
+                let mut words = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                 let base_addr = (cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF) as usize;
                 let data = cpu.main_bus.cd_drive.data_queue();
+
+                if words == 0 {
+                    words = 0x10000;
+                }
 
                 if data.len() == 0 {
                     panic!("Tried to do dma on empty cd buffer");
@@ -367,9 +433,12 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
             4 => {
                 //SPU
 
-                let entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
-                let block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
+                let mut entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
+                let mut block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                 let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
+
+                if entries == 0 {entries = 0x10000};
+                if block_size == 0 {block_size = 0x10000};
 
                 match cpu.main_bus.dma.channels[num].control {
                     0x01000201 => {
@@ -397,9 +466,13 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
             6 => {
                 //OTC
                 //OTC is only used to reset the ordering table. So we can ignore a lot of the parameters
-                let entries = cpu.main_bus.dma.channels[num].block & 0xFFFF;
+                let mut entries = cpu.main_bus.dma.channels[num].block & 0xFFFF;
                 let base = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
                 trace!("Initializing {} entries ending at {:#X}", entries, base);
+
+                if entries == 0 {
+                    entries = 0x10000;
+                }
                 
                 for i in 0..entries {
                     let addr = base - (((entries - 1) - i) * 4);

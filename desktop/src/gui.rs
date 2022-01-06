@@ -177,7 +177,7 @@ impl epi::App for VaporstationApp {
 
                 ui.with_layout(Layout::right_to_left(), |ui| {
                     if self.halted() {
-                        ui.label("HALTED");
+                        ui.label(format!("HALTED at {:#X}", self.latest_pc));
                     } else {
                         ui.label(format!("{:.2} fps", 1000.0 / self.times.average()));
                     }

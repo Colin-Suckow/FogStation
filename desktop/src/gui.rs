@@ -318,16 +318,16 @@ impl epi::App for VaporstationApp {
                             } else {
                                 (pane_size.width() * 0.75, pane_size.width())
                             };
-                        let origin_x = self.display_origin.0;
-                        let origin_y = self.display_origin.1;
+                        let origin_x = self.display_origin.0 + 2;
+                        let origin_y = self.display_origin.1 + 2;
                         let viewport_rect = egui::Rect::from_min_max(
                             pos2(
                                 origin_x as f32 / VRAM_WIDTH as f32,
                                 origin_y as f32 / VRAM_HEIGHT as f32,
                             ),
                             pos2(
-                                (origin_x + width - 1) as f32 / VRAM_WIDTH as f32,
-                                (origin_y + height - 1) as f32 / VRAM_HEIGHT as f32,
+                                (origin_x + width - 5) as f32 / VRAM_WIDTH as f32,
+                                (origin_y + height - 5) as f32 / VRAM_HEIGHT as f32,
                             ),
                         );
                         let image =

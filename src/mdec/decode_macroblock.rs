@@ -60,8 +60,10 @@ impl MdecCommand for DecodeMacroblockCommand {
             parameters.push((w & 0xFFFF) as u16);
             parameters.push((w >> 16) as u16);
         }
+        let mut i = 0;
         for block_data in parameters.chunks_exact(32) {
-            ctx.result_buffer.extend(decode_block(block_data).chunks(2).map(|c| ((c[0] as u32) << 16) | c[1] as u32));
+            i += 1;
+            ctx.result_buffer.extend(decode_block(block_data, i).chunks(2).map(|c| ((c[0] as u32) << 16) | c[1] as u32));
         }
     }
 
@@ -87,7 +89,11 @@ impl MdecCommand for DecodeMacroblockCommand {
     }
 }
 
-fn decode_block(raw_block: &[u16]) -> Vec<u16> {
+fn decode_block(raw_block: &[u16], tmp_count: u16) -> Vec<u16> {
     // TODO do the real decoding
-    vec!(0x1f; 256)
+    if tmp_count % 2 == 1 {
+        vec!(0x1f; 256)
+    } else {
+        vec!(0x1f00; 256)
+    }
 }

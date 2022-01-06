@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use bit_field::BitField;
 
 use self::{decode_macroblock::DecodeMacroblockCommand, set_quant_table::SetQuantTableCommand, set_scale_table::SetScaleTableCommand};
@@ -44,6 +46,7 @@ pub(crate) struct MDEC {
     luminance_quant_table: Vec<u8>,
     color_quant_table: Vec<u8>,
     scale_table: Vec<i16>,
+    result_buffer: VecDeque<u32>,
 
     dma_out_enabled: bool,
     dma_in_enabled: bool,
@@ -60,6 +63,7 @@ impl MDEC {
 
             dma_out_enabled: false,
             dma_in_enabled: false,
+            result_buffer: VecDeque::new(),
         }
     }
 
@@ -125,6 +129,7 @@ impl MDEC {
 
         result.set_bit(27, self.dma_out_enabled);
         result.set_bit(28, self.dma_in_enabled);
+        result.set_bit(31, self.result_buffer.is_empty());
         //println!("MDEC status {:#X}", result);
         result
 
@@ -140,7 +145,11 @@ impl MDEC {
     }
 
     fn read_response(&mut self) -> u32 {
-        //TODO read from actual response buffer
-        0
+        if let Some(val) = self.result_buffer.pop_front() {
+            val
+        } else {
+            // Buffer is empty, so return zero
+            0
+        }
     }
 }

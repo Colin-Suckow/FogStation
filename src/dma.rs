@@ -219,8 +219,8 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 let mut block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                 let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
 
-                if entries == 0 {entries = 0x10000};
-                if block_size == 0 {block_size = 0x10000};
+                if entries == 0 {entries = 1};
+                if block_size == 0 {block_size = 1};
 
                 match cpu.main_bus.dma.channels[num].control {
                     0x01000201 => {
@@ -254,12 +254,11 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 let mut block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                 let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
 
-                if entries == 0 {entries = 0x10000};
-                if block_size == 0 {block_size = 0x10000};
+                if entries == 0 {entries = 1};
+                if block_size == 0 {block_size = 1};
 
                 match cpu.main_bus.dma.channels[num].control {
                     0x01000200 => {
-                        println!("MDEC DMA OUT entries {} block size {}", entries, block_size);
                         for i in 0..entries {
                             for j in 0..block_size {
                                 let word =  cpu.main_bus.mdec.bus_read_word(0x1f801820);
@@ -335,8 +334,8 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                         let mut entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
                         let mut block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                         let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
-                        if entries == 0 {entries = 0x10000};
-                        if block_size == 0 {block_size = 0x10000};
+                        if entries == 0 {entries = 1};
+                        if block_size == 0 {block_size = 1};
                         trace!("Block size {} Num blocks {} base {:#X}", block_size, entries, base_addr);
                         for i in 0..entries {
                             for j in 0..block_size {
@@ -365,8 +364,8 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                         let mut entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
                         let mut block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                         let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
-                        if entries == 0 {entries = 0x10000};
-                        if block_size == 0 {block_size = 0x10000};
+                        if entries == 0 {entries = 1};
+                        if block_size == 0 {block_size = 1};
                         for i in 0..entries {
                             for j in 0..block_size {
                                 let val = cpu.main_bus.gpu.read_word_gp0();
@@ -437,8 +436,8 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 let mut block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                 let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
 
-                if entries == 0 {entries = 0x10000};
-                if block_size == 0 {block_size = 0x10000};
+                if entries == 0 {entries = 1};
+                if block_size == 0 {block_size = 1};
 
                 match cpu.main_bus.dma.channels[num].control {
                     0x01000201 => {
@@ -471,7 +470,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 trace!("Initializing {} entries ending at {:#X}", entries, base);
 
                 if entries == 0 {
-                    entries = 0x10000;
+                    entries = 1;
                 }
                 
                 for i in 0..entries {

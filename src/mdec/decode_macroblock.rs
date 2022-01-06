@@ -55,7 +55,14 @@ impl MdecCommand for DecodeMacroblockCommand {
     }
 
     fn execute(&self, ctx: &mut super::MDEC) {
-        todo!();
+        let mut parameters = vec!();
+        for w in &ctx.parameter_buffer {
+            parameters.push((w & 0xFFFF) as u16);
+            parameters.push((w >> 16) as u16);
+        }
+        for block_data in parameters.chunks_exact(32) {
+            ctx.result_buffer.extend(decode_block(block_data).chunks(2).map(|c| ((c[0] as u32) << 16) | c[1] as u32));
+        }
     }
 
     fn box_clone(&self) -> Box<dyn MdecCommand> {
@@ -78,4 +85,9 @@ impl MdecCommand for DecodeMacroblockCommand {
         status.set_bit(23, self.set_b15);
        
     }
+}
+
+fn decode_block(raw_block: &[u16]) -> Vec<u16> {
+    // TODO do the real decoding
+    vec!(0x1f; 256)
 }

@@ -18,3 +18,4 @@ Cargo.lock
 /desktop/*.svg
 /desktop/*.gz
 /desktop/tests
+*.ps-exe

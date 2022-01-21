@@ -2,7 +2,7 @@
 name = "psx-emu"
 version = "0.1.0"
 authors = ["Colin Suckow <csuckow99@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [profile.release]
 #lto = true

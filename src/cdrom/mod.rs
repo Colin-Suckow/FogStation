@@ -256,10 +256,9 @@ impl CDDrive {
     }
 
     fn execute_command(&mut self, command: u8) {
-        //println!("CDROM: Executing command {:#X}", command);
-        if self.reg_interrupt_flag > 0 {
-            println!("CDERR: Sent command while IRQs are not acked!");
-        }
+        
+        self.running_commands.clear();
+        
         //Execute
         {
             let parameters: Vec<u8> = self.parameter_queue.iter().map(|v| v.clone()).collect();

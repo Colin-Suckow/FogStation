@@ -58,7 +58,7 @@ impl DiscIndex {
 
 impl Display for DiscIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "M: {} ({}) S: {} ({}) F: {} ({}) - dec (bcd)", self.minutes, dec_to_bcd(self.minutes), self.seconds, dec_to_bcd(self.seconds), self.sectors, dec_to_bcd(self.sectors))
+        write!(f, "{}:{}:{}", self.minutes, self.seconds, self.sectors)
     }
 }
 

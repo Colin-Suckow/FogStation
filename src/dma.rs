@@ -33,11 +33,11 @@ impl Channel {
     }
 
     fn enabled(&self) -> bool {
-        self.control.get_bit(24) /*&& if self.channel_num == 0 || self.channel_num == 3 {
+        self.control.get_bit(24) && if self.sync_mode() == 0 {
             self.control.get_bit(28)
         } else {
             true
-        } */
+        }
     }
 
     fn complete(&mut self) {
@@ -74,6 +74,10 @@ impl Channel {
         info!("Start/Busy: {}", if self.control.get_bit(24) {"Start"} else {"Stopped"});
         info!("Start/Trigger: {}", if self.control.get_bit(28) {"Start"} else {"Stopped"});
         info!("");
+    }
+
+    fn sync_mode(&self) -> usize {
+        self.control.get_bits(9..=10) as usize
     }
 }
 
@@ -210,6 +214,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
     //Execute dma copy for each channel
     for num in channels_to_run {
         cpu.main_bus.dma.channels[num].print_stats();
+        cpu.main_bus.dma.channels[num].control.set_bit(28, false); // Disable this channel's Start/Trigger bit because the transfer has begun
         match num {
 
             0 => {
@@ -269,6 +274,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                                
                             }
                         }
+                        trace!("MDEC_out transfer done!")
                     },
                     control => println!("Unknown MDEC DMA transfer! {:#X}", control)
                 }
@@ -278,6 +284,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 cpu.main_bus.dma.raise_irq(num);
                 if cpu.main_bus.dma.irq_channel_enabled(num) {
                     cpu.fire_external_interrupt(InterruptSource::DMA);
+                    trace!("IRQ fired");
                 } else {
                     trace!("DMA IRQ Rejected");
                     trace!("DICR: {:#X}", cpu.main_bus.dma.interrupt);

@@ -127,7 +127,7 @@ impl R3000 {
     }
 
     fn print_registers(&self) {
-        for r in 0..32 {
+        for r in 0..=32 {
             print!("{:#4} : {:#10X}, ", RegisterNames::try_from(r as usize).unwrap(), self.read_reg(r));
             if r % 8 == 0 && r != 0 {
                 println!("");
@@ -1376,6 +1376,7 @@ impl R3000 {
 
     pub fn read_bus_word(&mut self, addr: u32, timers: &mut TimerState) -> u32 {
         //self.last_touched_addr = addr & 0x1fffffff;
+
         match addr & 0x1fffffff {
             0x1F801070 => {
                 //println!("Reading ISTATUS");
@@ -1390,13 +1391,7 @@ impl R3000 {
     pub fn write_bus_word(&mut self, addr: u32, val: u32, timers: &mut TimerState) {
         self.last_touched_addr = addr & 0x1fffffff;
 
-        if addr == 0x800c1788 && val == 0x8011F9C8 {
-            println!("wrote bad madr {:#X}", self.current_pc);
-        }
-
-        if self.last_touched_addr == 0x1F8010B0 && val == 0x8011F9E8 {
-            println!("TOUCHED BAD PART pc {:#X} ra {:#X}", self.current_pc, self.read_reg(31));
-        }
+        
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
             return;

@@ -1317,7 +1317,6 @@ impl Gpu {
                     //Not enough for the header
                     return;
                 }
-                trace!("cpu to vram");
                 let mut width = (self.gp0_buffer[2] & 0xFFFF) as u32;
                 let mut height = ((self.gp0_buffer[2] >> 16) & 0xFFFF) as u32;
                 if width == 0 {
@@ -1659,7 +1658,7 @@ impl Gpu {
         for x_offset in 0..=width {
             let val = self.vram[min(point_to_address(x_source + x_offset, y_source) as usize, 524287)];
             let addr = point_to_address(x_dest + x_offset, y_dest) as usize;
-            self.vram[addr] = val;
+            self.vram[min(addr, 524287)] = val;
         }
     }
 

@@ -71,7 +71,7 @@ pub(super) fn set_loc(state: &mut CDDrive, minutes: u8, seconds: u8, frames: u8)
     state.next_seek_target = DiscIndex::new_bcd(minutes as usize, seconds as usize, frames as usize);
     state.seek_complete = false;
     state.data_queue.clear();
-    //println!("set_loc to bcd m {} s {} f {}", minutes, seconds, frames);
+    println!("set_loc to {}", state.next_seek_target);
 
     //println!("set_loc to {:?}, total sectors: {}", state.seek_target, state.seek_target.as_address() / BYTES_PER_SECTOR as u32);
     let main_response = stat(state, 0x2);
@@ -99,7 +99,7 @@ pub(super) fn seek_data(state: &mut CDDrive) -> Packet {
 
 pub(super) fn set_mode(state: &mut CDDrive, mode: u8) -> Packet {
     state.drive_mode = mode;
-    //println!("CD MODE: {:#b}", state.drive_mode);
+    println!("CD MODE: {:#b}", state.drive_mode);
     stat(state, 0xE)
 }
 
@@ -152,7 +152,8 @@ pub(super) fn pause_read(state: &mut CDDrive) -> Packet {
     };
 
     state.drive_state = DriveState::Idle;
-    state.read_offset = 0;
+    //state.read_offset = 0;
+    state.read_enabled = false;
 
     let response_packet = Packet {
         cause: IntCause::INT2,

@@ -183,8 +183,8 @@ impl CDDrive {
                         if self.data_queue.len() > 0 {
                             let sector = self.data_queue.remove(0);
                             // println!("Loaded a sector!");
-                            // println!("Sector index is {}, sector # {}", sector.index(), sector.index().sector_number());
-                            // println!("Filling buffer with sector size {:?}", self.sector_size());
+                            //println!("Sector index is {}, sector # {}", sector.index(), sector.index().sector_number());
+                            //println!("Filling buffer with sector size {:?}", self.sector_size());
                             self.response_data_queue.extend(sector.consume(self.sector_size()));
                         } else {
                             //println!("Game requested sector load, but the input buffer was empty!");
@@ -256,8 +256,8 @@ impl CDDrive {
     }
 
     fn execute_command(&mut self, command: u8) {
-        
-        self.running_commands.clear();
+
+        //println!("Received command {:#X}", command);
         
         //Execute
         {
@@ -515,7 +515,7 @@ pub fn step_cycle(cpu: &mut R3000) {
             //println!("Fetched {} bytes!", self.data_queue.len())
             //}
 
-            if cpu.main_bus.cd_drive.read_enabled && packet.cause == IntCause::INT1 {
+            if packet.cause == IntCause::INT1 {
 
                 let new_sector = cpu
                     .main_bus
@@ -529,6 +529,8 @@ pub fn step_cycle(cpu: &mut R3000) {
                             .next_seek_target
                             .plus_sector_offset(cpu.main_bus.cd_drive.read_offset)
                     );
+
+                //println!("Read {} from disc. Read offset {}", new_sector.index(), cpu.main_bus.cd_drive.read_offset);
 
                 cpu.main_bus.cd_drive.read_offset += 1;
 
@@ -545,21 +547,25 @@ pub fn step_cycle(cpu: &mut R3000) {
                 //cpu.main_bus.cd_drive.data_queue.clear();
                 cpu.main_bus.cd_drive.data_queue.insert(0, new_sector);
 
+                if cpu.main_bus.cd_drive.read_enabled {
+                    trace!("Inserting next ReadN");
+                    let cycles = match cpu.main_bus.cd_drive.drive_speed() {
+                        DriveSpeed::Single => 0x6e1cd,
+                        DriveSpeed::Double => 0x36cd2,
+                    };
+                    let response_packet = Packet {
+                        cause: IntCause::INT1,
+                        response: vec![cpu.main_bus.cd_drive.get_stat()],
+                        execution_cycles: cycles,
+                        extra_response: None,
+                        command: 0x6,
+                    };
+    
+                    cpu.main_bus.cd_drive.running_commands.push(response_packet);
+                }
 
-                trace!("Inserting next ReadN");
-                let cycles = match cpu.main_bus.cd_drive.drive_speed() {
-                    DriveSpeed::Single => 0x6e1cd,
-                    DriveSpeed::Double => 0x36cd2,
-                };
-                let response_packet = Packet {
-                    cause: IntCause::INT1,
-                    response: vec![cpu.main_bus.cd_drive.get_stat()],
-                    execution_cycles: cycles,
-                    extra_response: None,
-                    command: 0x6,
-                };
 
-                cpu.main_bus.cd_drive.running_commands.push(response_packet);
+                
             }
         }
         _ => (), //No actions for this command

@@ -482,7 +482,7 @@ pub enum RegisterNames {
 impl Display for RegisterNames {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RegisterNames::zero => write!(f, "zero"),
+            RegisterNames::zero => write!(f, "ze"),
             RegisterNames::at => write!(f,"at"),
             RegisterNames::v0 => write!(f,"v0"),
             RegisterNames::v1 => write!(f,"v1"),

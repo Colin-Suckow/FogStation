@@ -101,6 +101,7 @@ impl MDEC {
                 self.parameter_buffer.push(word);
 
                 if self.parameter_buffer.len() == expected_words {
+                    self.result_buffer.clear();
                     command.execute(self);
                     println!("MDEC executed. Returning to idle");
                     self.input_state = InputState::Idle;
@@ -130,7 +131,7 @@ impl MDEC {
         result.set_bit(27, self.dma_out_enabled);
         result.set_bit(28, self.dma_in_enabled);
         result.set_bit(31, self.result_buffer.is_empty());
-        //println!("MDEC status {:#X}", result);
+        println!("MDEC status {:#X}", result);
         result
 
     }

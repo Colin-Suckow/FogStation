@@ -8,6 +8,7 @@ use psx_emu::controller::ButtonState;
 use psx_emu::gpu::DrawCall;
 use psx_emu::gpu::Resolution;
 use psx_emu::PSXEmu;
+use psx_emu::toggle_memory_logging;
 use std::env;
 use std::fs;
 use std::net::{TcpListener, TcpStream};
@@ -208,6 +209,7 @@ enum EmuMessage {
     RequestDrawCallback(Arc<dyn RepaintSignal>),
     SetFrameLimiter(bool),
     ClearGpuLog,
+    SetMemLogging(bool),
 }
 
 enum ClientMessage {
@@ -301,6 +303,7 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
             EmuMessage::RequestDrawCallback(signal) => state.redraw_signal = Some(signal),
             EmuMessage::SetFrameLimiter(val) => state.frame_limited = val,
             EmuMessage::ClearGpuLog => state.emu.clear_gpu_call_log(),
+            EmuMessage::SetMemLogging(enabled) => toggle_memory_logging(enabled),
         }
     }
 

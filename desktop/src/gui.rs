@@ -33,7 +33,8 @@ struct VaporstationApp {
     latest_gpu_log: Vec<DrawCall>,
     show_gpu_call_window: bool,
     highlighted_gpu_calls: Vec<usize>,
-    last_frame_data: Vec<Color32>
+    last_frame_data: Vec<Color32>,
+    memory_logging: bool,
 }
 
 impl VaporstationApp {
@@ -57,6 +58,7 @@ impl VaporstationApp {
             show_gpu_call_window: false,
             highlighted_gpu_calls: vec![],
             last_frame_data: vec!(),
+            memory_logging: false,
         }
     }
 
@@ -173,6 +175,13 @@ impl epi::App for VaporstationApp {
                 egui::menu::menu(ui, "Debug", |ui| {
                     ui.checkbox(&mut self.show_vram_window, "VRAM Viewer");
                     ui.checkbox(&mut self.show_gpu_call_window, "GPU Call Debugger");
+                    if ui.checkbox(&mut self.memory_logging, "Memory Logging").clicked() {
+                        self.emu_handle
+                            .comm
+                            .tx
+                            .send(EmuMessage::SetMemLogging(self.memory_logging))
+                            .unwrap();
+                    };
                 });
 
                 ui.with_layout(Layout::right_to_left(), |ui| {

@@ -107,7 +107,7 @@ impl MainBus {
             0x1F801814 => self.gpu.send_gp1_command(word),
             0x1F801820..=0x1F801824 => self.mdec.bus_write_word(addr, word),
             0x1F800000..=0x1F8003FF => self.scratchpad.write_word(addr - 0x1F800000, word),
-            0x1f80_1000..=0x1f80_2fff => warn!("Something tried to write to the hardware control registers. These are not currently emulated. The address was {:#X}. Value {:#X}", addr, word),
+            //0x1f80_1000..=0x1f80_2fff => warn!("Something tried to write to the hardware control registers. These are not currently emulated. The address was {:#X}. Value {:#X}", addr, word),
             0x1FFE0000..=0x1FFE0200 => warn!("Something tried to write to the cache control registers. These are not currently emulated. The address was {:#X}", addr),
             _ => {
                 panic!(
@@ -160,9 +160,9 @@ impl MainBus {
             0x1F801C00..=0x1F801E80 => self.spu.write_half_word(addr, value),
             0x1F800000..=0x1F8003FF => self.scratchpad.write_half_word(addr - 0x1F800000, value),
             0x1F80_1040..=0x1F80_104E => self.controllers.write_half_word(addr, value),
-            0x1f801050..=0x1f80105e => (), //SIO registers
-            0x1F80_1000..=0x1F80_2000 => warn!("Something tried to half word write to the I/O ports. This is not currently emulated. The address was {:#X}. value was {:#X}", addr, value),
-            _ => println!("Invalid half word write at address {:#X}! This address is not mapped to any device.", addr)
+            //0x1f801050..=0x1f80105e => (), //SIO registers
+            //0x1F80_1000..=0x1F80_2000 => warn!("Something tried to half word write to the I/O ports. This is not currently emulated. The address was {:#X}. value was {:#X}", addr, value),
+            _ => panic!("Invalid half word write at address {:#X}! This address is not mapped to any device.", addr)
         }
     }
 
@@ -189,11 +189,11 @@ impl MainBus {
             0x1F80_1040..=0x1F80_104E => self.controllers.read_byte(addr),
             0x1F800000..=0x1F8003FF => self.scratchpad.read_byte(addr - 0x1F800000),
             _ => {
-                // panic!(
-                //     "Invalid byte read at address {:#X}! This address is not mapped to any device.",
-                //     addr
-                // );
-                0
+                panic!(
+                    "Invalid byte read at address {:#X}! This address is not mapped to any device.",
+                    addr
+                );
+                
             }
         };
         // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {
@@ -221,7 +221,7 @@ impl MainBus {
             0x1F802000..=0x1F803000 => (), //Expansion port 2
             0x1F801040 => self.controllers.write_byte(addr, value),
             0x1F800000..=0x1F8003FF => self.scratchpad.write_byte(addr - 0x1F800000, value),
-            _ => error!(
+            _ => panic!(
                 "Invalid byte write at address {:#X}! This address is not mapped to any device.",
                 addr
             ),

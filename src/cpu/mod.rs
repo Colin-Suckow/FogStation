@@ -143,7 +143,7 @@ impl R3000 {
             println!("Jumping to exe...");
             self.pc = self.entrypoint;
         }
-     
+
         if self.pc == 0xB0 {
             // SYSCALL: Send character to serial port
             // This catches any characters and prints them to stdout instead

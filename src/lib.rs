@@ -1,3 +1,5 @@
+use std::f32::consts::LOG10_2;
+
 use bios::Bios;
 use bus::MainBus;
 use controller::{ButtonState, controller_execute_cycle};
@@ -216,4 +218,9 @@ impl PSXEmu {
     pub fn display_origin(&self) -> (usize, usize) {
         self.r3000.main_bus.gpu.display_origin()
     }
+
+}
+
+pub fn toggle_memory_logging(enabled: bool) {
+    unsafe {LOGGING = enabled;}
 }

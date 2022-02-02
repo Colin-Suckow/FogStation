@@ -42,7 +42,7 @@ impl Channel {
 
     fn complete(&mut self) {
         self.control.set_bit(24, false);
-        self.control.set_bit(28, false);
+        //self.control.set_bit(28, false);
     }
 
     fn print_stats(&self) {
@@ -108,7 +108,6 @@ impl DMAState {
 
     pub fn read_word(&mut self, addr: u32) -> u32 {
         let channel_num = (((addr & 0x000000F0) >> 4) - 0x8) as usize;
-        //println!("Reading DMA addr {:#X}", addr);
         match addr {
             0x1F8010F0 => self.control,
             0x1F8010F4 => {
@@ -129,7 +128,7 @@ impl DMAState {
                     }
                     0x1F801008 => {
                         //read control
-                        //println!("Reading dma control {} val {:#X}", channel_num, self.channels[channel_num].control);
+                        println!("Reading dma control {} val {:#X}", channel_num, self.channels[channel_num].control);
                         self.channels[channel_num].control
                     }
                     _ => panic!("Unknown dma read {:#X}", addr),
@@ -140,27 +139,28 @@ impl DMAState {
 
     pub fn write_word(&mut self, addr: u32, value: u32) {
         let channel_num = (((addr & 0x000000F0) >> 4) - 0x8) as usize;
-        //trace!("Write DMA word: addr {:#X} value {:#X}", addr, value);
+        //println!("Write DMA word: addr {:#X} value {:#X}", addr, value);
         match addr {
             0x1F8010F0 => self.control = value,
             0x1F8010F4 => {
                 self.interrupt = write_dicr(self.interrupt, value);
+                self.update_master_flag();
             }
             _ => {
                 match addr & 0xFFFFFF0F {
                     0x1F801000 => {
                         //Set base address
-                        //println!("Wrote DMA base {} with {:#X} addr {:#X}", channel_num, value, addr);
+                        println!("Wrote DMA base {} with {:#X} addr {:#X}", channel_num, value, addr);
                         self.channels[channel_num].base_addr = value & 0xFFFFFF;
                     }
                     0x1F801004 => {
                         //Set block control
-                        //println!("Wrote DMA block {} with {:#X}", channel_num, value);
+                        println!("Wrote DMA block {} with {:#X}", channel_num, value);
                         self.channels[channel_num].block = value;
                     }
                     0x1F801008 => {
                         //Set control
-                        //println!("Wrote DMA control {} with {:#X}", channel_num, value);
+                        println!("Wrote DMA control {} with {:#X}", channel_num, value);
                         self.channels[channel_num].control = value;
                         if value.get_bit(24) {
                             self.cycles_to_wait = 500;
@@ -214,7 +214,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
     //Execute dma copy for each channel
     for num in channels_to_run {
         cpu.main_bus.dma.channels[num].print_stats();
-        cpu.main_bus.dma.channels[num].control.set_bit(28, false); // Disable this channel's Start/Trigger bit because the transfer has begun
+        //cpu.main_bus.dma.channels[num].control.set_bit(28, false); // Disable this channel's Start/Trigger bit because the transfer has begun
         match num {
 
             0 => {
@@ -505,7 +505,12 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
             _ => panic!("Unable to transfer unknown DMA channel {}!", num),
         }
     }
+
+    let old_flag = cpu.main_bus.dma.interrupt.get_bit(31);
     cpu.main_bus.dma.update_master_flag();
+    if !old_flag && cpu.main_bus.dma.interrupt.get_bit(31) {
+        cpu.fire_external_interrupt(InterruptSource::DMA);
+    }
     //cpu.main_bus.dma.cycles_to_wait = 200; // Lets give the cpu some time to see that the DMA is done
 }
 

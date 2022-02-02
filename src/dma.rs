@@ -172,6 +172,29 @@ impl DMAState {
         };
     }
 
+    pub fn read_byte(&mut self, addr: u32) -> u8 {
+        let channel_num = (((addr & 0x000000F0) >> 4) - 0x8) as usize;
+        match addr {
+            0x1F8010F6 => {
+                ((self.interrupt >> 16) & 0xFF) as u8
+            },
+            _ => panic!("Unknown DMA read byte {:#X}", addr),
+            
+        }
+    }
+
+    pub fn write_byte(&mut self, addr: u32, value: u8) {
+        let channel_num = (((addr & 0x000000F0) >> 4) - 0x8) as usize;
+        match addr {
+            0x1F8010F6 => {
+                self.interrupt &= !(0xFF << 16);
+                self.interrupt |= (value as u32) << 16
+            },
+            _ => panic!("Unknown DMA read byte {:#X}", addr),
+            
+        }
+    }
+
     pub fn update_master_flag(&mut self) {
         let should_flag = self.interrupt.get_bit(15)
             || (self.interrupt.get_bit(23)

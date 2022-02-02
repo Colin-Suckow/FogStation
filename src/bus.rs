@@ -188,6 +188,8 @@ impl MainBus {
             0x1F801800..=0x1F801803 => self.cd_drive.read_byte(addr), //CDROM
             0x1F80_1040..=0x1F80_104E => self.controllers.read_byte(addr),
             0x1F800000..=0x1F8003FF => self.scratchpad.read_byte(addr - 0x1F800000),
+            0x1F801080..=0x1F8010F7 => self.dma.read_byte(addr),
+            
             _ => {
                 panic!(
                     "Invalid byte read at address {:#X}! This address is not mapped to any device.",
@@ -221,6 +223,7 @@ impl MainBus {
             0x1F802000..=0x1F803000 => (), //Expansion port 2
             0x1F801040 => self.controllers.write_byte(addr, value),
             0x1F800000..=0x1F8003FF => self.scratchpad.write_byte(addr - 0x1F800000, value),
+            0x1F801080..=0x1F8010F7 => self.dma.write_byte(addr, value),
             _ => panic!(
                 "Invalid byte write at address {:#X}! This address is not mapped to any device.",
                 addr

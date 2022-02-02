@@ -71,7 +71,7 @@ pub(super) fn set_loc(state: &mut CDDrive, minutes: u8, seconds: u8, frames: u8)
     state.next_seek_target = DiscIndex::new_bcd(minutes as usize, seconds as usize, frames as usize);
     state.seek_complete = false;
     state.data_queue.clear();
-    println!("set_loc to {}", state.next_seek_target);
+    //println!("set_loc to {}", state.next_seek_target);
 
     //println!("set_loc to {:?}, total sectors: {}", state.seek_target, state.seek_target.as_address() / BYTES_PER_SECTOR as u32);
     let main_response = stat(state, 0x2);

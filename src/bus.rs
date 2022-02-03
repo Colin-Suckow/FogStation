@@ -155,7 +155,7 @@ impl MainBus {
             0x1F802002 => info!("Serial: {}", value),
             0x1F802023 => info!("DUART A: {}", value),
             0x1F80202B => info!("DUART B: {}", value),
-            0x1F801050 => info!("SIO: {}", value),
+            0x1F801050..=0x1f80105e => info!("SIO: {}", value),
             0x0..=0x001f_ffff => self.memory.write_half_word(addr, value), //KUSEG
             0x1F801C00..=0x1F801E80 => self.spu.write_half_word(addr, value),
             0x1F800000..=0x1F8003FF => self.scratchpad.write_half_word(addr - 0x1F800000, value),

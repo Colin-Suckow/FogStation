@@ -1373,7 +1373,7 @@ impl Gpu {
                     };
                     let x = base_x + (index % width);
                     let y = base_y + (index / width);
-                    self.vram[point_to_address(x,y) as usize] = val;
+                    self.vram[min(point_to_address(x,y) as usize, 524287)] = val;
                 }
             }
 
@@ -1471,7 +1471,8 @@ impl Gpu {
             0 => BlendMode::B2F2,
             1 => BlendMode::BAF,
             2 => BlendMode::BSF,
-            _ => BlendMode::BF4,
+            3 => BlendMode::BF4,
+            mode => panic!("Unknown blend mode! {}", mode)
         };
     }
 
@@ -2107,20 +2108,20 @@ enum BlendMode {
     BSF,  // B-F
     BF4,  // B+F/4
 }
-
+// TODO: Make not bad
 fn alpha_composite(background_color: u16, alpha_color: u16, mode: &BlendMode) -> u16 {
     let (b_r, b_g, b_b) = b15_to_rgb(background_color);
     let (a_r, a_g, a_b) = b15_to_rgb(alpha_color);
 
     match mode {
         BlendMode::B2F2 => rgb_to_b15(
-            (a_r / 2) + (b_r / 2),
-            (a_g / 2) + (b_g / 2),
-            (a_b / 2) + (b_b / 2),
+            clamp((a_r / 2) as u16 + (b_r / 2) as u16, 0, 0xFF) as u8,
+            clamp((a_g / 2) as u16 + (b_g / 2) as u16, 0, 0xFF) as u8,
+            clamp((a_b / 2) as u16 + (b_b / 2) as u16, 0, 0xFF) as u8,
         ),
-        BlendMode::BAF => rgb_to_b15(a_r + b_r, a_g + b_g, a_b + b_b),
-        BlendMode::BSF => rgb_to_b15(a_r - b_r, a_g - b_g, a_b - b_b),
-        BlendMode::BF4 => rgb_to_b15(a_r + (b_r / 4), a_g + (b_g / 4), a_b + (b_b / 4)),
+        BlendMode::BAF => rgb_to_b15(clamp(a_r as u16 + b_r as u16, 0, 0xFF) as u8, clamp(a_g as u16 + b_g as u16, 0, 0xFF) as u8, clamp(a_b as u16 + b_b as u16, 0, 0xFF) as u8),
+        BlendMode::BSF => rgb_to_b15(clamp(b_r as u16 - a_r as u16, 0, 0xFF) as u8, clamp(b_g as u16 - a_g as u16, 0, 0xFF) as u8, clamp(b_b as u16 - a_b as u16, 0, 0xFF) as u8),
+        BlendMode::BF4 => rgb_to_b15(clamp(b_r as u16 + (a_r / 4) as u16, 0, 0xFF) as u8, clamp(b_g as u16 + (a_g / 4) as u16, 0, 0xFF) as u8, clamp(b_b as u16 + (a_b / 4) as u16, 0 ,0xFF) as u8),
     }
 }
 

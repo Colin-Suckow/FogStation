@@ -258,7 +258,9 @@ pub struct Gpu {
     display_origin_y: usize,
 
     draw_logging_enabled: bool,
-    draw_log: Vec<DrawCall>
+    draw_log: Vec<DrawCall>,
+
+    force_b15: bool,
 }
 
 impl Gpu {
@@ -311,6 +313,8 @@ impl Gpu {
 
             draw_logging_enabled: true,
             draw_log: vec!(),
+
+            force_b15: false,
         }
     }
 
@@ -1037,7 +1041,7 @@ impl Gpu {
 
                         let address = point_to_address(point.x as u32, point.y as u32) as usize;
                         let fill = b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF);
-                        self.composite_and_place_pixel(address, fill, false, false);
+                        self.composite_and_place_pixel(address, fill, false, true);
                     }
 
                     0b0 => {
@@ -1438,6 +1442,10 @@ impl Gpu {
                         self.draw_offset = Point::from_components(x, y, 0);
                     }
 
+                    0xE6 => {
+                        self.force_b15 = command.get_bit(0);
+                    }
+
                     _ => error!(
                         "Unknown GPU ENV command {:#X}. Full command queue is {:#X}",
                         command.command(),
@@ -1698,7 +1706,7 @@ impl Gpu {
                 continue;
             }
             let address = point_to_address(x, y) as usize;
-            self.composite_and_place_pixel(address, fill, transparent, is_quick_fill);
+            self.composite_and_place_pixel(address, fill, transparent, true);
         }
     }
 
@@ -1742,14 +1750,20 @@ impl Gpu {
     }
 
     fn composite_and_place_pixel(&mut self, addr: usize, fill: u16, transparent: bool, allow_black: bool) {
-        let color = if transparent && fill.get_bit(15) {
+        let mut color = if transparent && fill.get_bit(15) {
             alpha_composite(self.vram[addr], fill, &self.blend_mode)
         } else {
             fill
         };
+        
+        if self.force_b15 {
+            color.set_bit(15, true);
+        }
+        
         if (!allow_black && color == 0) && !(color == 0x8000 && !transparent) {
             return;
         }
+
         self.vram[min(addr, 524287)] = color;
     }
 
@@ -1873,7 +1887,7 @@ impl Gpu {
                         fill.set_bit(15, true);
                     }
 
-                    self.composite_and_place_pixel(addr as usize, fill, transparent, false);
+                    self.composite_and_place_pixel(addr as usize, fill, transparent, true);
                 }
             }
         }

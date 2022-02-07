@@ -261,6 +261,7 @@ pub struct Gpu {
     draw_log: Vec<DrawCall>,
 
     force_b15: bool,
+    interlace: bool,
 }
 
 impl Gpu {
@@ -315,6 +316,7 @@ impl Gpu {
             draw_log: vec!(),
 
             force_b15: false,
+            interlace: false,
         }
     }
 
@@ -1525,6 +1527,9 @@ impl Gpu {
                 self.ntsc_y2 = command.get_bits(10..=19);
 
                 self.display_v_res = self.ntsc_y2 - self.ntsc_y1;
+                if self.interlace {
+                    self.display_v_res *= 2;
+                }
             }
 
             0x8 => {
@@ -1557,6 +1562,8 @@ impl Gpu {
                 if self.color_depth == ColorDepth::Full {
                     println!("24 bit color depth not supported!");
                 }
+
+                self.interlace = command.get_bit(5);
             }
 
             0x10 => {
@@ -1752,7 +1759,7 @@ impl Gpu {
     }
 
     fn composite_and_place_pixel(&mut self, addr: usize, fill: u16, transparent: bool, allow_black: bool) {
-        let mut color = if transparent && fill.get_bit(15) {
+        let mut color = if transparent {
             alpha_composite(self.vram[addr], fill, &self.blend_mode)
         } else {
             fill
@@ -2143,13 +2150,13 @@ fn alpha_composite(background_color: u16, alpha_color: u16, mode: &BlendMode) ->
 
     match mode {
         BlendMode::B2F2 => rgb_to_b15(
-            clamp((a_r / 2) as i16 + (b_r / 2) as i16, 0, 0xFF) as u8,
-            clamp((a_g / 2) as i16 + (b_g / 2) as i16, 0, 0xFF) as u8,
-            clamp((a_b / 2) as i16 + (b_b / 2) as i16, 0, 0xFF) as u8,
+            clamp((a_r / 2) as i16 + (b_r / 2) as i16, 0, 0x1F) as u8,
+            clamp((a_g / 2) as i16 + (b_g / 2) as i16, 0, 0x1F) as u8,
+            clamp((a_b / 2) as i16 + (b_b / 2) as i16, 0, 0x1F) as u8,
         ),
-        BlendMode::BAF => rgb_to_b15(clamp(a_r as i16 + b_r as i16, 0, 0xFF) as u8, clamp(a_g as i16 + b_g as i16, 0, 0xFF) as u8, clamp(a_b as i16 + b_b as i16, 0, 0xFF) as u8),
-        BlendMode::BSF => rgb_to_b15(clamp(b_r as i16 - a_r as i16, 0, 0xFF) as u8, clamp(b_g as i16 - a_g as i16, 0, 0xFF) as u8, clamp(b_b as i16 - a_b as i16, 0, 0xFF) as u8),
-        BlendMode::BF4 => rgb_to_b15(clamp(b_r as i16 + (a_r / 4) as i16, 0, 0xFF) as u8, clamp(b_g as i16 + (a_g / 4) as i16, 0, 0xFF) as u8, clamp(b_b as i16 + (a_b / 4) as i16, 0 ,0xFF) as u8),
+        BlendMode::BAF => rgb_to_b15(clamp(a_r as i16 + b_r as i16, 0, 0x1F) as u8, clamp(a_g as i16 + b_g as i16, 0, 0x1F) as u8, clamp(a_b as i16 + b_b as i16, 0, 0x1F) as u8),
+        BlendMode::BSF => rgb_to_b15(clamp(b_r as i16 - a_r as i16, 0, 0x1F) as u8, clamp(b_g as i16 - a_g as i16, 0, 0x1F) as u8, clamp(b_b as i16 - a_b as i16, 0, 0x1F) as u8),
+        BlendMode::BF4 => rgb_to_b15(clamp((b_r as i16 + (a_r / 4) as i16), 0, 0x1F) as u8, clamp((b_g as i16 + (a_g / 4) as i16), 0, 0x1F) as u8, clamp((b_b as i16 + (a_b / 4) as i16), 0 ,0x1F) as u8),
     }
 }
 

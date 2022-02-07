@@ -71,10 +71,10 @@ impl MdecCommand for DecodeMacroblockCommand {
         let mut current_block = Vec::<u16>::new();
         for parameter in parameters {
             if parameter != END_CODE {
-                println!("pushed {:#X}", parameter);
+                //println!("pushed {:#X}", parameter);
                 current_block.push(parameter);
             } else {
-                println!("Executing block");
+                //println!("Executing block");
                 let decoded_block = decode_block(ctx, &current_block, &self.depth);
                 ctx.result_buffer.extend(decoded_block);
                 current_block.clear();
@@ -154,7 +154,7 @@ fn decode_block(ctx: & super::MDEC, raw_block: &Vec<u16>, color_depth: &ColorDep
         ColorDepth::B4 => todo!(),
         ColorDepth::B8 => todo!(),
         ColorDepth::B24 => vec!(0xFFFFFF; 16*16),
-        ColorDepth::B15 => todo!(),
+        ColorDepth::B15 => vec!(0x1F001F; 16*16/2),
     }
 }
 

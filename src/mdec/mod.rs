@@ -131,7 +131,7 @@ impl MDEC {
         result.set_bit(27, self.dma_out_enabled);
         result.set_bit(28, self.dma_in_enabled);
         result.set_bit(31, self.result_buffer.is_empty());
-        println!("MDEC status {:#X}", result);
+        //println!("MDEC status {:#X}", result);
         result
 
     }

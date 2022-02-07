@@ -1966,12 +1966,11 @@ impl Gpu {
                         let shaded_green = ((w0 * c1.1 as f32) + (w1 * c2.1 as f32) + (w2 * c3.1 as f32)) as u16;
                         let shaded_blue = ((w0 * c1.2 as f32) + (w1 * c2.2 as f32) + (w2 * c3.2 as f32)) as u16;
 
-                        let tex_colors = b15_to_rgb(tex_fill);
+                        let shade_fill = ((shaded_blue & 0x1f) << 10)
+                        | (shaded_green << 5)
+                        | (shaded_red as u8 as u16);
 
-                        let final_red = clamp((((tex_colors.0 as u16) << 3) * shaded_red) >> 7, 0, 255);
-                        let final_green = clamp((((tex_colors.1 as u16) << 3) * shaded_green) >> 7, 0, 255);
-                        let final_blue = clamp((((tex_colors.2 as u16) << 3) * shaded_blue) >> 7, 0, 255);
-                        rgb_to_b15(final_red as u8, final_green as u8, final_blue as u8) | (tex_fill & 0x8000)
+                        blend_b15(tex_fill, shade_fill)
                     } else {
                         tex_fill
                     };
@@ -2116,6 +2115,19 @@ fn lerp_color(y0: u16, y1: u16, x0: i32, x1: i32, x: i32) -> u16 {
 
 fn lerp_coords(y0: i32, y1: i32, x0: i32, x1: i32, x: i32) -> i32 {
     (y0 as f32 + ((y1 as i32 - y0 as i32) as f32 * ((x - x0) as f32 / (x1 - x0) as f32))) as i32
+}
+
+fn blend_b15(bg_color: u16, fg_color: u16) -> u16 {
+    let (b_r, b_g, b_b) = b15_to_rgb(bg_color);
+    let (f_r, f_g, f_b) = b15_to_rgb(fg_color);
+
+    let blend_r = clamp((b_r as f32 / 31.0) * ((f_r) as f32 / 31.0) * 2.0, 0.0, 1.0);
+    let blend_g = clamp((b_g as f32 / 31.0) * ((f_g) as f32 / 31.0) * 2.0, 0.0, 1.0);
+    let blend_b = clamp((b_b as f32 / 31.0) * ((f_b) as f32 / 31.0) * 2.0, 0.0, 1.0);
+
+    let transparent_flag = bg_color.get_bit(15) | fg_color.get_bit(15);
+
+    rgb_to_b15((blend_r * 31.0) as u8, (blend_g * 31.0) as u8, (blend_b * 31.0) as u8) | ((transparent_flag as u16) << 15)
 }
 
 enum BlendMode {

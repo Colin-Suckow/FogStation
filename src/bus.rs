@@ -190,13 +190,14 @@ impl MainBus {
             0x1F800000..=0x1F8003FF => self.scratchpad.read_byte(addr - 0x1F800000),
             0x1F801080..=0x1F8010F7 => self.dma.read_byte(addr),
             
-            _ => {
-                panic!(
-                    "Invalid byte read at address {:#X}! This address is not mapped to any device.",
-                    addr
-                );
+            // _ => {
+            //     panic!(
+            //         "Invalid byte read at address {:#X}! This address is not mapped to any device.",
+            //         addr
+            //     );
                 
-            }
+            // }
+            _ => 0,
         };
         // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {
         //     println!("Read IO byte addr {:#X} value {:#X}", addr, val);

@@ -9,6 +9,34 @@ enum SpuMode {
     DMAread = 3,
 }
 
+enum DeltaMode {
+    Linear,
+    Exponential
+}
+
+enum DeltaDirection {
+    Increase,
+    Decrease
+}
+
+struct Voice {
+    attack_mode: DeltaMode,
+    attack_shift: u8,
+    attack_step: u8,
+    decay_shift: u8,
+    sustain_level: u8,
+    sustain_mode: DeltaMode,
+    sustain_direction: DeltaDirection,
+    sustain_shift: u8,
+    sustain_step: u8,
+    release_mode: DeltaMode,
+    release_shift: u8,
+
+    start_address: u16,
+    current_address: u16,
+
+}
+
 pub struct SPU {
     main_volume: u32,
     reverb_volume: u32,
@@ -25,6 +53,7 @@ pub struct SPU {
     irq_addr: u32,
     pending_irq_acked: bool,
 
+    cycle_count: usize,
 }
 
 impl SPU {
@@ -44,6 +73,9 @@ impl SPU {
             memory: vec![0; 0x800000],
 
             pending_irq_acked: true,
+
+
+            cycle_count: 0,
         }
     }
 
@@ -85,12 +117,12 @@ impl SPU {
                 let offset = (addr - 0x1F801C00);
                 LittleEndian::write_u16(&mut self.voice_registers[offset as usize..(offset + 2) as usize], value);
             },
-            _ => (),//println!("Wrote unknown SPU address {:#X} with {:#X}", addr, value)
+            _ => println!("Wrote unknown SPU address {:#X} with {:#X}", addr, value)
         }
     }
 
     fn set_transfer_address(&mut self, addr: u16) {
-        self.internal_transfer_address = (addr as u32) * 8;
+        self.internal_transfer_address = (addr << 3) as u32;
         self.transfer_address_register = addr;
     }
 
@@ -108,10 +140,17 @@ impl SPU {
     }
 
     fn check_irq(&self) -> bool {
-        self.internal_transfer_address == self.irq_addr * 8
+        //println!("addr {:#X} irq addr {:#X}", self.internal_transfer_address, self.irq_addr << 3);
+        self.internal_transfer_address == self.irq_addr << 3
     }
 
     pub fn check_and_ack_irq(&mut self) -> bool {
+        self.cycle_count += 1;
+
+        if self.cycle_count % (340_220 / 2) == 0 && self.spu_control.get_bit(15) {
+            self.queue_irq();
+        }
+
         let result = !self.pending_irq_acked;
         self.pending_irq_acked = true;
         result

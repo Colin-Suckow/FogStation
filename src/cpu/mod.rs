@@ -191,10 +191,13 @@ impl R3000 {
 
         // Handle SPU irq
         if self.main_bus.spu.check_and_ack_irq() {
-            println!("SPU Interrupt fired!");
             self.fire_external_interrupt(InterruptSource::SPU);
         }
 
+        //Check for vblank
+        if self.main_bus.gpu.consume_vblank() {
+            self.fire_external_interrupt(InterruptSource::VBLANK);
+        };
         
         // Handle interrupts
         let mut cause = self.cop0.read_reg(13);
@@ -207,12 +210,6 @@ impl R3000 {
             self.fire_exception(Exception::Int);
         }
         
-        //Check for vblank
-        if self.main_bus.gpu.consume_vblank() {
-            self.fire_external_interrupt(InterruptSource::VBLANK);
-            // throw in an spu interrupt too because that thing isn't implemented yet
-            self.fire_external_interrupt(InterruptSource::SPU);
-        };
 
         let instruction = self.main_bus.read_word(self.pc);
         self.current_pc = self.pc;

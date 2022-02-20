@@ -2145,6 +2145,12 @@ enum BlendMode {
 }
 // TODO: Make not bad
 fn alpha_composite(background_color: u16, alpha_color: u16, mode: &BlendMode) -> u16 {
+
+    // If the new color isn't transparent, just return it
+    if !alpha_color.get_bit(15) {
+        return alpha_color;
+    }
+
     let (b_r, b_g, b_b) = b15_to_rgb(background_color);
     let (a_r, a_g, a_b) = b15_to_rgb(alpha_color);
 

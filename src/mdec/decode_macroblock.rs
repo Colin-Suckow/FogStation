@@ -1,6 +1,7 @@
 use std::{os::raw, f64::consts::PI, mem::size_of_val};
 
 use bit_field::BitField;
+use byteorder::{LittleEndian, ByteOrder};
 
 use super::MdecCommand;
 
@@ -360,8 +361,13 @@ impl MacroblockDecoder {
             ColorDepth::B4 => todo!(),
             ColorDepth::B8 => todo!(),
             ColorDepth::B24 => {
-                rgb_block.iter().map(|pixel| {
-                    ((pixel.2 as u32) << 16) | ((pixel.1 as u32) << 8) | (pixel.0 as u32)
+                let bytes: Vec<u8> = rgb_block.iter().fold(Vec::<u8>::new(),|mut acc, pixel| {
+                    acc.extend(&[pixel.0, pixel.1, pixel.2]);
+                    acc
+                });
+
+                bytes.chunks(4).map(|bytes| {
+                    LittleEndian::read_u32(bytes)
                 }).collect()
             },
             ColorDepth::B15 =>  {

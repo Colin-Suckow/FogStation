@@ -3,8 +3,9 @@ A toy playstation 1 emulator written in rust. Capable of emulating most of the p
 
 
 
-<img src="images/cars.png" height=400px alt="boot screen">
+<img src="images/cars.png" height=400px alt="ridge racer screenshot">
 <img src="https://i.imgur.com/3rMhbhJ.png" height=400px alt="gdb debugging">
+<img src="images/re2_demo.png" height=400px alt="Resident evil 2 screenshot">
 
 
 ## OS Support
@@ -27,12 +28,7 @@ A toy playstation 1 emulator written in rust. Capable of emulating most of the p
 
 ### Retail games
 
-| Game            | Status             | Notes                                                                                           |
-|-----------------|--------------------|-------------------------------------------------------------------------------------------------|
-| Puzzle Bobble 2 | :heavy_check_mark: | Minor color issues, but completely playable otherwise                                           |
-| Bust a Move 2   | :x:                | US version of Puzzle Bobble 2. Halts on exception after loading                                 |
-| Crash Bandicoot | :question:         | Moderate texture issues, but playable otherwise                                                 |
-| Ridge Racer     | :heavy_check_mark: | Playable with only minor texture issues                                                         |
+See [compatibility.md](docs/compatibility.md)
 
 ## Building
 
@@ -66,6 +62,8 @@ Run crash bandicoot with a local copy of openbios
 | Control->Continue      | Continue emulation (Only visible if paused)    |
 | Control->Frame Limiter | Toggle 60fps frame limiter. Enabled by default |
 | Debug->VRAM Viewer     | Opens VRAM viewer window                       |
+| Debug->GPU Call Debug  | Opens GPU call debugger window                 |
+| Debug->Memory Logging  | Toggles logging memory access to stdout        |
 
 ### BIOS
 The Playstation depends software called the BIOS to boot user programs. Being a full emulator, Vaporstation also requires a BIOS binary. By default, Vaporstation expects a BIOS file at ` ./SCPH1001.bin `, but an alternative file can be loaded with the ` -b <BIOS path>` option. To legally obtain a BIOS binary, you need to dump the firmware from a real playstation's rom chip. For an open source implementation of the BIOS, see [openbios](https://github.com/grumpycoders/pcsx-redux/tree/main/src/mips/openbios).
@@ -80,12 +78,18 @@ Retail or homebrew CD images can be inserted into the virtual CD drive with the 
 ### Logging
 By default, all data sent to the playstation's serial port will be echoed to stdout. To enable verbose logging about internal emulator state, use the ` -l ` command line flag. All verbose logging will also be sent to stdout.
 
+
 ### Headless mode
 
 Passing the ` -h ` flag will start Vaporstation in headless mode. In headless mode the GUI is not shown and the frame limiter is disabled. This mode is useful for running test programs.
 
 ### GDB debugging
 Vaporstation supports a small subset of the GDB protocol. Pass the ` -g ` flag at launch and Vaporstation will wait for a GDB connection at port ` 4444 ` after initialization. Breakpoints, instruction stepping and memory/register access are implemented. Be careful when stepping the CPU because going too far without resuming execution can cause the processor to fall out of sync with the rest of the system. Debugging works in both GUI and headless mode
+
+### GPU call debugger
+This tool displays a list of every gpu call that has been sent during the current frame. Selecting a specific gpu call will show which area of VRAM was affected by the call.
+
+Tip: Use this in conjunction with the VRAM viewer. Because most games use double buffering, any GPU calls probably won't be touching the displayed screen area.
 
 
 ## Technical Details

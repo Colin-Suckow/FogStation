@@ -353,7 +353,7 @@ impl MacroblockDecoder {
             let green = (y - (0.3437 * cb) - (0.7143 * cr)).clamp(0.0, 255.0) as u16;
             let blue = (y + 1.772 * cb).clamp(0.0, 255.0) as u16;
     
-            ((blue / 8) & 0x1f << 10) | ((green / 8) & 0x1f << 5) | ((red / 8) & 0x1f)
+            (((blue / 8) & 0x1f) << 10) | (((green / 8) & 0x1f) << 5) | ((red / 8) & 0x1f)
         }).collect();
         
         // TODO do the real decoding

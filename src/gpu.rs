@@ -1710,12 +1710,18 @@ impl Gpu {
         clip: bool,
         is_quick_fill: bool
     ) {
+        let final_fill = if transparent {
+            fill & 0x8000
+        } else {
+            fill
+        };
+
         for x in x1..x2 {
             if clip && self.out_of_draw_area(&Point::from_components(x as i32, y as i32, 0)) {
                 continue;
             }
             let address = point_to_address(x, y) as usize;
-            self.composite_and_place_pixel(address, fill, transparent, true);
+            self.composite_and_place_pixel(address, final_fill, transparent, true);
         }
     }
 
@@ -1821,6 +1827,12 @@ impl Gpu {
         let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
         let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
 
+        let final_fill = if transparent {
+            fill & 0x8000
+        } else {
+            fill
+        };
+
         for x in min_x..=max_x {
             for y in min_y..=max_y {
                 let point = Vector2::new(x, y);
@@ -1829,7 +1841,7 @@ impl Gpu {
                     && edge_function(&points[2], &points[0], &point) <= 0;
                 let addr = ((y as u32) * 1024) + x as u32;
                 if !self.out_of_draw_area(&Point::from_components(x, y, 0)) && inside {
-                    self.vram[min(addr as usize, 524287)] = fill;
+                    self.composite_and_place_pixel(addr as usize, final_fill, transparent, true);
                 }
             }
         }
@@ -1892,6 +1904,7 @@ impl Gpu {
                     if points[0].color.get_bit(15)
                         || points[1].color.get_bit(15)
                         || points[2].color.get_bit(15)
+                        || transparent
                     {
                         fill.set_bit(15, true);
                     }

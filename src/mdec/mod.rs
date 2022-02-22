@@ -93,7 +93,6 @@ impl MDEC {
         match current_state {
             InputState::Idle => {
                 let command = decode_command(word);
-                println!("Executing MDEC command: {}", command.name());
                 self.input_state = InputState::AwaitingParameters(command);
             },
             InputState::AwaitingParameters(command) => {
@@ -103,7 +102,6 @@ impl MDEC {
                 if self.parameter_buffer.len() == expected_words {
                     self.result_buffer.clear();
                     command.execute(self);
-                    println!("MDEC executed. Returning to idle");
                     self.input_state = InputState::Idle;
                     self.parameter_buffer.clear();
                 }

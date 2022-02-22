@@ -348,12 +348,11 @@ impl MacroblockDecoder {
     
         // Convert to rgb
     
-        let rgb_block: Vec<u16> = chroma_block.iter().map(|(y, cb, cr)| {
-            let red = (y + 1.402 * cr).clamp(0.0, 255.0) as u16;
-            let green = (y - (0.3437 * cb) - (0.7143 * cr)).clamp(0.0, 255.0) as u16;
-            let blue = (y + 1.772 * cb).clamp(0.0, 255.0) as u16;
-    
-            (((blue / 8) & 0x1f) << 10) | (((green / 8) & 0x1f) << 5) | ((red / 8) & 0x1f)
+        let rgb_block: Vec<(u8, u8, u8)> = chroma_block.iter().map(|(y, cb, cr)| {
+            let red = (y + 1.402 * cr).clamp(0.0, 255.0) as u8;
+            let green = (y - (0.3437 * cb) - (0.7143 * cr)).clamp(0.0, 255.0) as u8;
+            let blue = (y + 1.772 * cb).clamp(0.0, 255.0) as u8;
+            (red, green, blue)
         }).collect();
         
         // TODO do the real decoding
@@ -362,12 +361,14 @@ impl MacroblockDecoder {
             ColorDepth::B8 => todo!(),
             ColorDepth::B24 => {
                 rgb_block.iter().map(|pixel| {
-                    *pixel as u32
+                    ((pixel.2 as u32) << 16) | ((pixel.1 as u32) << 8) | (pixel.0 as u32)
                 }).collect()
             },
             ColorDepth::B15 =>  {
                 rgb_block.chunks(2).map(|chunk| {
-                    (chunk[1] as u32) << 16 | (chunk[0] as u32)
+                    let c1 = (((chunk[0].2 as u16 / 8) & 0x1f) << 10) | (((chunk[0].1 as u16 / 8) & 0x1f) << 5) | ((chunk[0].0 as u16 / 8) & 0x1f);
+                    let c2 = (((chunk[1].2 as u16 / 8) & 0x1f) << 10) | (((chunk[1].1 as u16 / 8) & 0x1f) << 5) | ((chunk[1].0 as u16 / 8) & 0x1f);
+                    (c2 as u32) << 16 | (c1 as u32)
                 }).collect()
             },
         }

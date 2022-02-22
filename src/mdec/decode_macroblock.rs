@@ -348,12 +348,12 @@ impl MacroblockDecoder {
     
         // Convert to rgb
     
-        let mut rgb_block: Vec<u16> = chroma_block.iter().map(|(y, cr, cb)| {
+        let rgb_block: Vec<u16> = chroma_block.iter().map(|(y, cb, cr)| {
             let red = (y + 1.402 * cr).clamp(0.0, 255.0) as u16;
-            let green = (y - 0.3437 * cb - 0.7143 * cr).clamp(0.0, 255.0) as u16;
+            let green = (y - (0.3437 * cb) - (0.7143 * cr)).clamp(0.0, 255.0) as u16;
             let blue = (y + 1.772 * cb).clamp(0.0, 255.0) as u16;
     
-            (blue & 0x1f << 10) | (green & 0x1f << 5) | (red & 0x1f)
+            ((blue / 8) & 0x1f << 10) | ((green / 8) & 0x1f << 5) | ((red / 8) & 0x1f)
         }).collect();
         
         // TODO do the real decoding
@@ -391,14 +391,11 @@ fn decode_block(ctx: &super::MDEC, raw_block: &Vec<u16>, is_chroma: bool) -> Vec
     let dc_coefficient = sign_extend((raw_block[0] & 0x3FF) as i32, 10); 
     let quantization_scale = raw_block[0] >> 10;
     
-    
     coefficient_list[0] = dc_coefficient as i16;
     
 
     let mut i = 0;
-    let mut count = 0;
     for rlc in &raw_block[1..] {
-        count += 1;
         i += 1 + (rlc >> 10);
         coefficient_list[i as usize] = sign_extend((rlc & 0x3FF) as i32, 10) as i16;
     }
@@ -453,8 +450,8 @@ fn decode_block(ctx: &super::MDEC, raw_block: &Vec<u16>, is_chroma: bool) -> Vec
                         sub_total *= ((2.0/8.0) as f64).sqrt();
                     }
 
-                    sub_total *= f64::cos(dct_x as f64 * PI * ((block_x as f64 + 1.0) / 8.0));
-                    sub_total *= f64::cos(dct_y as f64 * PI * ((block_y as f64 + 1.0) / 8.0));
+                    sub_total *= f64::cos(dct_x as f64 * PI * ((2.0 * block_x as f64 + 1.0) / 16.0));
+                    sub_total *= f64::cos(dct_y as f64 * PI * ((2.0 * block_y as f64 + 1.0) / 16.0));
                     total += sub_total;
                 }
             }

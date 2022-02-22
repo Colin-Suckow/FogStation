@@ -99,7 +99,6 @@ pub(super) fn seek_data(state: &mut CDDrive) -> Packet {
 
 pub(super) fn set_mode(state: &mut CDDrive, mode: u8) -> Packet {
     state.drive_mode = mode;
-    println!("CD MODE: {:#b}", state.drive_mode);
     stat(state, 0xE)
 }
 

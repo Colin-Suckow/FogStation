@@ -1,5 +1,6 @@
 use std::ops::Add;
 
+use byteorder::LittleEndian;
 use eframe::{
     egui::{self, pos2, Direction, Key, Layout, TextureId, Color32},
     epi,
@@ -27,6 +28,7 @@ struct VaporstationApp {
     awaiting_gdb: bool,
     latest_pc: u32,
     vram_texture: Option<TextureId>,
+    display_texture: Option<TextureId>,
     show_vram_window: bool,
     gdb_connected: bool,
     display_origin: (usize, usize),
@@ -59,6 +61,7 @@ impl VaporstationApp {
             highlighted_gpu_calls: vec![],
             last_frame_data: vec!(),
             memory_logging: false,
+            display_texture: None,
         }
     }
 
@@ -100,18 +103,34 @@ impl epi::App for VaporstationApp {
         loop {
             match self.emu_handle.comm.rx.try_recv() {
                 Ok(msg) => match msg {
-                    ClientMessage::FrameReady(vram_frame, frame_time) => {
+                    ClientMessage::FrameReady(vram_frame, frame_time, is_full_color) => {
                         // Free the old texture if it exists
                         if let Some(vram_texture) = self.vram_texture {
                             frame.tex_allocator().free(vram_texture);
                         }
 
+                        if let Some(display_texture) = self.display_texture {
+                            frame.tex_allocator().free(display_texture);
+                        }
 
-                        let pixel_data = transform_psx_to_32(&vram_frame);
 
+                        let pixel_data = transform_psx16_to_32(&vram_frame, 0, 0, VRAM_WIDTH as u32, VRAM_HEIGHT as u32);
+                        
                         self.vram_texture = Some(frame
                             .tex_allocator()
                             .alloc_srgba_premultiplied((VRAM_WIDTH, VRAM_HEIGHT), &pixel_data));
+
+                            
+                            
+                        let display_data = if is_full_color {
+                            transform_psx24_to_32(&vram_frame, self.display_origin.0 as u32, self.display_origin.1 as u32, self.latest_resolution.width, self.latest_resolution.height)
+                        } else {
+                            transform_psx16_to_32(&vram_frame, self.display_origin.0 as u32, self.display_origin.1 as u32, self.latest_resolution.width, self.latest_resolution.height)
+                        };
+                            
+                        self.display_texture = Some(frame
+                            .tex_allocator()
+                            .alloc_srgba_premultiplied((self.latest_resolution.width as usize, self.latest_resolution.height as usize), &display_data));
 
                         self.last_frame_data = pixel_data;
                         self.times.push(frame_time as usize);
@@ -314,12 +333,11 @@ impl epi::App for VaporstationApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(vram) = self.vram_texture {
+            if let Some(display_texture) = self.display_texture {
                 ui.with_layout(
                     egui::Layout::centered_and_justified(Direction::TopDown),
                     |ui| {
-                        let width = self.latest_resolution.width as usize;
-                        let height = self.latest_resolution.height as usize;
+                        
                         let pane_size = ui.max_rect();
                         let (scaled_height, scaled_width) =
                             if pane_size.width() > pane_size.height() * 1.3333 {
@@ -327,20 +345,9 @@ impl epi::App for VaporstationApp {
                             } else {
                                 (pane_size.width() * 0.75, pane_size.width())
                             };
-                        let origin_x = self.display_origin.0 + 2;
-                        let origin_y = self.display_origin.1 + 2;
-                        let viewport_rect = egui::Rect::from_min_max(
-                            pos2(
-                                origin_x as f32 / VRAM_WIDTH as f32,
-                                origin_y as f32 / VRAM_HEIGHT as f32,
-                            ),
-                            pos2(
-                                (origin_x + width - 5) as f32 / VRAM_WIDTH as f32,
-                                (origin_y + height - 5) as f32 / VRAM_HEIGHT as f32,
-                            ),
-                        );
-                        let image =
-                            egui::Image::new(vram, [scaled_width, scaled_height]).uv(viewport_rect);
+                            
+            
+                        let image = egui::Image::new(display_texture, [scaled_width, scaled_height]);
                         ui.add(image);
                     },
                 );
@@ -377,13 +384,35 @@ fn get_button_state(input_state: &egui::InputState) -> ButtonState {
 }
 
 
-fn transform_psx_to_32(psx_data: &Vec<u16>) -> Vec<Color32> {
+fn transform_psx16_to_32(psx_data: &Vec<u16>, origin_x: u32, origin_y: u32, width: u32, height: u32) -> Vec<Color32> {
     psx_data.iter()
-        .map(|p| {
+        .enumerate()
+        .filter(|(i, v)| {
+            (i % VRAM_WIDTH) >= origin_x as usize &&  (i / VRAM_WIDTH) >= origin_y as usize && (i % VRAM_WIDTH) < (origin_x + width) as usize && (i / VRAM_WIDTH) < (origin_y + height) as usize
+        })
+        .map(|(i, p)| {
             let colors = ps_pixel_to_gl(p);
             egui::Color32::from_rgba_unmultiplied(colors[0], colors[1], colors[2], 255)
         })
         .collect::<Vec<_>>()
+}
+
+fn transform_psx24_to_32(psx_data: &Vec<u16>, origin_x: u32, origin_y: u32, width: u32, height: u32) -> Vec<Color32> {
+    psx_data.iter()
+        .fold(vec!(), |mut vec, val| {
+            vec.extend(val.to_le_bytes());
+            vec
+        })
+        .iter()
+        .enumerate()
+        .filter(|(i, v)| {
+            (i % (VRAM_WIDTH * 2)) >= (origin_x * 3) as usize && ((i) / (VRAM_WIDTH * 2)) >= origin_y as usize && (i % (VRAM_WIDTH * 2)) < ((origin_x + width) * 3) as usize && ((i) / (VRAM_WIDTH * 2)) < (origin_y + height) as usize
+        })
+        .map(|(i, v)| {*v})
+        .collect::<Vec<u8>>()
+        .chunks_exact(3).map(|colors| {
+            egui::Color32::from_rgba_unmultiplied(colors[0], colors[1], colors[2], 255)
+        }).collect()
 }
 
 fn apply_highlights(app: &VaporstationApp, pixel_data: &mut Vec<Color32>) {

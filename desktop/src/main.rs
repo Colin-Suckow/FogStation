@@ -213,7 +213,7 @@ enum EmuMessage {
 }
 
 enum ClientMessage {
-    FrameReady(Vec<u16>, u128),
+    FrameReady(Vec<u16>, u128, bool),
     ResolutionChanged(Resolution),
     AwaitingGDBClient,
     GDBClientConnected,
@@ -335,7 +335,7 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
                 .as_millis();
     
             let frame = state.emu.get_vram().clone();
-
+            let depth_full = state.emu.is_full_color_depth();
             // Wait for frame limiter time to pass
             while state.frame_limited && frame_time < 17 {
                 frame_time = SystemTime::now()
@@ -348,7 +348,7 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
             if let Err(_) = state
                 .comm
                 .tx
-                .send(ClientMessage::FrameReady(frame, frame_time))
+                .send(ClientMessage::FrameReady(frame, frame_time, depth_full))
             {
                 //The other side hung up, so lets end the emu thread
                 return Err(EmuThreadError::ClientDied);

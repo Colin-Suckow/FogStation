@@ -145,6 +145,10 @@ impl PSXEmu {
         self.r3000.main_bus.gpu.get_vram()
     }
 
+    pub fn is_full_color_depth(&self) -> bool {
+        self.r3000.main_bus.gpu.is_full_color_depth()
+    }
+
     pub fn get_bios(&self) -> &Vec<u8> {
         self.r3000.main_bus.bios.get_data()
     }

@@ -1559,10 +1559,6 @@ impl Gpu {
                     false => ColorDepth::Reduced,
                 };
 
-                if self.color_depth == ColorDepth::Full {
-                    println!("24 bit color depth not supported!");
-                }
-
                 self.interlace = command.get_bit(5);
             }
 
@@ -1645,6 +1641,10 @@ impl Gpu {
 
     pub fn get_vram(&self) -> &Vec<u16> {
         &self.vram
+    }
+
+    pub fn is_full_color_depth(&self) -> bool {
+        self.color_depth == ColorDepth::Full
     }
 
     ///Returns irq status. If true, function will return true then clear irq status

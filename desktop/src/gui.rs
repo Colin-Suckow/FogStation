@@ -2,7 +2,7 @@ use std::ops::Add;
 
 use byteorder::LittleEndian;
 use eframe::{
-    egui::{self, pos2, Direction, Key, Layout, TextureId, Color32},
+    egui::{self, pos2, Direction, Key, Layout, TextureId, Color32, Rect, Pos2},
     epi,
 };
 use psx_emu::{
@@ -347,7 +347,7 @@ impl epi::App for VaporstationApp {
                             };
                             
             
-                        let image = egui::Image::new(display_texture, [scaled_width, scaled_height]);
+                        let image = egui::Image::new(display_texture, [scaled_width, scaled_height]).uv(Rect { min: Pos2::new(0.00625, 0.00833), max: Pos2::new(1.0 - 0.00625, 1.0 - 0.00833)});
                         ui.add(image);
                     },
                 );
@@ -372,11 +372,11 @@ fn get_button_state(input_state: &egui::InputState) -> ButtonState {
         button_down: input_state.key_down(Key::S),
         button_left: input_state.key_down(Key::A),
         button_right: input_state.key_down(Key::D),
-        button_l1: false,
-        button_l2: false,
+        button_l1: input_state.key_down(Key::E),
+        button_l2: input_state.key_down(Key::Q),
         button_l3: false,
-        button_r1: false,
-        button_r2: false,
+        button_r1: input_state.key_down(Key::U),
+        button_r2: input_state.key_down(Key::P),
         button_r3: false,
         button_select: false,
         button_start: input_state.key_down(Key::Enter),

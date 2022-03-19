@@ -5,6 +5,7 @@ use eframe::{
     egui::{self, pos2, Direction, Key, Layout, TextureId, Color32, Rect, Pos2},
     epi,
 };
+use gilrs::{GamepadId, Gilrs, Button};
 use psx_emu::{
     controller::{ButtonState, ControllerType},
     gpu::{DrawCall, Resolution, Transparency},
@@ -37,6 +38,9 @@ struct VaporstationApp {
     highlighted_gpu_calls: Vec<usize>,
     last_frame_data: Vec<Color32>,
     memory_logging: bool,
+    gilrs_instance: Gilrs,
+    active_controller_id: Option<GamepadId>,
+    show_gamepad_window: bool,
 }
 
 impl VaporstationApp {
@@ -62,6 +66,9 @@ impl VaporstationApp {
             last_frame_data: vec!(),
             memory_logging: false,
             display_texture: None,
+            gilrs_instance: Gilrs::new().unwrap(),
+            active_controller_id: None,
+            show_gamepad_window: false,
         }
     }
 
@@ -76,6 +83,33 @@ impl VaporstationApp {
 
     fn halted(&self) -> bool {
         self.emu_handle.halted
+    }
+
+    fn get_button_state(&self, input_state: &egui::InputState) -> ButtonState {
+        if let Some(gamepad_id) = self.active_controller_id {
+            let gamepad = self.gilrs_instance.gamepad(gamepad_id);
+            ButtonState {
+                controller_type: ControllerType::DigitalPad,
+                button_x: gamepad.is_pressed(Button::South),
+                button_square: gamepad.is_pressed(Button::West),
+                button_triangle: gamepad.is_pressed(Button::North),
+                button_circle: gamepad.is_pressed(Button::East),
+                button_up: gamepad.is_pressed(Button::DPadUp),
+                button_down: gamepad.is_pressed(Button::DPadDown),
+                button_left: gamepad.is_pressed(Button::DPadLeft),
+                button_right: gamepad.is_pressed(Button::DPadRight),
+                button_l1: gamepad.is_pressed(Button::LeftTrigger),
+                button_l2: gamepad.is_pressed(Button::LeftTrigger2),
+                button_l3: false,
+                button_r1: gamepad.is_pressed(Button::RightTrigger),
+                button_r2: gamepad.is_pressed(Button::RightTrigger2),
+                button_r3: false,
+                button_select: gamepad.is_pressed(Button::Select),
+                button_start: gamepad.is_pressed(Button::Start),
+            }
+        } else {
+            get_button_state_from_keyboard(input_state)
+        }
     }
 }
 
@@ -94,10 +128,15 @@ impl epi::App for VaporstationApp {
     }
 
     fn update(&mut self, ctx: &eframe::egui::CtxRef, frame: &mut epi::Frame<'_>) {
+        // TODO: Fix this. Runs the envent loop enough to grab most of the controller updates
+        for _ in 0..16 {
+            self.gilrs_instance.next_event();
+        }
+        let psx_button_state = self.get_button_state(ctx.input());
         self.emu_handle
             .comm
             .tx
-            .send(EmuMessage::UpdateControllers(get_button_state(ctx.input())))
+            .send(EmuMessage::UpdateControllers(psx_button_state))
             .unwrap();
         // Process emu messages until empty
         loop {
@@ -174,6 +213,10 @@ impl epi::App for VaporstationApp {
                         frame.quit();
                     }
                 });
+
+                egui::menu::menu(ui, "Settings", |ui| {
+                    ui.checkbox(&mut self.show_gamepad_window, "Controller");
+                });
                 egui::menu::menu(ui, "Control", |ui| {
                     let halt_button_text = if self.halted() { "Resume" } else { "Halt" };
                     if ui.button(halt_button_text).clicked() {
@@ -226,6 +269,29 @@ impl epi::App for VaporstationApp {
                 if let Some(vram) = self.vram_texture {
                     ui.image(vram, [VRAM_WIDTH as f32, VRAM_HEIGHT as f32]);
                 }
+            });
+        }
+
+        if self.show_gamepad_window {
+            egui::Window::new("Settings | Controller").show(ctx, |ui| {
+                let current_id = self.active_controller_id;
+                let current_gamepad = if let Some(id) = current_id {
+                    Some(self.gilrs_instance.gamepad(id))  
+                } else {
+                    None
+                };
+                egui::ComboBox::from_label("Input Source")
+                    .selected_text(format!("{}", match &current_gamepad {
+                        Some(gamepad) => gamepad.name(),
+                        _ => "Keyboard"
+                    }))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.active_controller_id, None, "Keyboard");
+                        for (id, gamepad) in self.gilrs_instance.gamepads() {
+                            let connected_string = if gamepad.is_connected() {""} else {" DISCONNECTED"};
+                            ui.selectable_value(&mut self.active_controller_id, Some(id), format!("{}{}", gamepad.name(), connected_string));
+                        }
+                    });
             });
         }
 
@@ -361,7 +427,7 @@ impl epi::App for VaporstationApp {
 }
 
 
-fn get_button_state(input_state: &egui::InputState) -> ButtonState {
+fn get_button_state_from_keyboard(input_state: &egui::InputState) -> ButtonState {
     ButtonState {
         controller_type: ControllerType::DigitalPad,
         button_x: input_state.key_down(Key::K),
@@ -382,7 +448,6 @@ fn get_button_state(input_state: &egui::InputState) -> ButtonState {
         button_start: input_state.key_down(Key::Enter),
     }
 }
-
 
 fn transform_psx16_to_32(psx_data: &Vec<u16>, origin_x: u32, origin_y: u32, width: u32, height: u32) -> Vec<Color32> {
     psx_data.iter()

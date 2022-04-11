@@ -11,7 +11,7 @@ use nalgebra::Vector2;
 use num_traits::clamp;
 
 const CYCLES_PER_SCANLINE: u32 = 2500;
-const TOTAL_SCANLINES: u32 = 245;
+const TOTAL_SCANLINES: u32 = 263;
 
 #[derive(Copy, Clone, Debug, Display)]
 pub enum TextureColorMode {
@@ -1043,7 +1043,7 @@ impl Gpu {
 
                         let address = point_to_address(point.x as u32, point.y as u32) as usize;
                         let fill = b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF);
-                        self.composite_and_place_pixel(address, fill, false, true);
+                        self.composite_and_place_pixel(address, fill, false, false);
                     }
 
                     0b0 => {
@@ -1710,18 +1710,12 @@ impl Gpu {
         clip: bool,
         is_quick_fill: bool
     ) {
-        let final_fill = if transparent {
-            fill & 0x8000
-        } else {
-            fill
-        };
-
         for x in x1..x2 {
             if clip && self.out_of_draw_area(&Point::from_components(x as i32, y as i32, 0)) {
                 continue;
             }
             let address = point_to_address(x, y) as usize;
-            self.composite_and_place_pixel(address, final_fill, transparent, true);
+            self.composite_and_place_pixel(address, fill, transparent, is_quick_fill);
         }
     }
 
@@ -1764,19 +1758,20 @@ impl Gpu {
         }
     }
 
-    fn composite_and_place_pixel(&mut self, addr: usize, fill: u16, transparent: bool, allow_black: bool) {
-        let mut color = if transparent {
+    fn composite_and_place_pixel(&mut self, addr: usize, fill: u16, transparent: bool, force_black: bool) {
+        let mut color = if transparent && fill.get_bit(15) {
             alpha_composite(self.vram[addr], fill, &self.blend_mode)
         } else {
             fill
         };
         
-        if self.force_b15 {
-            color.set_bit(15, true);
+        
+        if fill == 0 && !force_black {
+            return;
         }
         
-        if !(transparent && fill.get_bit(15)) && (!allow_black && color == 0) && !(color == 0x8000 && !transparent) {
-            return;
+        if self.force_b15 {
+            color.set_bit(15, true);
         }
 
         self.vram[min(addr, 524287)] = color;
@@ -1827,11 +1822,6 @@ impl Gpu {
         let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
         let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
 
-        let final_fill = if transparent {
-            fill & 0x8000
-        } else {
-            fill
-        };
 
         for x in min_x..=max_x {
             for y in min_y..=max_y {
@@ -1841,7 +1831,7 @@ impl Gpu {
                     && edge_function(&points[2], &points[0], &point) <= 0;
                 let addr = ((y as u32) * 1024) + x as u32;
                 if !self.out_of_draw_area(&Point::from_components(x, y, 0)) && inside {
-                    self.composite_and_place_pixel(addr as usize, final_fill, transparent, true);
+                    self.composite_and_place_pixel(addr as usize, fill, transparent, false);
                 }
             }
         }
@@ -1904,12 +1894,11 @@ impl Gpu {
                     if points[0].color.get_bit(15)
                         || points[1].color.get_bit(15)
                         || points[2].color.get_bit(15)
-                        || transparent
                     {
                         fill.set_bit(15, true);
                     }
 
-                    self.composite_and_place_pixel(addr as usize, fill, transparent, true);
+                    self.composite_and_place_pixel(addr as usize, fill, transparent, false);
                 }
             }
         }
@@ -2158,11 +2147,6 @@ enum BlendMode {
 }
 // TODO: Make not bad
 fn alpha_composite(background_color: u16, alpha_color: u16, mode: &BlendMode) -> u16 {
-
-    // If the new color isn't transparent, just return it
-    if !alpha_color.get_bit(15) {
-        return alpha_color;
-    }
 
     let (b_r, b_g, b_b) = b15_to_rgb(background_color);
     let (a_r, a_g, a_b) = b15_to_rgb(alpha_color);

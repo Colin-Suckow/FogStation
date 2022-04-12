@@ -1043,7 +1043,7 @@ impl Gpu {
 
                         let address = point_to_address(point.x as u32, point.y as u32) as usize;
                         let fill = b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF);
-                        self.composite_and_place_pixel(address, fill, false, false);
+                        self.composite_and_place_pixel(address, fill, false, true);
                     }
 
                     0b0 => {
@@ -1115,7 +1115,7 @@ impl Gpu {
                                 (tl_point.y + self.draw_offset.y) as u32,
                                 (br_point.x + self.draw_offset.x) as u32,
                                 (br_point.y + self.draw_offset.y) as u32,
-                                b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
+                                b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF) | 0x8000,
                                 command.get_bit(25),
                                 true,
                                 false,
@@ -1715,7 +1715,7 @@ impl Gpu {
                 continue;
             }
             let address = point_to_address(x, y) as usize;
-            self.composite_and_place_pixel(address, fill, transparent, is_quick_fill);
+            self.composite_and_place_pixel(address, fill, transparent, true);
         }
     }
 
@@ -1764,7 +1764,6 @@ impl Gpu {
         } else {
             fill
         };
-        
         
         if fill == 0 && !force_black {
             return;
@@ -1831,7 +1830,7 @@ impl Gpu {
                     && edge_function(&points[2], &points[0], &point) <= 0;
                 let addr = ((y as u32) * 1024) + x as u32;
                 if !self.out_of_draw_area(&Point::from_components(x, y, 0)) && inside {
-                    self.composite_and_place_pixel(addr as usize, fill, transparent, false);
+                    self.composite_and_place_pixel(addr as usize, fill, transparent, true);
                 }
             }
         }
@@ -1898,7 +1897,7 @@ impl Gpu {
                         fill.set_bit(15, true);
                     }
 
-                    self.composite_and_place_pixel(addr as usize, fill, transparent, false);
+                    self.composite_and_place_pixel(addr as usize, fill, transparent, true);
                 }
             }
         }
@@ -2089,7 +2088,7 @@ fn b24color_to_b15color(color: u32) -> u16 {
     let b = ((color >> 16) & 0xFF) / 8;
     let g = ((color >> 8) & 0xFF) / 8;
     let r = (color & 0xFF) / 8;
-    (((b & 0x1F) << 10) | ((g & 0x1F) << 5) | r & 0x1F) as u16
+    ((((b & 0x1F) << 10) | ((g & 0x1F) << 5) | r & 0x1F) as u16) | 0x8000
 }
 
 fn b15_to_rgb(color: u16) -> (u8, u8, u8) {
@@ -2139,6 +2138,7 @@ fn blend_b15(bg_color: u16, fg_color: u16) -> u16 {
     rgb_to_b15((blend_r * 31.0) as u8, (blend_g * 31.0) as u8, (blend_b * 31.0) as u8) | ((transparent_flag as u16) << 15)
 }
 
+#[derive(Debug)]
 enum BlendMode {
     B2F2, // B/2+F/2
     BAF,  // B+F

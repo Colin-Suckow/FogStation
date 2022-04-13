@@ -1115,7 +1115,7 @@ impl Gpu {
                                 (tl_point.y + self.draw_offset.y) as u32,
                                 (br_point.x + self.draw_offset.x) as u32,
                                 (br_point.y + self.draw_offset.y) as u32,
-                                b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF) | 0x8000,
+                                b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
                                 command.get_bit(25),
                                 true,
                                 false,
@@ -1764,7 +1764,7 @@ impl Gpu {
         } else {
             fill
         };
-        
+
         if fill == 0 && !force_black {
             return;
         }
@@ -1941,6 +1941,8 @@ impl Gpu {
 
                 let addr = ((y as u32) * 1024) + x as u32;
 
+                let mut allow_black_pixel = false;
+
                 if !self.out_of_draw_area(&Point::from_components(x, y, 0))
                     && w0 < 0.0
                     && w1 <= 0.0
@@ -1978,12 +1980,14 @@ impl Gpu {
                         | (shaded_green << 5)
                         | (shaded_red as u8 as u16);
 
-                        blend_b15(tex_fill, shade_fill)
+                        allow_black_pixel = tex_fill != 0;
+                        blend_b15(tex_fill, shade_fill) | 0x8000
+
                     } else {
                         tex_fill
                     };
                     
-                    self.composite_and_place_pixel(addr as usize, final_fill, transparent, false);
+                    self.composite_and_place_pixel(addr as usize, final_fill, transparent, allow_black_pixel);
                 }
             }
         }
@@ -2133,9 +2137,8 @@ fn blend_b15(bg_color: u16, fg_color: u16) -> u16 {
     let blend_g = clamp((b_g as f32 / 31.0) * ((f_g) as f32 / 31.0) * 2.0, 0.0, 1.0);
     let blend_b = clamp((b_b as f32 / 31.0) * ((f_b) as f32 / 31.0) * 2.0, 0.0, 1.0);
 
-    let transparent_flag = bg_color.get_bit(15) | fg_color.get_bit(15);
 
-    rgb_to_b15((blend_r * 31.0) as u8, (blend_g * 31.0) as u8, (blend_b * 31.0) as u8) | ((transparent_flag as u16) << 15)
+    rgb_to_b15((blend_r * 31.0) as u8, (blend_g * 31.0) as u8, (blend_b * 31.0) as u8) | (bg_color & 0x8000)
 }
 
 #[derive(Debug)]
@@ -2147,7 +2150,6 @@ enum BlendMode {
 }
 // TODO: Make not bad
 fn alpha_composite(background_color: u16, alpha_color: u16, mode: &BlendMode) -> u16 {
-
     let (b_r, b_g, b_b) = b15_to_rgb(background_color);
     let (a_r, a_g, a_b) = b15_to_rgb(alpha_color);
 

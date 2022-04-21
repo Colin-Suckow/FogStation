@@ -1788,7 +1788,7 @@ impl Gpu {
         is_quick_fill: bool,
     ) {
         for y in y1..y2 {
-            self.draw_horizontal_line(x1, x2, y, fill, transparent, clip, is_quick_fill);
+            self.draw_horizontal_line(x1, x2, y, fill | if transparent {0x8000} else {0}, transparent, clip, is_quick_fill);
         }
     }
 
@@ -1821,6 +1821,7 @@ impl Gpu {
         let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
         let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
 
+        let final_fill = fill | if transparent {0x8000} else {0};
 
         for x in min_x..=max_x {
             for y in min_y..=max_y {
@@ -1830,7 +1831,7 @@ impl Gpu {
                     && edge_function(&points[2], &points[0], &point) <= 0;
                 let addr = ((y as u32) * 1024) + x as u32;
                 if !self.out_of_draw_area(&Point::from_components(x, y, 0)) && inside {
-                    self.composite_and_place_pixel(addr as usize, fill, transparent, true);
+                    self.composite_and_place_pixel(addr as usize, final_fill, transparent, true);
                 }
             }
         }
@@ -2092,7 +2093,7 @@ fn b24color_to_b15color(color: u32) -> u16 {
     let b = ((color >> 16) & 0xFF) / 8;
     let g = ((color >> 8) & 0xFF) / 8;
     let r = (color & 0xFF) / 8;
-    ((((b & 0x1F) << 10) | ((g & 0x1F) << 5) | r & 0x1F) as u16) | 0x8000
+    ((((b & 0x1F) << 10) | ((g & 0x1F) << 5) | r & 0x1F) as u16)
 }
 
 fn b15_to_rgb(color: u16) -> (u8, u8, u8) {

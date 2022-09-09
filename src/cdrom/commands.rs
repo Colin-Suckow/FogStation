@@ -111,10 +111,7 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
     state.drive_state = DriveState::Read;
     state.read_enabled = true;
 
-    let cycles = match state.drive_speed() {
-        DriveSpeed::Single => 0x6e1cd, // Add some extra time for a seek
-        DriveSpeed::Double => 0x36cd2,
-    }; // + if !state.seek_complete {100} else {0}; //Add some extra time if we need to seek
+    let cycles = 0xE5CA8;
 
     if !state.seek_complete {
         state.read_offset = 0;
@@ -129,7 +126,7 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
         extra_response: None,
         command: 0x6,
     };
-    initial_response.execution_cycles = AVG_FIRST_RESPONSE_TIME;
+    initial_response.execution_cycles = 124304;
     initial_response.extra_response = Some(Box::new(response_packet));
 
     initial_response
@@ -161,7 +158,7 @@ pub(super) fn pause_read(state: &mut CDDrive) -> Packet {
         extra_response: None,
         command: 0x9,
     };
-    initial_response.execution_cycles = AVG_FIRST_RESPONSE_TIME;
+    initial_response.execution_cycles = 28648;
 
     initial_response.extra_response = Some(Box::new(response_packet));
     initial_response

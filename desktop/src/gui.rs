@@ -444,7 +444,7 @@ fn get_button_state_from_keyboard(input_state: &egui::InputState) -> ButtonState
         button_r1: input_state.key_down(Key::U),
         button_r2: input_state.key_down(Key::P),
         button_r3: false,
-        button_select: false,
+        button_select: input_state.key_down(Key::Backspace),
         button_start: input_state.key_down(Key::Enter),
     }
 }

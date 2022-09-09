@@ -23,6 +23,7 @@ These games run, but with major graphical issues
 * Tony Hawk's Pro Skater
 * Mega Man X4
 * Ridge Racer 4
+* Metal Gear Solid
 
 ## Unplayable
 These games are unplayable for one reason or another, such as freezing or crashing
@@ -30,7 +31,6 @@ These games are unplayable for one reason or another, such as freezing or crashi
 * Ace Combat
 * Castlevania: Symphony of the Night
 * Gran Turismo
-* Metal Gear Solid
 * Persona
 * Resident Evil 1
 * Wipeout

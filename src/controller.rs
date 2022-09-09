@@ -274,23 +274,28 @@ impl Controllers {
             }
             TXstate::Transfering { slot, step } => {
                 if slot == Slot::Controller {
-
-                  
-
-                    let response = match step {
-                        0 => 0x41, // Digital pad idlo
-                        1 => 0x5A, // Digital pad idhi
-                        2 => self.latest_button_state.digital_low_byte(),
-                        3 => self.latest_button_state.digital_high_byte(),
-                        _ => 0,
-                    };
-                    self.push_rx_buf(response);
-                    if step < 3 {
-                        self.queue_interrupt();
-                    }
-                    TXstate::Transfering {
-                        slot: slot.clone(),
-                        step: step + 1,
+                    if step == 0 && val != 0x42 {
+                        // Invalid command for digital pad. Send junk
+                        self.push_rx_buf(0xFF);
+                        TXstate::Ready
+                    } else
+                    {
+                        // Normal digital pad communication
+                        let response = match step {
+                            0 => 0x41, // Digital pad idlo
+                            1 => 0x5A, // Digital pad idhi
+                            2 => self.latest_button_state.digital_low_byte(),
+                            3 => self.latest_button_state.digital_high_byte(),
+                            _ => 0,
+                        };
+                        self.push_rx_buf(response);
+                        if step < 3 {
+                            self.queue_interrupt();
+                        }
+                        TXstate::Transfering {
+                            slot: slot.clone(),
+                            step: step + 1,
+                        }
                     }
                 } else {
                     panic!("Tried to read memory card! It's not implemented yet :(");

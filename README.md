@@ -2,10 +2,9 @@
 A toy playstation 1 emulator written in rust. Capable of emulating most of the playstation's hardware components and playing some retail games.
 
 
-
+<img src="images/re2_demo.png" height=400px alt="Resident evil 2 screenshot">
 <img src="images/cars.png" height=400px alt="ridge racer screenshot">
 <img src="https://i.imgur.com/3rMhbhJ.png" height=400px alt="gdb debugging">
-<img src="images/re2_demo.png" height=400px alt="Resident evil 2 screenshot">
 
 
 ## OS Support

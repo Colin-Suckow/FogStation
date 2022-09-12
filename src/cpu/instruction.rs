@@ -332,6 +332,13 @@ impl Instruction {
             Instruction::SWC2 { rt, offset, base } => format!("${}({:08x}), {:#04x}({})([{:08x}] = {:08x})", RegisterNames::from_u8(*rt).unwrap(), cpu.read_reg(*rt as u8), offset, RegisterNames::from_u8(*base).unwrap(), cpu.gen_registers[*base as usize] + *offset as u32, cpu.main_bus.peek_word((cpu.gen_registers[*base as usize] as i32 + (*offset  as i16)as i32) as u32)),
         }
     }
+
+    pub fn execute(&self, cpu: &mut R3000) {
+        match self {
+            
+        }
+    }
+
 }
 
 pub(super) fn decode_opcode(inst: u32) -> Option<Instruction> {

@@ -78,7 +78,7 @@ pub(super) struct Packet {
 
 #[derive(Debug)]
 pub(super) struct Block {
-    data: Vec<u8>,
+    _data: Vec<u8>,
 }
 #[allow(dead_code)]
 
@@ -179,7 +179,7 @@ impl CDDrive {
                     }
                     if val.get_bit(7) {
                         // Try to load latest sector from buffer
-                        let sector_size = *self.sector_size() as usize;
+                        let _sector_size = *self.sector_size() as usize;
                         if self.data_queue.len() > 0 {
                             let sector = self.data_queue.remove(0);
                             // println!("Loaded a sector!");

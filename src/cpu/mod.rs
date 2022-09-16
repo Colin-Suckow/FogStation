@@ -3,15 +3,14 @@ use std::convert::TryFrom;
 use bit_field::BitField;
 
 use cop0::Cop0;
-use instruction::{InstructionArgs, NumberHelpers, decode_opcode};
-use log::{trace, warn};
+use instruction:: decode_opcode;
+use log::warn;
 
 use crate::cpu::instruction::RegisterNames;
 use crate::timer::TimerState;
 use crate::bus::MainBus;
 
 use self::gte::GTE;
-use self::instruction::Instruction;
 
 mod cop0;
 mod instruction;
@@ -53,8 +52,7 @@ pub enum Exception {
 #[derive(Debug)]
 struct LoadDelay {
     register: u8,
-    value: u32,
-    cycle_loaded: u32,
+    value: u32
 }
 
 pub struct R3000 {
@@ -447,7 +445,6 @@ impl R3000 {
         self.load_delay = Some(LoadDelay{
             register: register_number,
             value: value,
-            cycle_loaded: self.cycle_count,
         });
     }
 }

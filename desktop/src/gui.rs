@@ -1,14 +1,11 @@
-use std::ops::Add;
-
-use byteorder::LittleEndian;
 use eframe::{
-    egui::{self, pos2, Direction, Key, Layout, TextureId, Color32, Rect, Pos2},
+    egui::{self, Direction, Key, Layout, TextureId, Color32, Rect, Pos2},
     epi,
 };
 use gilrs::{GamepadId, Gilrs, Button};
 use psx_emu::{
     controller::{ButtonState, ControllerType},
-    gpu::{DrawCall, Resolution, Transparency},
+    gpu::{DrawCall, Resolution},
 };
 
 use crate::{ClientMessage, ClientState, EmuMessage};
@@ -452,10 +449,10 @@ fn get_button_state_from_keyboard(input_state: &egui::InputState) -> ButtonState
 fn transform_psx16_to_32(psx_data: &Vec<u16>, origin_x: u32, origin_y: u32, width: u32, height: u32) -> Vec<Color32> {
     psx_data.iter()
         .enumerate()
-        .filter(|(i, v)| {
+        .filter(|(i, _v)| {
             (i % VRAM_WIDTH) >= origin_x as usize &&  (i / VRAM_WIDTH) >= origin_y as usize && (i % VRAM_WIDTH) < (origin_x + width) as usize && (i / VRAM_WIDTH) < (origin_y + height) as usize
         })
-        .map(|(i, p)| {
+        .map(|(_i, p)| {
             let colors = ps_pixel_to_gl(p);
             egui::Color32::from_rgba_unmultiplied(colors[0], colors[1], colors[2], 255)
         })
@@ -470,10 +467,10 @@ fn transform_psx24_to_32(psx_data: &Vec<u16>, origin_x: u32, origin_y: u32, widt
         })
         .iter()
         .enumerate()
-        .filter(|(i, v)| {
+        .filter(|(i, _v)| {
             (i % (VRAM_WIDTH * 2)) >= (origin_x * 3) as usize && ((i) / (VRAM_WIDTH * 2)) >= origin_y as usize && (i % (VRAM_WIDTH * 2)) < ((origin_x + width) * 3) as usize && ((i) / (VRAM_WIDTH * 2)) < (origin_y + height) as usize
         })
-        .map(|(i, v)| {*v})
+        .map(|(_i, v)| {*v})
         .collect::<Vec<u8>>()
         .chunks_exact(3).map(|colors| {
             egui::Color32::from_rgba_unmultiplied(colors[0], colors[1], colors[2], 255)
@@ -517,7 +514,7 @@ fn apply_highlights(app: &VaporstationApp, pixel_data: &mut Vec<Color32>) {
                     let current_pixel = pixel_data[addr as usize];
                     let highlight_color = Color32::from_rgba_unmultiplied(155, 0, 0, 155);
 
-                    pixel_data[addr as usize] = Color32::from_rgba_unmultiplied((current_pixel.r() + highlight_color.r()), (current_pixel.g() + highlight_color.g()), (current_pixel.b() + highlight_color.b()), 255);
+                    pixel_data[addr as usize] = Color32::from_rgba_unmultiplied(current_pixel.r() + highlight_color.r(), current_pixel.g() + highlight_color.g(), current_pixel.b() + highlight_color.b(), 255);
                 }
             }
 
@@ -527,7 +524,7 @@ fn apply_highlights(app: &VaporstationApp, pixel_data: &mut Vec<Color32>) {
                     let current_pixel = pixel_data[addr as usize];
                     let highlight_color = Color32::from_rgba_unmultiplied(0, 155, 0, 155);
 
-                    pixel_data[addr as usize] = Color32::from_rgba_unmultiplied((current_pixel.r() + highlight_color.r()), (current_pixel.g() + highlight_color.g()), (current_pixel.b() + highlight_color.b()), 255);
+                    pixel_data[addr as usize] = Color32::from_rgba_unmultiplied(current_pixel.r() + highlight_color.r(), current_pixel.g() + highlight_color.g(), current_pixel.b() + highlight_color.b(), 255);
                 }
             }
         }

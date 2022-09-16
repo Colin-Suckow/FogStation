@@ -1,5 +1,3 @@
-use std::f32::consts::LOG10_2;
-
 use bios::Bios;
 use bus::MainBus;
 use controller::{ButtonState, controller_execute_cycle};

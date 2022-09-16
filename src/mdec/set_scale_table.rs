@@ -36,6 +36,6 @@ impl MdecCommand for SetScaleTableCommand {
         "SetScaleTable"
     }
 
-    fn set_status(&self, status: &mut u32) {
+    fn set_status(&self, _status: &mut u32) {
     }
 }

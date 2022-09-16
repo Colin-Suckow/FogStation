@@ -347,8 +347,8 @@ impl Instruction {
             Instruction::SRAV { rd, rt, rs } => interpreter::op_srav(cpu, *rs, *rt, *rd),
             Instruction::JR { rs } => interpreter::op_jr(cpu, *rs),
             Instruction::JALR { rd, rs } => interpreter::op_jalr(cpu, *rs, *rd),
-            Instruction::SYSCALL { code } => interpreter::op_syscall(cpu),
-            Instruction::BREAK { code } => interpreter::op_break(cpu),
+            Instruction::SYSCALL { .. } => interpreter::op_syscall(cpu),
+            Instruction::BREAK { .. } => interpreter::op_break(cpu),
             Instruction::MFHI { rd } => interpreter::op_mfhi(cpu, *rd),
             Instruction::MTHI { rs } => interpreter::op_mthi(cpu, *rs),
             Instruction::MFLO { rd } => interpreter::op_mflo(cpu, *rd),
@@ -407,7 +407,7 @@ impl Instruction {
             Instruction::SW { rt, offset, base } => interpreter::op_sw(cpu, *base, *rt, *offset as u32, timers),
             Instruction::LWC2 { rt, offset, base } => interpreter::op_lwc2(cpu, *base, *rt, *offset as u32, timers),
             Instruction::SWC2 { rt, offset, base } => interpreter::op_swc2(cpu, *base, *rt, *offset as u32, timers),
-            Instruction::MALBRCH { rs, offset, opcode } => interpreter::op_branch(cpu, *opcode),
+            Instruction::MALBRCH {opcode , ..} => interpreter::op_branch(cpu, *opcode),
         }
     }
 

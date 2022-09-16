@@ -173,7 +173,7 @@ impl DMAState {
     }
 
     pub fn read_byte(&mut self, addr: u32) -> u8 {
-        let channel_num = (((addr & 0x000000F0) >> 4) - 0x8) as usize;
+        let _channel_num = (((addr & 0x000000F0) >> 4) - 0x8) as usize;
         match addr {
             0x1F8010F6 => {
                 ((self.interrupt >> 16) & 0xFF) as u8
@@ -184,7 +184,7 @@ impl DMAState {
     }
 
     pub fn write_byte(&mut self, addr: u32, value: u8) {
-        let channel_num = (((addr & 0x000000F0) >> 4) - 0x8) as usize;
+        let _channel_num = (((addr & 0x000000F0) >> 4) - 0x8) as usize;
         match addr {
             0x1F8010F6 => {
                 self.interrupt &= !(0xFF << 16);
@@ -464,15 +464,15 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
 
                 let mut entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
                 let mut block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
-                let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
+                let _base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
 
                 if entries == 0 {entries = 1};
                 if block_size == 0 {block_size = 1};
 
                 match cpu.main_bus.dma.channels[num].control {
                     0x01000201 => {
-                        for i in 0..entries {
-                            for j in 0..block_size {
+                        for _ in 0..entries {
+                            for _ in 0..block_size {
                                 cpu.main_bus.spu.write_half_word(0x1F801DA8, 0);
                                 cpu.main_bus.spu.write_half_word(0x1F801DA8, 0);
                             }

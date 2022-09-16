@@ -87,7 +87,7 @@ impl SPU {
             0x1F801DAC => 0x4, //SPU transfer control
             0x1F801DA6 => self.transfer_address_register,
             0x1F801C00 ..= 0x1F801E5F => {
-                let offset = (addr - 0x1F801C00);
+                let offset = addr - 0x1F801C00;
                 LittleEndian::read_u16(&self.voice_registers[offset as usize..(offset + 2) as usize])
             },
             _ => 0, //{println!("Read unknown SPU address {:#X}", addr); 0}
@@ -114,7 +114,7 @@ impl SPU {
             0x1F801DA6 => self.set_transfer_address(value),
 
             0x1F801C00 ..= 0x1F801E5F => {
-                let offset = (addr - 0x1F801C00);
+                let offset = addr - 0x1F801C00;
                 LittleEndian::write_u16(&mut self.voice_registers[offset as usize..(offset + 2) as usize], value);
             },
             _ => println!("Wrote unknown SPU address {:#X} with {:#X}", addr, value)

@@ -1,6 +1,5 @@
 use std::{
-    borrow::Borrow,
-    cmp::{max, min, Ordering},
+    cmp::{min, Ordering},
     mem::{size_of_val, self}, fmt::Display,
 };
 
@@ -401,7 +400,7 @@ impl Gpu {
                         }
                         trace!("Quick rect");
 
-                        let mut p1 = Point::from_components(
+                        let p1 = Point::from_components(
                             (self.gp0_buffer[1] & 0x3F0) as i32,
                             ((self.gp0_buffer[1] >> 16) & 0x1FF) as i32,
                             0,
@@ -442,7 +441,6 @@ impl Gpu {
                             p2.y as u32,
                             b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
                             false,
-                            true,
                             true,
                         );
                     }
@@ -1118,7 +1116,6 @@ impl Gpu {
                                 b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
                                 command.get_bit(25),
                                 true,
-                                false,
                             );
                         }
                     }
@@ -1197,7 +1194,6 @@ impl Gpu {
                                 b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
                                 command.get_bit(25),
                                 true,
-                                false
                             );
                         }
                     }
@@ -1276,7 +1272,6 @@ impl Gpu {
                                 b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF),
                                 command.get_bit(25),
                                 true,
-                                false,
                             );
                         }
                     }
@@ -1708,7 +1703,6 @@ impl Gpu {
         fill: u16,
         transparent: bool,
         clip: bool,
-        is_quick_fill: bool
     ) {
         for x in x1..x2 {
             if clip && self.out_of_draw_area(&Point::from_components(x as i32, y as i32, 0)) {
@@ -1785,10 +1779,9 @@ impl Gpu {
         fill: u16,
         transparent: bool,
         clip: bool,
-        is_quick_fill: bool,
     ) {
         for y in y1..y2 {
-            self.draw_horizontal_line(x1, x2, y, fill | if transparent {0x8000} else {0}, transparent, clip, is_quick_fill);
+            self.draw_horizontal_line(x1, x2, y, fill | if transparent {0x8000} else {0}, transparent, clip);
         }
     }
 
@@ -2093,7 +2086,7 @@ fn b24color_to_b15color(color: u32) -> u16 {
     let b = ((color >> 16) & 0xFF) / 8;
     let g = ((color >> 8) & 0xFF) / 8;
     let r = (color & 0xFF) / 8;
-    ((((b & 0x1F) << 10) | ((g & 0x1F) << 5) | r & 0x1F) as u16)
+    (((b & 0x1F) << 10) | ((g & 0x1F) << 5) | r & 0x1F) as u16
 }
 
 fn b15_to_rgb(color: u16) -> (u8, u8, u8) {
@@ -2108,22 +2101,6 @@ fn rgb_to_b15(r: u8, g: u8, b: u8) -> u16 {
     (((b & 0x1F) as u16) << 10)
         | (((g & 0x1F) as u16) << 5)
         | ((r & 0x1F) as u16)
-}
-
-fn lerp_color(y0: u16, y1: u16, x0: i32, x1: i32, x: i32) -> u16 {
-    let (sr, sg, sb) = b15_to_rgb(y0);
-    let (er, eg, eb) = b15_to_rgb(y1);
-
-    let ir = (sr as f32 + ((er as i32 - sr as i32) as f32 * ((x - x0) as f32 / (x1 - x0) as f32)))
-        as u16;
-    let ig = (sg as f32 + ((eg as i32 - sg as i32) as f32 * ((x - x0) as f32 / (x1 - x0) as f32)))
-        as u16;
-    let ib = (sb as f32 + ((eb as i32 - sb as i32) as f32 * ((x - x0) as f32 / (x1 - x0) as f32)))
-        as u16;
-
-    rgb_to_b15(ir as u8, ig as u8, ib as u8)
-
-    //(y0 as f32 + ((y1 - y0) as f32 * ((x - x0) as f32 / (x1 - x0) as f32))) as u16
 }
 
 fn lerp_coords(y0: i32, y1: i32, x0: i32, x1: i32, x: i32) -> i32 {
@@ -2162,7 +2139,7 @@ fn alpha_composite(background_color: u16, alpha_color: u16, mode: &BlendMode) ->
         ),
         BlendMode::BAF => rgb_to_b15(clamp(a_r as i16 + b_r as i16, 0, 0x1F) as u8, clamp(a_g as i16 + b_g as i16, 0, 0x1F) as u8, clamp(a_b as i16 + b_b as i16, 0, 0x1F) as u8),
         BlendMode::BSF => rgb_to_b15(clamp(b_r as i16 - a_r as i16, 0, 0x1F) as u8, clamp(b_g as i16 - a_g as i16, 0, 0x1F) as u8, clamp(b_b as i16 - a_b as i16, 0, 0x1F) as u8),
-        BlendMode::BF4 => rgb_to_b15(clamp((b_r as i16 + (a_r / 4) as i16), 0, 0x1F) as u8, clamp((b_g as i16 + (a_g / 4) as i16), 0, 0x1F) as u8, clamp((b_b as i16 + (a_b / 4) as i16), 0 ,0x1F) as u8),
+        BlendMode::BF4 => rgb_to_b15(clamp(b_r as i16 + (a_r / 4) as i16, 0, 0x1F) as u8, clamp(b_g as i16 + (a_g / 4) as i16, 0, 0x1F) as u8, clamp(b_b as i16 + (a_b / 4) as i16, 0 ,0x1F) as u8),
     }
 }
 
@@ -2235,19 +2212,5 @@ impl Command for u32 {
 
     fn parameter(&self) -> u32 {
         self.clone() & 0x7FFFFF
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_lerp_color() {
-        assert_eq!(15, lerp_color(10, 20, 100, 200, 150));
-    }
-
-    #[test]
-    fn test_lerp_color_negative() {
-        assert_eq!(15, lerp_color(20, 10, 100, 200, 150));
     }
 }

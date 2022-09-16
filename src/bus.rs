@@ -1,4 +1,4 @@
-use log::{error, info, warn};
+use log::{info, warn};
 
 use crate::LOGGING;
 use crate::bios::Bios;

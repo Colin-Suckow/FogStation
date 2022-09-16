@@ -73,6 +73,10 @@ fn main() {
         }
     };
 
+    if matches.opt_present("h") {
+        headless = true;
+    }
+
     let (emu_sender, client_receiver) = channel();
     let (client_sender, emu_receiver) = channel();
 
@@ -127,7 +131,6 @@ fn wait_for_gdb_connection(port: u16) -> std::io::Result<TcpStream> {
 }
 
 fn create_emu(matches: Matches, emu_comm: EmuComms) -> EmuState {
-    let mut headless = false;
     let bios_path = if let Some(new_path) = matches.opt_str("b") {
         println!("Using alternate bios file: {}", new_path);
         new_path
@@ -149,12 +152,6 @@ fn create_emu(matches: Matches, emu_comm: EmuComms) -> EmuState {
     if matches.opt_present("l") {
         SimpleLogger::new().init().unwrap();
     }
-
-    if matches.opt_present("h") {
-        headless = true;
-    }
-
-   
 
     //Loads entire disc into memory (Don't worry about it)
     if let Some(disc_path) = matches.opt_str("c") {

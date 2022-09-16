@@ -1,4 +1,4 @@
-use std::{os::raw, f64::consts::PI, mem::size_of_val};
+use std::{f64::consts::PI, mem::size_of_val};
 
 use bit_field::BitField;
 use byteorder::{LittleEndian, ByteOrder};
@@ -20,63 +20,6 @@ pub(crate) struct DecodeMacroblockCommand {
     signed: bool,
     set_b15: bool,
     size: usize,
-}
-
-#[derive(Debug)]
-enum MacroblockDecodeState {
-    Cr,
-    Cb,
-    Y1,
-    Y2,
-    Y3,
-    Y4
-}
-
-impl MacroblockDecodeState {
-    fn next(self) -> Self {
-        match self {
-            Self::Cr => Self::Cb,
-            Self::Cb => Self::Y1,
-            Self::Y1 => Self::Y2,
-            Self::Y2 => Self::Y3,
-            Self::Y3 => Self::Y4,
-            Self::Y4 => panic!("MDEC: No valid state transition from block Y4"),
-        }
-    }
-}
-
-struct Macroblock {
-    cr_block: Vec<u16>,
-    cb_block: Vec<u16>,
-    y1_block: Vec<u16>,
-    y2_block: Vec<u16>,
-    y3_block: Vec<u16>,
-    y4_block: Vec<u16>,
-}
-
-impl Macroblock {
-    fn new() -> Self {
-        Self {
-            cr_block: vec!(),
-            cb_block: vec!(),
-            y1_block: vec!(),
-            y2_block: vec!(),
-            y3_block: vec!(),
-            y4_block: vec!(),
-        }
-    }
-
-    fn block_data(&self, block: &MacroblockDecodeState) -> &Vec<u16> {
-        match block {
-            MacroblockDecodeState::Cr => &self.cr_block,
-            MacroblockDecodeState::Cb => &self.cb_block,
-            MacroblockDecodeState::Y1 => &self.y1_block,
-            MacroblockDecodeState::Y2 => &self.y2_block,
-            MacroblockDecodeState::Y3 => &self.y3_block,
-            MacroblockDecodeState::Y4 => &self.y4_block,
-            _ => panic!("MDEC: Not a block"),
-        }
-    }
 }
 
 impl DecodeMacroblockCommand {

@@ -1,10 +1,7 @@
 use std::{cmp::min, mem::size_of_val};
 
 use bit_field::BitField;
-use log::warn;
 use nalgebra::clamp;
-
-use crate::gpu;
 
 #[derive(Clone, Copy)]
 struct Color {

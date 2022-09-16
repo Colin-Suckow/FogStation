@@ -1,3 +1,4 @@
+use bit_field::BitField;
 use log::trace;
 
 use crate::{cpu::Exception, timer::TimerState};
@@ -205,20 +206,20 @@ pub(super) fn op_rfe(cpu: &mut R3000) {
     cpu.cop0.write_reg(12, (status & !0xf) | (mode >> 2));
 }
 
-pub(super) fn op_mfc0(cpu: &mut R3000, rd: u8, rt: u8, offset: u32) {
+pub(super) fn op_mfc0(cpu: &mut R3000, rd: u8, rt: u8) {
     let val = cpu.cop0.read_reg(rd);
     cpu.flush_load_delay();
     cpu.delayed_load(rt, val);
 }
 
-pub(super) fn op_mtc0(cpu: &mut R3000, rd: u8, rt: u8, offset: u32) {
+pub(super) fn op_mtc0(cpu: &mut R3000, rd: u8, rt: u8) {
     let val = cpu.read_reg(rt);
     cpu.flush_load_delay();
     cpu.cop0
         .write_reg(rd, val);
 }
 
-pub(super) fn op_lui(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
+pub(super) fn op_lui(cpu: &mut R3000, rt: u8, offset: u32) {
     cpu.flush_load_delay();
     cpu.write_reg(rt, (offset.immediate().zero_extended() << 16) as u32);
 }
@@ -295,7 +296,7 @@ pub(super) fn op_addi(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
     );
 }
 
-pub(super) fn op_bgtz(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
+pub(super) fn op_bgtz(cpu: &mut R3000, rs: u8, offset: u32) {
     if (cpu.read_reg(rs) as i32) > 0 {
         cpu.delay_slot = cpu.pc;
         cpu.pc = ((offset.immediate_sign_extended() as u32) << 2).wrapping_add(cpu.delay_slot);
@@ -303,7 +304,7 @@ pub(super) fn op_bgtz(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
     cpu.flush_load_delay();
 }
 
-pub(super) fn op_blez(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
+pub(super) fn op_blez(cpu: &mut R3000, rs: u8, offset: u32) {
     if (cpu.read_reg(rs) as i32) <= 0 {
         cpu.delay_slot = cpu.pc;
         cpu.pc = ((offset.immediate_sign_extended() as u32) << 2).wrapping_add(cpu.delay_slot);
@@ -558,7 +559,7 @@ pub(super) fn op_jalr(cpu: &mut R3000, rs: u8, rd: u8) {
     }
 }
 
-pub(super) fn op_jr(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
+pub(super) fn op_jr(cpu: &mut R3000, rs: u8) {
     let target = cpu.read_reg(rs);
     cpu.flush_load_delay();
     if target % 4 != 0 {
@@ -631,4 +632,76 @@ pub(super) fn op_sll(cpu: &mut R3000, rd: u8, rt: u8, sa: u8) {
 pub(super) fn op_break(cpu: &mut R3000) {
     cpu.flush_load_delay();
     cpu.fire_exception(Exception::Bp);
+}
+
+pub(super) fn op_cfc2(cpu: &mut R3000, rt: u8, rd: u8) {
+    cpu.delayed_load(rt, cpu.gte.control_register(rd as usize));
+}
+
+pub(super) fn op_ctc2(cpu: &mut R3000, rt: u8, rd: u8) {
+    let val = cpu.read_reg(rt);
+    cpu.flush_load_delay();
+    cpu.gte.set_control_register(rd as usize, val);
+}
+
+pub(super) fn op_mfc2(cpu: &mut R3000, rt: u8, rd: u8) {
+    let val = cpu.gte.data_register(rd as usize);
+    cpu.delayed_load(rt, val);
+}
+
+pub(super) fn op_mtc2(cpu: &mut R3000, rt: u8, rd: u8) {
+    let val = cpu.read_reg(rt);
+    cpu.flush_load_delay();
+    cpu.gte.set_data_register(rd as usize, val);
+}
+pub(super) fn op_imm25(cpu: &mut R3000, command: u32) {
+    cpu.flush_load_delay();
+    cpu.gte.execute_command(command);
+}
+
+pub(super) fn op_lwc2(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
+    let addr = offset
+                .immediate_sign_extended()
+                .wrapping_add(cpu.read_reg(rs));
+    let val = cpu.read_bus_word(addr, timers);
+    cpu.flush_load_delay();
+    cpu.gte.set_data_register(rt as usize, val);
+}
+
+pub(super) fn op_swc2(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
+    let addr = offset
+        .immediate_sign_extended()
+        .wrapping_add(cpu.read_reg(rs));
+    let val = if rt > 31 {
+        cpu.gte.control_register(rt as usize - 32)
+    } else {
+        cpu.gte.data_register(rt as usize)
+    };
+    cpu.flush_load_delay();
+    cpu.write_bus_word(addr, val, timers);
+}
+
+pub(super) fn op_branch(cpu: &mut R3000, instruction: u32) {
+    // Wacky branch instructions. Copied from rustation
+    let s = instruction.rs();
+
+    let is_bgez = instruction.get_bit(16) as u32;
+    let is_link = (instruction >> 17) & 0xf == 0x8;
+
+    let v = cpu.read_reg(s) as i32;
+    let test = (v < 0) as u32;
+
+    let test = test ^ is_bgez;
+
+    cpu.flush_load_delay();
+
+    if is_link {
+        cpu.write_reg(31, cpu.pc + 4);
+    }
+
+    if test != 0 {
+        cpu.delay_slot = cpu.pc;
+        cpu.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(cpu.delay_slot);
+    }
+
 }

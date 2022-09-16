@@ -4,7 +4,10 @@ use bit_field::BitField;
 use num_derive::FromPrimitive;    
 use num_traits::FromPrimitive;
 
+use crate::timer::TimerState;
+
 use super::R3000;
+use super::interpreter;
 
 pub trait InstructionArgs {
     fn opcode(&self) -> u8;
@@ -87,9 +90,7 @@ impl InstructionArgs for u32 {
     }
 
     fn immediate_sign_extended(&self) -> u32 {
-        let val = (self.clone() & 0xFFFF) as i16 as i32 as u32;
-        //println!("immse {:#X}", val);
-        val
+        (self.clone() & 0xFFFF) as i16 as i32 as u32
     }
 }
 
@@ -123,10 +124,11 @@ pub(super) enum Instruction {
     MULT{rs: u8, rt: u8},
     MULTU{rs: u8, rt: u8},
     SLT{rd: u8, rs: u8, rt: u8},
-    BLTZ{rs: u8, offset: u16},
-    BGEZ{rs: u8, offset: u16},
-    BLTZAL{rs: u8, offset: u16},
-    BGEZAL{rs: u8, offset: u16},
+    BLTZ{rs: u8, offset: u16, opcode: u32},
+    BGEZ{rs: u8, offset: u16, opcode: u32},
+    BLTZAL{rs: u8, offset: u16, opcode: u32},
+    BGEZAL{rs: u8, offset: u16, opcode: u32},
+    MALBRCH{rs: u8, offset: u16, opcode: u32}, //Malformed branch
     J{target: u32},
     JAL{target: u32},
     BEQ{rs: u8, rt: u8, offset: u16},
@@ -198,10 +200,10 @@ impl Instruction {
             Instruction::MULT { rs, rt } => "mult",
             Instruction::MULTU { rs, rt } => "multu",
             Instruction::SLT { rd, rs, rt } => "slt",
-            Instruction::BLTZ { rs, offset } => "bltz",
-            Instruction::BGEZ { rs, offset } => "bgez",
-            Instruction::BLTZAL { rs, offset } => "bltzal",
-            Instruction::BGEZAL { rs, offset } => "bgezal",
+            Instruction::BLTZ { rs, offset, .. } => "bltz",
+            Instruction::BGEZ { rs, offset, .. } => "bgez",
+            Instruction::BLTZAL { rs, offset, .. } => "bltzal",
+            Instruction::BGEZAL { rs, offset, .. } => "bgezal",
             Instruction::J { target } => "j",
             Instruction::JAL { target } => "jal",
             Instruction::BEQ { rs, rt, offset } => "beq",
@@ -238,6 +240,7 @@ impl Instruction {
             Instruction::SW { rt, offset, base } => "sw",
             Instruction::LWC2 { rt, offset, base } => "lwc2",
             Instruction::SWC2 { rt, offset, base } => "swc2",
+            Instruction::MALBRCH { rs, offset, opcode } => "malbrch",
         }
     }
 
@@ -280,12 +283,13 @@ impl Instruction {
             Instruction::ADDU { rd, rs, rt } |           
             Instruction::SLT { rd, rs, rt } => format!("${}({:08x}, ${}({:08x}, ${}({:08x})", RegisterNames::from_u8(*rd).unwrap(), cpu.gen_registers[*rd as usize], RegisterNames::from_u8(*rt).unwrap(), cpu.gen_registers[*rt as usize], RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize]),
 
-            Instruction::BLTZ { rs, offset } |
-            Instruction::BGEZ { rs, offset } |
-            Instruction::BLTZAL { rs, offset } |
+            Instruction::BLTZ { rs, offset, .. } |
+            Instruction::BGEZ { rs, offset, .. } |
+            Instruction::BLTZAL { rs, offset, .. } |
             Instruction::BLEZ { rs, offset } |
             Instruction::BGTZ { rs, offset } |
-            Instruction::BGEZAL { rs, offset } => format!("${}({:08x}), {:#x}", RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize], offset),
+            Instruction::MALBRCH { rs, offset, .. } |
+            Instruction::BGEZAL { rs, offset, .. } => format!("${}({:08x}), {:#x}", RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize], offset),
 
             Instruction::J { target } |
             Instruction::JAL { target } => format!("{:#08x}", target),
@@ -332,6 +336,81 @@ impl Instruction {
             Instruction::SWC2 { rt, offset, base } => format!("${}({:08x}), {:#04x}({})([{:08x}] = {:08x})", RegisterNames::from_u8(*rt).unwrap(), cpu.read_reg(*rt as u8), offset, RegisterNames::from_u8(*base).unwrap(), cpu.gen_registers[*base as usize] + *offset as u32, cpu.main_bus.peek_word((cpu.gen_registers[*base as usize] as i32 + (*offset  as i16)as i32) as u32)),
         }
     }
+
+    pub fn execute(&self, cpu: &mut R3000, timers: &mut TimerState) {
+        match self {
+            Instruction::SLL { rt, rd, sa } => interpreter::op_sll(cpu, *rd, *rt, *sa),
+            Instruction::SRL { rt, rd, sa } => interpreter::op_srl(cpu, *rd, *rt, *sa),
+            Instruction::SRA { rt, rd, sa } => interpreter::op_sra(cpu, *rd, *rt, *sa),
+            Instruction::SLLV { rd, rt, rs } => interpreter::op_sllv(cpu, *rs, *rt, *rd),
+            Instruction::SRLV { rd, rt, rs } => interpreter::op_srlv(cpu, *rs, *rt, *rd),
+            Instruction::SRAV { rd, rt, rs } => interpreter::op_srav(cpu, *rs, *rt, *rd),
+            Instruction::JR { rs } => interpreter::op_jr(cpu, *rs),
+            Instruction::JALR { rd, rs } => interpreter::op_jalr(cpu, *rs, *rd),
+            Instruction::SYSCALL { code } => interpreter::op_syscall(cpu),
+            Instruction::BREAK { code } => interpreter::op_break(cpu),
+            Instruction::MFHI { rd } => interpreter::op_mfhi(cpu, *rd),
+            Instruction::MTHI { rs } => interpreter::op_mthi(cpu, *rs),
+            Instruction::MFLO { rd } => interpreter::op_mflo(cpu, *rd),
+            Instruction::MTLO { rs } => interpreter::op_mtlo(cpu, *rs),
+            Instruction::DIV { rs, rt } => interpreter::op_div(cpu, *rs, *rt),
+            Instruction::DIVU { rs, rt } => interpreter::op_divu(cpu, *rs, *rt),
+            Instruction::ADD { rd, rs, rt } => interpreter::op_add(cpu, *rs, *rt, *rd),
+            Instruction::SUB { rd, rs, rt } => interpreter::op_sub(cpu, *rs, *rt, *rd),
+            Instruction::SLTU { rd, rs, rt } => interpreter::op_sltu(cpu, *rs, *rt, *rd),
+            Instruction::SUBU { rd, rs, rt } => interpreter::op_subu(cpu, *rs, *rt, *rd),
+            Instruction::AND { rd, rs, rt } => interpreter::op_and(cpu, *rs, *rt, *rd),
+            Instruction::OR { rd, rs, rt } => interpreter::op_or(cpu, *rs, *rt, *rd),
+            Instruction::XOR { rd, rs, rt } => interpreter::op_xor(cpu, *rs, *rt, *rd),
+            Instruction::NOR { rd, rs, rt } => interpreter::op_nor(cpu, *rs, *rt, *rd),
+            Instruction::ADDU { rd, rs, rt } => interpreter::op_addu(cpu, *rs, *rt, *rd),
+            Instruction::MULT { rs, rt } => interpreter::op_mult(cpu, *rs, *rt),
+            Instruction::MULTU { rs, rt } => interpreter::op_multu(cpu, *rs, *rt),
+            Instruction::SLT { rd, rs, rt } => interpreter::op_slt(cpu, *rs, *rt, *rd),
+            Instruction::BLTZ { opcode, .. } => interpreter::op_branch(cpu, *opcode),
+            Instruction::BGEZ { opcode, .. } => interpreter::op_branch(cpu, *opcode),
+            Instruction::BLTZAL { opcode, .. } => interpreter::op_branch(cpu, *opcode),
+            Instruction::BGEZAL { opcode, .. } => interpreter::op_branch(cpu, *opcode),
+            Instruction::J { target } => interpreter::op_j(cpu, *target),
+            Instruction::JAL { target } => interpreter::op_jal(cpu, *target),
+            Instruction::BEQ { rs, rt, offset } => interpreter::op_beq(cpu, *rs, *rt, *offset as u32),
+            Instruction::BNE { rs, rt, offset } => interpreter::op_bne(cpu, *rs, *rt, *offset as u32),
+            Instruction::BLEZ { rs, offset } => interpreter::op_blez(cpu, *rs, *offset as u32),
+            Instruction::BGTZ { rs, offset } => interpreter::op_bgtz(cpu, *rs, *offset as u32),
+            Instruction::ADDI { rt, rs, immediate } => interpreter::op_addi(cpu, *rs, *rt, *immediate as u32),
+            Instruction::ADDIU { rt, rs, immediate } => interpreter::op_addiu(cpu, *rs, *rt, *immediate as u32),
+            Instruction::SLTI { rt, rs, immediate } => interpreter::op_slti(cpu, *rs, *rt, *immediate as u32),
+            Instruction::SLTIU { rt, rs, immediate } => interpreter::op_sltiu(cpu, *rs, *rt, *immediate as u32),
+            Instruction::ANDI { rt, rs, immediate } => interpreter::op_andi(cpu, *rs, *rt, *immediate as u32),
+            Instruction::ORI { rt, rs, immediate } => interpreter::op_ori(cpu, *rs, *rt, *immediate as u32),
+            Instruction::XORI { rt, rs, immediate } => interpreter::op_xori(cpu, *rs, *rt, *immediate as u32),
+            Instruction::LUI { rt, immediate } => interpreter::op_lui(cpu, *rt, *immediate as u32),
+            Instruction::MTC0 { rt, rd } => interpreter::op_mtc0(cpu, *rd, *rt),
+            Instruction::MFC0 { rt, rd } => interpreter::op_mfc0(cpu, *rd, *rt),
+            Instruction::RFE => interpreter::op_rfe(cpu),
+            Instruction::MFC2 { rt, rd } => interpreter::op_mfc2(cpu, *rt, *rd),
+            Instruction::CTC2 { rt, rd } => interpreter::op_ctc2(cpu, *rt, *rd),
+            Instruction::MTC2 { rt, rd } => interpreter::op_mtc2(cpu, *rt, *rd),
+            Instruction::CFC2 { rt, rd } => interpreter::op_cfc2(cpu, *rt, *rd),
+            Instruction::IMM25 { command } => interpreter::op_imm25(cpu, *command),
+            Instruction::LB { rt, offset, base } => interpreter::op_lb(cpu, *base, *rt, *offset as u32),
+            Instruction::LH { rt, offset, base } => interpreter::op_lh(cpu, *base, *rt, *offset as u32, timers),
+            Instruction::LW { rt, offset, base } => interpreter::op_lw(cpu, *base, *rt, *offset as u32, timers),
+            Instruction::LBU { rt, offset, base } => interpreter::op_lbu(cpu, *base, *rt, *offset as u32),
+            Instruction::LHU { rt, offset, base } => interpreter::op_lhu(cpu, *base, *rt, *offset as u32, timers),
+            Instruction::SB { rt, offset, base } => interpreter::op_sb(cpu, *base, *rt, *offset as u32),
+            Instruction::SH { rt, offset, base } => interpreter::op_sh(cpu, *base, *rt, *offset as u32, timers),
+            Instruction::LWL { rt, offset, base } => interpreter::op_lwl(cpu, *base, *rt, *offset as u32, timers),
+            Instruction::LWR { rt, offset, base } => interpreter::op_lwr(cpu, *base, *rt, *offset as u32, timers),
+            Instruction::SWL { rt, offset, base } => interpreter::op_swl(cpu, *base, *rt, *offset as u32, timers),
+            Instruction::SWR { rt, offset, base } => interpreter::op_swr(cpu, *base, *rt, *offset as u32, timers),
+            Instruction::SW { rt, offset, base } => interpreter::op_sw(cpu, *base, *rt, *offset as u32, timers),
+            Instruction::LWC2 { rt, offset, base } => interpreter::op_lwc2(cpu, *base, *rt, *offset as u32, timers),
+            Instruction::SWC2 { rt, offset, base } => interpreter::op_swc2(cpu, *base, *rt, *offset as u32, timers),
+            Instruction::MALBRCH { rs, offset, opcode } => interpreter::op_branch(cpu, *opcode),
+        }
+    }
+
 }
 
 pub(super) fn decode_opcode(inst: u32) -> Option<Instruction> {
@@ -374,11 +453,11 @@ pub(super) fn decode_opcode(inst: u32) -> Option<Instruction> {
         0x1 => {
             //"PC-relative" test and branch instructions
             match inst.rt() {
-                0x0 => Some(Instruction::BLTZ{rs: inst.rs(), offset: inst.immediate()}),
-                0x1 => Some(Instruction::BGEZ{rs: inst.rs(), offset: inst.immediate()}),
-                0x10 => Some(Instruction::BLTZAL{rs: inst.rs(), offset: inst.immediate()}),
-                0x11 => Some(Instruction::BGEZAL{rs: inst.rs(), offset: inst.immediate()}),
-                _ => None
+                0x0 => Some(Instruction::BLTZ{rs: inst.rs(), offset: inst.immediate(), opcode: inst}),
+                0x1 => Some(Instruction::BGEZ{rs: inst.rs(), offset: inst.immediate(), opcode: inst}),
+                0x10 => Some(Instruction::BLTZAL{rs: inst.rs(), offset: inst.immediate(), opcode: inst}),
+                0x11 => Some(Instruction::BGEZAL{rs: inst.rs(), offset: inst.immediate(), opcode: inst}),
+                _ => Some(Instruction::MALBRCH{rs: inst.rs(), offset: inst.immediate(), opcode: inst})
             }
         }
 

@@ -214,7 +214,7 @@ impl CDDrive {
         match addr {
             0x1F801800 => self.get_status_register(),
             0x1F801801 => match self.status_index {
-                0 => panic!("CD: 0x1F801801 read byte unknown index 0"),
+                0 => self.pop_response(), // mirror
                 1 => self.pop_response(),
                 2 => panic!("CD: 0x1F801801 read byte unknown index 2"),
                 3 => panic!("CD: 0x1F801801 read byte unknown index 3"),

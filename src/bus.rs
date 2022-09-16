@@ -66,6 +66,7 @@ impl MainBus {
             0x1F801060 => 0x00000B88, //RAM_SIZE
             0x1F801820..=0x1F801824 => self.mdec.bus_read_word(addr),
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_word(addr - 0x1fc0_0000),
+            0x1F802000 ..= 0x1F802080 => 0, // Expansion 2
             _ => panic!(
                 "Invalid word read at address {:#X}! This address is not mapped to any device.",
                 addr

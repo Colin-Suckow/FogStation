@@ -1,8 +1,8 @@
 use eframe::{
-    egui::{self, Direction, Key, Layout, TextureId, Color32, Rect, Pos2},
+    egui::{self, Color32, Direction, Key, Layout, Pos2, Rect, TextureId},
     epi,
 };
-use gilrs::{GamepadId, Gilrs, Button};
+use gilrs::{Button, GamepadId, Gilrs};
 use psx_emu::{
     controller::{ButtonState, ControllerType},
     gpu::{DrawCall, Resolution},
@@ -60,7 +60,7 @@ impl VaporstationApp {
             latest_gpu_log: vec![],
             show_gpu_call_window: false,
             highlighted_gpu_calls: vec![],
-            last_frame_data: vec!(),
+            last_frame_data: vec![],
             memory_logging: false,
             display_texture: None,
             gilrs_instance: Gilrs::new().unwrap(),
@@ -149,24 +149,46 @@ impl epi::App for VaporstationApp {
                             frame.tex_allocator().free(display_texture);
                         }
 
+                        let pixel_data = transform_psx16_to_32(
+                            &vram_frame,
+                            0,
+                            0,
+                            VRAM_WIDTH as u32,
+                            VRAM_HEIGHT as u32,
+                        );
 
-                        let pixel_data = transform_psx16_to_32(&vram_frame, 0, 0, VRAM_WIDTH as u32, VRAM_HEIGHT as u32);
-                        
-                        self.vram_texture = Some(frame
-                            .tex_allocator()
-                            .alloc_srgba_premultiplied((VRAM_WIDTH, VRAM_HEIGHT), &pixel_data));
+                        self.vram_texture = Some(
+                            frame
+                                .tex_allocator()
+                                .alloc_srgba_premultiplied((VRAM_WIDTH, VRAM_HEIGHT), &pixel_data),
+                        );
 
-                            
-                            
                         let display_data = if is_full_color {
-                            transform_psx24_to_32(&vram_frame, self.display_origin.0 as u32, self.display_origin.1 as u32, self.latest_resolution.width, self.latest_resolution.height)
+                            transform_psx24_to_32(
+                                &vram_frame,
+                                self.display_origin.0 as u32,
+                                self.display_origin.1 as u32,
+                                self.latest_resolution.width,
+                                self.latest_resolution.height,
+                            )
                         } else {
-                            transform_psx16_to_32(&vram_frame, self.display_origin.0 as u32, self.display_origin.1 as u32, self.latest_resolution.width, self.latest_resolution.height)
+                            transform_psx16_to_32(
+                                &vram_frame,
+                                self.display_origin.0 as u32,
+                                self.display_origin.1 as u32,
+                                self.latest_resolution.width,
+                                self.latest_resolution.height,
+                            )
                         };
-                            
-                        self.display_texture = Some(frame
-                            .tex_allocator()
-                            .alloc_srgba_premultiplied((self.latest_resolution.width as usize, self.latest_resolution.height as usize), &display_data));
+
+                        self.display_texture =
+                            Some(frame.tex_allocator().alloc_srgba_premultiplied(
+                                (
+                                    self.latest_resolution.width as usize,
+                                    self.latest_resolution.height as usize,
+                                ),
+                                &display_data,
+                            ));
 
                         self.last_frame_data = pixel_data;
                         self.times.push(frame_time as usize);
@@ -234,7 +256,10 @@ impl epi::App for VaporstationApp {
                 egui::menu::menu(ui, "Debug", |ui| {
                     ui.checkbox(&mut self.show_vram_window, "VRAM Viewer");
                     ui.checkbox(&mut self.show_gpu_call_window, "GPU Call Debugger");
-                    if ui.checkbox(&mut self.memory_logging, "Memory Logging").clicked() {
+                    if ui
+                        .checkbox(&mut self.memory_logging, "Memory Logging")
+                        .clicked()
+                    {
                         self.emu_handle
                             .comm
                             .tx
@@ -273,20 +298,31 @@ impl epi::App for VaporstationApp {
             egui::Window::new("Settings | Controller").show(ctx, |ui| {
                 let current_id = self.active_controller_id;
                 let current_gamepad = if let Some(id) = current_id {
-                    Some(self.gilrs_instance.gamepad(id))  
+                    Some(self.gilrs_instance.gamepad(id))
                 } else {
                     None
                 };
                 egui::ComboBox::from_label("Input Source")
-                    .selected_text(format!("{}", match &current_gamepad {
-                        Some(gamepad) => gamepad.name(),
-                        _ => "Keyboard"
-                    }))
+                    .selected_text(format!(
+                        "{}",
+                        match &current_gamepad {
+                            Some(gamepad) => gamepad.name(),
+                            _ => "Keyboard",
+                        }
+                    ))
                     .show_ui(ui, |ui| {
                         ui.selectable_value(&mut self.active_controller_id, None, "Keyboard");
                         for (id, gamepad) in self.gilrs_instance.gamepads() {
-                            let connected_string = if gamepad.is_connected() {""} else {" DISCONNECTED"};
-                            ui.selectable_value(&mut self.active_controller_id, Some(id), format!("{}{}", gamepad.name(), connected_string));
+                            let connected_string = if gamepad.is_connected() {
+                                ""
+                            } else {
+                                " DISCONNECTED"
+                            };
+                            ui.selectable_value(
+                                &mut self.active_controller_id,
+                                Some(id),
+                                format!("{}{}", gamepad.name(), connected_string),
+                            );
                         }
                     });
             });
@@ -342,7 +378,7 @@ impl epi::App for VaporstationApp {
                                     }
 
                                     ui.label(command.clut_size.to_string());
-                                  
+
                                     let mut should_be_highlighted =
                                         self.highlighted_gpu_calls.contains(&i);
                                     ui.checkbox(&mut should_be_highlighted, "");
@@ -372,16 +408,16 @@ impl epi::App for VaporstationApp {
 
                                         apply_highlights(&self, &mut new_frame);
 
-
-                                         // Free the old texture if it exists
+                                        // Free the old texture if it exists
                                         if let Some(vram_texture) = self.vram_texture {
                                             frame.tex_allocator().free(vram_texture);
                                         }
 
-                                        self.vram_texture = Some(frame
-                                            .tex_allocator()
-                                            .alloc_srgba_premultiplied((VRAM_WIDTH, VRAM_HEIGHT), &new_frame));
-                
+                                        self.vram_texture =
+                                            Some(frame.tex_allocator().alloc_srgba_premultiplied(
+                                                (VRAM_WIDTH, VRAM_HEIGHT),
+                                                &new_frame,
+                                            ));
                                     }
 
                                     ui.end_row();
@@ -400,7 +436,6 @@ impl epi::App for VaporstationApp {
                 ui.with_layout(
                     egui::Layout::centered_and_justified(Direction::TopDown),
                     |ui| {
-                        
                         let pane_size = ui.max_rect();
                         let (scaled_height, scaled_width) =
                             if pane_size.width() > pane_size.height() * 1.3333 {
@@ -408,9 +443,14 @@ impl epi::App for VaporstationApp {
                             } else {
                                 (pane_size.width() * 0.75, pane_size.width())
                             };
-                            
-            
-                        let image = egui::Image::new(display_texture, [scaled_width, scaled_height]).uv(Rect { min: Pos2::new(0.00625, 0.00833), max: Pos2::new(1.0 - 0.00625, 1.0 - 0.00833)});
+
+                        let image =
+                            egui::Image::new(display_texture, [scaled_width, scaled_height]).uv(
+                                Rect {
+                                    min: Pos2::new(0.00625, 0.00833),
+                                    max: Pos2::new(1.0 - 0.00625, 1.0 - 0.00833),
+                                },
+                            );
                         ui.add(image);
                     },
                 );
@@ -422,7 +462,6 @@ impl epi::App for VaporstationApp {
         "Vaporstation"
     }
 }
-
 
 fn get_button_state_from_keyboard(input_state: &egui::InputState) -> ButtonState {
     ButtonState {
@@ -446,11 +485,21 @@ fn get_button_state_from_keyboard(input_state: &egui::InputState) -> ButtonState
     }
 }
 
-fn transform_psx16_to_32(psx_data: &Vec<u16>, origin_x: u32, origin_y: u32, width: u32, height: u32) -> Vec<Color32> {
-    psx_data.iter()
+fn transform_psx16_to_32(
+    psx_data: &Vec<u16>,
+    origin_x: u32,
+    origin_y: u32,
+    width: u32,
+    height: u32,
+) -> Vec<Color32> {
+    psx_data
+        .iter()
         .enumerate()
         .filter(|(i, _v)| {
-            (i % VRAM_WIDTH) >= origin_x as usize &&  (i / VRAM_WIDTH) >= origin_y as usize && (i % VRAM_WIDTH) < (origin_x + width) as usize && (i / VRAM_WIDTH) < (origin_y + height) as usize
+            (i % VRAM_WIDTH) >= origin_x as usize
+                && (i / VRAM_WIDTH) >= origin_y as usize
+                && (i % VRAM_WIDTH) < (origin_x + width) as usize
+                && (i / VRAM_WIDTH) < (origin_y + height) as usize
         })
         .map(|(_i, p)| {
             let colors = ps_pixel_to_gl(p);
@@ -459,22 +508,32 @@ fn transform_psx16_to_32(psx_data: &Vec<u16>, origin_x: u32, origin_y: u32, widt
         .collect::<Vec<_>>()
 }
 
-fn transform_psx24_to_32(psx_data: &Vec<u16>, origin_x: u32, origin_y: u32, width: u32, height: u32) -> Vec<Color32> {
-    psx_data.iter()
-        .fold(vec!(), |mut vec, val| {
+fn transform_psx24_to_32(
+    psx_data: &Vec<u16>,
+    origin_x: u32,
+    origin_y: u32,
+    width: u32,
+    height: u32,
+) -> Vec<Color32> {
+    psx_data
+        .iter()
+        .fold(vec![], |mut vec, val| {
             vec.extend(val.to_le_bytes());
             vec
         })
         .iter()
         .enumerate()
         .filter(|(i, _v)| {
-            (i % (VRAM_WIDTH * 2)) >= (origin_x * 3) as usize && ((i) / (VRAM_WIDTH * 2)) >= origin_y as usize && (i % (VRAM_WIDTH * 2)) < ((origin_x + width) * 3) as usize && ((i) / (VRAM_WIDTH * 2)) < (origin_y + height) as usize
+            (i % (VRAM_WIDTH * 2)) >= (origin_x * 3) as usize
+                && ((i) / (VRAM_WIDTH * 2)) >= origin_y as usize
+                && (i % (VRAM_WIDTH * 2)) < ((origin_x + width) * 3) as usize
+                && ((i) / (VRAM_WIDTH * 2)) < (origin_y + height) as usize
         })
-        .map(|(_i, v)| {*v})
+        .map(|(_i, v)| *v)
         .collect::<Vec<u8>>()
-        .chunks_exact(3).map(|colors| {
-            egui::Color32::from_rgba_unmultiplied(colors[0], colors[1], colors[2], 255)
-        }).collect()
+        .chunks_exact(3)
+        .map(|colors| egui::Color32::from_rgba_unmultiplied(colors[0], colors[1], colors[2], 255))
+        .collect()
 }
 
 fn apply_highlights(app: &VaporstationApp, pixel_data: &mut Vec<Color32>) {
@@ -484,7 +543,7 @@ fn apply_highlights(app: &VaporstationApp, pixel_data: &mut Vec<Color32>) {
         if let Some(points) = &call.points {
             let min_x = points.iter().min_by_key(|v| v.x).unwrap().x;
             let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
-            
+
             let max_x = points.iter().max_by_key(|v| v.x).unwrap().x;
             let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
 
@@ -501,11 +560,19 @@ fn apply_highlights(app: &VaporstationApp, pixel_data: &mut Vec<Color32>) {
             };
 
             // Do some wacky division stuff so the adjust the highlight size for clut
-            let tex_max_x = ((points.iter().max_by_key(|v| v.tex_x).unwrap().tex_x - tex_min_x) / clut_div) + tex_min_x;
+            let tex_max_x = ((points.iter().max_by_key(|v| v.tex_x).unwrap().tex_x - tex_min_x)
+                / clut_div)
+                + tex_min_x;
             let tex_max_y = points.iter().max_by_key(|v| v.tex_y).unwrap().tex_y;
 
-            println!("Highlighting ({}, {}) -> ({}, {})", min_x, min_y, max_x, max_y);
-            println!("Tex coords ({}, {}) -> ({}, {})", tex_min_x, tex_min_y, tex_max_x, tex_max_y);
+            println!(
+                "Highlighting ({}, {}) -> ({}, {})",
+                min_x, min_y, max_x, max_y
+            );
+            println!(
+                "Tex coords ({}, {}) -> ({}, {})",
+                tex_min_x, tex_min_y, tex_max_x, tex_max_y
+            );
             println!("base x {} base y {}", tex_base_x, tex_base_y);
 
             for y in min_y..max_y {
@@ -514,7 +581,12 @@ fn apply_highlights(app: &VaporstationApp, pixel_data: &mut Vec<Color32>) {
                     let current_pixel = pixel_data[addr as usize];
                     let highlight_color = Color32::from_rgba_unmultiplied(155, 0, 0, 155);
 
-                    pixel_data[addr as usize] = Color32::from_rgba_unmultiplied(current_pixel.r() + highlight_color.r(), current_pixel.g() + highlight_color.g(), current_pixel.b() + highlight_color.b(), 255);
+                    pixel_data[addr as usize] = Color32::from_rgba_unmultiplied(
+                        current_pixel.r() + highlight_color.r(),
+                        current_pixel.g() + highlight_color.g(),
+                        current_pixel.b() + highlight_color.b(),
+                        255,
+                    );
                 }
             }
 
@@ -524,7 +596,12 @@ fn apply_highlights(app: &VaporstationApp, pixel_data: &mut Vec<Color32>) {
                     let current_pixel = pixel_data[addr as usize];
                     let highlight_color = Color32::from_rgba_unmultiplied(0, 155, 0, 155);
 
-                    pixel_data[addr as usize] = Color32::from_rgba_unmultiplied(current_pixel.r() + highlight_color.r(), current_pixel.g() + highlight_color.g(), current_pixel.b() + highlight_color.b(), 255);
+                    pixel_data[addr as usize] = Color32::from_rgba_unmultiplied(
+                        current_pixel.r() + highlight_color.r(),
+                        current_pixel.g() + highlight_color.g(),
+                        current_pixel.b() + highlight_color.b(),
+                        255,
+                    );
                 }
             }
         }

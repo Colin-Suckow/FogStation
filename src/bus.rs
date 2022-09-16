@@ -1,14 +1,14 @@
 use log::{info, warn};
 
-use crate::LOGGING;
 use crate::bios::Bios;
 use crate::cdrom::CDDrive;
 use crate::controller::Controllers;
 use crate::dma::DMAState;
 use crate::gpu::Gpu;
+use crate::mdec::MDEC;
 use crate::memory::Memory;
 use crate::spu::SPU;
-use crate::mdec::MDEC;
+use crate::LOGGING;
 
 pub struct MainBus {
     pub bios: Bios,
@@ -66,7 +66,7 @@ impl MainBus {
             0x1F801060 => 0x00000B88, //RAM_SIZE
             0x1F801820..=0x1F801824 => self.mdec.bus_read_word(addr),
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_word(addr - 0x1fc0_0000),
-            0x1F802000 ..= 0x1F802080 => 0, // Expansion 2
+            0x1F802000..=0x1F802080 => 0, // Expansion 2
             _ => panic!(
                 "Invalid word read at address {:#X}! This address is not mapped to any device.",
                 addr
@@ -74,8 +74,10 @@ impl MainBus {
         };
         // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {
         //     println!("Read IO addr {:#X} value {:#X}", addr, value);
-        // } 
-        if unsafe{LOGGING} {println!("Loaded {:#X} from addr {:#X}", value, addr)};
+        // }
+        if unsafe { LOGGING } {
+            println!("Loaded {:#X} from addr {:#X}", value, addr)
+        };
         value
     }
 
@@ -85,7 +87,7 @@ impl MainBus {
 
         // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {
         //     println!("wrote IO addr {:#X} value {:#X}", addr, word);
-        // } 
+        // }
 
         match addr {
             0x1F802002 => info!("Serial: {}", word),
@@ -135,8 +137,10 @@ impl MainBus {
         };
         // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {
         //     println!("Read IO hw addr {:#X} value {:#X}", addr, val);
-        // } 
-        if unsafe{LOGGING} {println!("Loaded {:#X} from addr {:#X}", val, addr)};
+        // }
+        if unsafe { LOGGING } {
+            println!("Loaded {:#X} from addr {:#X}", val, addr)
+        };
         val
     }
 
@@ -146,7 +150,7 @@ impl MainBus {
 
         // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {
         //     println!("wrote hw IO addr {:#X} value {:#X}", addr, value);
-        // } 
+        // }
 
         // if addr == 0x7C7C8 {
         //     println!("0x7c7c8 written with hw val {:#X}", value);
@@ -169,7 +173,7 @@ impl MainBus {
 
     pub fn read_byte(&mut self, og_addr: u32) -> u8 {
         let addr = translate_address(og_addr);
-        
+
         let val = match addr {
             0x1F801070 => {
                 warn!("Tried to read i_status word");
@@ -179,7 +183,7 @@ impl MainBus {
                 warn!("Tried to read i_mask byte");
                 0
             }
-            
+
             0x0..=0x001f_ffff => self.memory.read_byte(addr), //KUSEG
             0x1F00_0000..=0x1f00_FFFF => {
                 //println!("Something tried to read the parallel port. This is not currently emulated, so a 0 was returned. The address was {:#X}", addr);
@@ -190,20 +194,22 @@ impl MainBus {
             0x1F80_1040..=0x1F80_104E => self.controllers.read_byte(addr),
             0x1F800000..=0x1F8003FF => self.scratchpad.read_byte(addr - 0x1F800000),
             0x1F801080..=0x1F8010F7 => self.dma.read_byte(addr),
-            
+
             // _ => {
             //     panic!(
             //         "Invalid byte read at address {:#X}! This address is not mapped to any device.",
             //         addr
             //     );
-                
+
             // }
             _ => 0,
         };
         // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {
         //     println!("Read IO byte addr {:#X} value {:#X}", addr, val);
-        // } 
-        if unsafe{LOGGING} {println!("Loaded {:#X} from addr {:#X}", val, addr)};
+        // }
+        if unsafe { LOGGING } {
+            println!("Loaded {:#X} from addr {:#X}", val, addr)
+        };
         val
     }
 
@@ -213,7 +219,7 @@ impl MainBus {
 
         // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {
         //     println!("wrote byte IO addr {:#X} value {:#X}", addr, value);
-        // } 
+        // }
 
         match addr {
             0x0..=0x001f_ffff => self.memory.write_byte(addr, value), //KUSEG

@@ -18,7 +18,7 @@ pub fn bcd_to_dec(hex: usize) -> usize {
 }
 
 pub fn dec_to_bcd(dec: usize) -> usize {
-    (dec/10*16) + (dec%10)
+    (dec / 10 * 16) + (dec % 10)
 }
 
 impl DiscIndex {
@@ -26,7 +26,7 @@ impl DiscIndex {
         Self {
             minutes: bcd_to_dec(minutes),
             seconds: bcd_to_dec(seconds),
-            sectors: bcd_to_dec(sectors)
+            sectors: bcd_to_dec(sectors),
         }
     }
 
@@ -34,12 +34,12 @@ impl DiscIndex {
         Self {
             minutes: minutes,
             seconds: seconds,
-            sectors: sectors
+            sectors: sectors,
         }
     }
 
     pub fn sector_number(&self) -> usize {
-        let total_seconds = (self.minutes * 60) +self.seconds;
+        let total_seconds = (self.minutes * 60) + self.seconds;
         ((total_seconds * SECTORS_PER_SECOND) + self.sectors) - 150
     }
 
@@ -62,16 +62,13 @@ impl Display for DiscIndex {
     }
 }
 
-
 pub struct DiscTrack {
     data: Vec<u8>,
 }
 
 impl DiscTrack {
     pub fn new(data: Vec<u8>) -> Self {
-        Self {
-            data
-        }
+        Self { data }
     }
 }
 
@@ -126,13 +123,15 @@ pub struct Sector {
 
 impl Sector {
     pub fn new(data: Vec<u8>) -> Self {
-        Self {
-            data,
-        }
+        Self { data }
     }
 
     pub fn index(&self) -> DiscIndex {
-        DiscIndex::new_bcd(self.data[12].into(), self.data[13].into(), self.data[14].into())
+        DiscIndex::new_bcd(
+            self.data[12].into(),
+            self.data[13].into(),
+            self.data[14].into(),
+        )
     }
 
     pub fn full_sector_data(&self) -> &[u8] {
@@ -145,7 +144,7 @@ impl Sector {
 
     pub fn consume(self, sector_size: &SectorSize) -> Vec<u8> {
         match sector_size {
-            SectorSize::DataOnly =>  self.data[24..24 + 0x800].to_vec(),
+            SectorSize::DataOnly => self.data[24..24 + 0x800].to_vec(),
             SectorSize::WholeSector => self.data[0xC..].to_vec(),
         }
     }

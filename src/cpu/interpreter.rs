@@ -3,14 +3,17 @@ use log::trace;
 
 use crate::{cpu::Exception, timer::TimerState};
 
-use super::{R3000, instruction::{InstructionArgs, NumberHelpers}};
+use super::{
+    instruction::{InstructionArgs, NumberHelpers},
+    R3000,
+};
 
 pub(super) fn op_sw(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
     let addr = offset
         .immediate_sign_extended()
         .wrapping_add(cpu.read_reg(rs));
     let val = cpu.read_reg(rt);
-        
+
     cpu.flush_load_delay();
 
     if addr % 4 != 0 {
@@ -74,7 +77,7 @@ pub(super) fn op_lwr(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut 
     let mut reg_val = cpu.read_reg(rt);
 
     if let Some(delay) = &cpu.load_delay {
-        if delay.register == rt{
+        if delay.register == rt {
             reg_val = delay.value;
         }
     }
@@ -93,15 +96,15 @@ pub(super) fn op_lwr(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut 
 
 pub(super) fn op_lwl(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
     let addr = offset
-    .immediate_sign_extended()
-    .wrapping_add(cpu.read_reg(rs));
-    
+        .immediate_sign_extended()
+        .wrapping_add(cpu.read_reg(rs));
+
     let word = cpu.read_bus_word(addr & !3, timers);
-    
+
     // LWL can ignore the load delay, so check if theres an existing load delay and fetch the rt value
     // from there if it exists
     let mut reg_val = cpu.read_reg(rt);
-    
+
     if let Some(delay) = &cpu.load_delay {
         if delay.register == rt {
             reg_val = delay.value;
@@ -145,8 +148,7 @@ pub(super) fn op_sb(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
 }
 
 pub(super) fn op_lhu(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
-    let addr =
-        (offset.immediate_sign_extended()).wrapping_add(cpu.read_reg(rs));
+    let addr = (offset.immediate_sign_extended()).wrapping_add(cpu.read_reg(rs));
     if addr % 2 != 0 {
         trace!("AdEl fired by op_lhu");
         cpu.flush_load_delay();
@@ -158,8 +160,7 @@ pub(super) fn op_lhu(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut 
 }
 
 pub(super) fn op_lbu(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
-    let addr =
-        (offset.immediate_sign_extended()).wrapping_add(cpu.read_reg(rs));
+    let addr = (offset.immediate_sign_extended()).wrapping_add(cpu.read_reg(rs));
     let val = cpu.main_bus.read_byte(addr).zero_extended();
     cpu.delayed_load(rt, val);
 }
@@ -169,20 +170,25 @@ pub(super) fn op_lw(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut T
     let offset = cpu.read_reg(rs);
     let addr = base.wrapping_add(offset);
     if addr % 4 != 0 {
-        trace!("AdEl fired by op_lw   addr {:#X}   s_reg  {}   s_reg_val  {:#X}   offset   {:#X}", addr, rs, offset , base);
+        trace!(
+            "AdEl fired by op_lw   addr {:#X}   s_reg  {}   s_reg_val  {:#X}   offset   {:#X}",
+            addr,
+            rs,
+            offset,
+            base
+        );
         cpu.fire_exception(Exception::AdEL);
     } else {
         let val = cpu.read_bus_word(addr as u32, timers);
-       
+
         //println!("lw addr {:08x} val {:08x} reg {}", addr, val, rt);
-        
+
         cpu.delayed_load(rt, val);
     };
 }
 
 pub(super) fn op_lh(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
-    let addr =
-        (offset.immediate_sign_extended()).wrapping_add(cpu.read_reg(rs));
+    let addr = (offset.immediate_sign_extended()).wrapping_add(cpu.read_reg(rs));
     if addr % 2 != 0 {
         trace!("AdEl fired by op_lh");
         cpu.fire_exception(Exception::AdEL);
@@ -193,8 +199,7 @@ pub(super) fn op_lh(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut T
 }
 
 pub(super) fn op_lb(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
-    let addr =
-        (offset.immediate_sign_extended()).wrapping_add(cpu.read_reg(rs));
+    let addr = (offset.immediate_sign_extended()).wrapping_add(cpu.read_reg(rs));
     let val = cpu.main_bus.read_byte(addr).sign_extended();
     cpu.delayed_load(rt, val as u32);
 }
@@ -215,8 +220,7 @@ pub(super) fn op_mfc0(cpu: &mut R3000, rd: u8, rt: u8) {
 pub(super) fn op_mtc0(cpu: &mut R3000, rd: u8, rt: u8) {
     let val = cpu.read_reg(rt);
     cpu.flush_load_delay();
-    cpu.cop0
-        .write_reg(rd, val);
+    cpu.cop0.write_reg(rd, val);
 }
 
 pub(super) fn op_lui(cpu: &mut R3000, rt: u8, offset: u32) {
@@ -227,37 +231,25 @@ pub(super) fn op_lui(cpu: &mut R3000, rt: u8, offset: u32) {
 pub(super) fn op_xori(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
     let val = cpu.read_reg(rs);
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rt,
-        val ^ offset.immediate().zero_extended(),
-    );
+    cpu.write_reg(rt, val ^ offset.immediate().zero_extended());
 }
 
 pub(super) fn op_ori(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
     let val = cpu.read_reg(rs);
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rt,
-        val | offset.immediate().zero_extended(),
-    );
+    cpu.write_reg(rt, val | offset.immediate().zero_extended());
 }
 
 pub(super) fn op_andi(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
     let val = cpu.read_reg(rs);
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rt,
-        offset.immediate().zero_extended() & val,
-    );
+    cpu.write_reg(rt, offset.immediate().zero_extended() & val);
 }
 
 pub(super) fn op_sltiu(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
     let val = cpu.read_reg(rs);
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rt,
-        (val < offset.immediate_sign_extended() as u32) as u32,
-    );
+    cpu.write_reg(rt, (val < offset.immediate_sign_extended() as u32) as u32);
 }
 
 pub(super) fn op_slti(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
@@ -265,8 +257,7 @@ pub(super) fn op_slti(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
     cpu.flush_load_delay();
     cpu.write_reg(
         rt,
-        ((val as i32)
-            < offset.immediate_sign_extended() as i32) as u32,
+        ((val as i32) < offset.immediate_sign_extended() as i32) as u32,
     );
 }
 
@@ -284,9 +275,7 @@ pub(super) fn op_addi(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
     cpu.flush_load_delay();
     cpu.write_reg(
         rt,
-        match (val as i32)
-            .checked_add(offset.immediate_sign_extended() as i32)
-        {
+        match (val as i32).checked_add(offset.immediate_sign_extended() as i32) {
             Some(val) => val as u32,
             None => {
                 cpu.fire_exception(Exception::Ovf);
@@ -345,11 +334,7 @@ pub(super) fn op_slt(cpu: &mut R3000, rs: u8, rt: u8, rd: u8) {
     let t_val = cpu.read_reg(rt) as i32;
     let s_val = cpu.read_reg(rs) as i32;
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rd,
-        (s_val < t_val)
-            as u32,
-    );
+    cpu.write_reg(rd, (s_val < t_val) as u32);
 }
 
 pub(super) fn op_multu(cpu: &mut R3000, rs: u8, rt: u8) {
@@ -357,8 +342,7 @@ pub(super) fn op_multu(cpu: &mut R3000, rs: u8, rt: u8) {
     let m2 = cpu.read_reg(rt);
     cpu.flush_load_delay();
 
-    let result =
-        (m1 as u64) * (m2 as u64);
+    let result = (m1 as u64) * (m2 as u64);
     cpu.lo = result as u32;
     cpu.hi = (result >> 32) as u32;
 }
@@ -367,8 +351,7 @@ pub(super) fn op_mult(cpu: &mut R3000, rs: u8, rt: u8) {
     let m1 = cpu.read_reg(rs);
     let m2 = cpu.read_reg(rt);
     cpu.flush_load_delay();
-    let result = ((m1 as i32) as i64
-        * (m2 as i32) as i64) as u64;
+    let result = ((m1 as i32) as i64 * (m2 as i32) as i64) as u64;
     cpu.lo = result as u32;
     cpu.hi = (result >> 32) as u32;
 }
@@ -377,40 +360,28 @@ pub(super) fn op_addu(cpu: &mut R3000, rs: u8, rt: u8, rd: u8) {
     let rs = cpu.read_reg(rs);
     let rt = cpu.read_reg(rt);
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rd,
-        rt.wrapping_add(rs) as u32,
-    );
+    cpu.write_reg(rd, rt.wrapping_add(rs) as u32);
 }
 
 pub(super) fn op_nor(cpu: &mut R3000, rs: u8, rt: u8, rd: u8) {
     let rs = cpu.read_reg(rs);
     let rt = cpu.read_reg(rt);
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rd,
-        !(rt | rs),
-    );
+    cpu.write_reg(rd, !(rt | rs));
 }
 
 pub(super) fn op_xor(cpu: &mut R3000, rs: u8, rt: u8, rd: u8) {
     let rs = cpu.read_reg(rs);
     let rt = cpu.read_reg(rt);
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rd,
-        rs ^ rt,
-    );
+    cpu.write_reg(rd, rs ^ rt);
 }
 
 pub(super) fn op_or(cpu: &mut R3000, rs: u8, rt: u8, rd: u8) {
     let rs = cpu.read_reg(rs);
     let rt = cpu.read_reg(rt);
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rd,
-        rs | rt,
-    );
+    cpu.write_reg(rd, rs | rt);
     //println!("or ${}({:08x}) | ${}({:08x}) = ${}({:08x})", rs, cpu.read_reg(rs), rt, cpu.read_reg(rt), rd, cpu.read_reg(rd))
 }
 
@@ -418,30 +389,21 @@ pub(super) fn op_and(cpu: &mut R3000, rs: u8, rt: u8, rd: u8) {
     let rs = cpu.read_reg(rs);
     let rt = cpu.read_reg(rt);
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rd,
-        rs & rt,
-    );
+    cpu.write_reg(rd, rs & rt);
 }
 
 pub(super) fn op_subu(cpu: &mut R3000, rs: u8, rt: u8, rd: u8) {
     let rs = cpu.read_reg(rs);
     let rt = cpu.read_reg(rt);
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rd,
-        rs.wrapping_sub(rt),
-    );
+    cpu.write_reg(rd, rs.wrapping_sub(rt));
 }
 
 pub(super) fn op_sltu(cpu: &mut R3000, rs: u8, rt: u8, rd: u8) {
     let rs = cpu.read_reg(rs);
     let rt = cpu.read_reg(rt);
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rd,
-        (rs < rt) as u32,
-    );
+    cpu.write_reg(rd, (rs < rt) as u32);
 }
 
 pub(super) fn op_sub(cpu: &mut R3000, rs: u8, rt: u8, rd: u8) {
@@ -450,9 +412,7 @@ pub(super) fn op_sub(cpu: &mut R3000, rs: u8, rt: u8, rd: u8) {
     cpu.flush_load_delay();
     cpu.write_reg(
         rd,
-        match (rs as i32)
-            .checked_sub(rt as i32)
-        {
+        match (rs as i32).checked_sub(rt as i32) {
             Some(val) => val as u32,
             None => {
                 cpu.fire_exception(Exception::Ovf);
@@ -466,9 +426,7 @@ pub(super) fn op_add(cpu: &mut R3000, rs: u8, rt: u8, rd: u8) {
     let rs = cpu.read_reg(rs);
     let rt = cpu.read_reg(rt);
     cpu.flush_load_delay();
-    let val = match (rs as i32)
-        .checked_add(rt as i32)
-    {
+    let val = match (rs as i32).checked_add(rt as i32) {
         Some(val) => val as u32,
         None => {
             cpu.fire_exception(Exception::Ovf);
@@ -486,7 +444,7 @@ pub(super) fn op_divu(cpu: &mut R3000, rs: u8, rt: u8) {
         Some(lo) => {
             cpu.lo = lo;
             cpu.hi = rs % rt;
-        },
+        }
         None => {
             //println!("CPU: Tried to divide by zero at pc: {:#X}!", cpu.old_pc);
             cpu.hi = rs as u32;
@@ -504,7 +462,7 @@ pub(super) fn op_div(cpu: &mut R3000, rs: u8, rt: u8) {
         Some(lo) => {
             cpu.lo = lo as u32;
             cpu.hi = (rs % rt) as u32;
-        },
+        }
         None => {
             if rt == -1 {
                 cpu.hi = 0;
@@ -575,58 +533,39 @@ pub(super) fn op_srav(cpu: &mut R3000, rs: u8, rt: u8, rd: u8) {
     let rs = cpu.read_reg(rs);
     let rt = cpu.read_reg(rt);
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rd,
-        ((rt as i32) >> (rs & 0x1F))
-            as u32,
-    );
+    cpu.write_reg(rd, ((rt as i32) >> (rs & 0x1F)) as u32);
 }
 
 pub(super) fn op_srlv(cpu: &mut R3000, rs: u8, rt: u8, rd: u8) {
     let rs = cpu.read_reg(rs);
     let rt = cpu.read_reg(rt);
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rd,
-        ((rt) >> (rs & 0x1F)) as u32,
-    );
+    cpu.write_reg(rd, ((rt) >> (rs & 0x1F)) as u32);
 }
 
 pub(super) fn op_sllv(cpu: &mut R3000, rs: u8, rt: u8, rd: u8) {
     let rs = cpu.read_reg(rs);
     let rt = cpu.read_reg(rt);
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rd,
-        ((rt) << (rs & 0x1F)) as u32,
-    );
+    cpu.write_reg(rd, ((rt) << (rs & 0x1F)) as u32);
 }
 
 pub(super) fn op_sra(cpu: &mut R3000, rd: u8, rt: u8, sa: u8) {
     let rt = cpu.read_reg(rt);
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rd,
-        ((rt as i32) >> sa) as u32,
-    );
+    cpu.write_reg(rd, ((rt as i32) >> sa) as u32);
 }
 
 pub(super) fn op_srl(cpu: &mut R3000, rd: u8, rt: u8, sa: u8) {
     let rt = cpu.read_reg(rt);
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rd,
-        rt >> sa,
-    );
+    cpu.write_reg(rd, rt >> sa);
 }
 
 pub(super) fn op_sll(cpu: &mut R3000, rd: u8, rt: u8, sa: u8) {
     let rt = cpu.read_reg(rt);
     cpu.flush_load_delay();
-    cpu.write_reg(
-        rd,
-        rt << sa,
-    );
+    cpu.write_reg(rd, rt << sa);
 }
 
 pub(super) fn op_break(cpu: &mut R3000) {
@@ -661,8 +600,8 @@ pub(super) fn op_imm25(cpu: &mut R3000, command: u32) {
 
 pub(super) fn op_lwc2(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
     let addr = offset
-                .immediate_sign_extended()
-                .wrapping_add(cpu.read_reg(rs));
+        .immediate_sign_extended()
+        .wrapping_add(cpu.read_reg(rs));
     let val = cpu.read_bus_word(addr, timers);
     cpu.flush_load_delay();
     cpu.gte.set_data_register(rt as usize, val);
@@ -703,5 +642,4 @@ pub(super) fn op_branch(cpu: &mut R3000, instruction: u32) {
         cpu.delay_slot = cpu.pc;
         cpu.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(cpu.delay_slot);
     }
-
 }

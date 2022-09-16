@@ -1,6 +1,7 @@
 use std::{
     cmp::{min, Ordering},
-    mem::{size_of_val, self}, fmt::Display,
+    fmt::Display,
+    mem::{self, size_of_val},
 };
 
 use bit_field::BitField;
@@ -132,10 +133,8 @@ impl Display for DrawOperation {
 #[derive(Clone, Copy, Display)]
 pub enum Shading {
     Gouraud,
-    Flat
+    Flat,
 }
-
-
 
 #[derive(Clone, Copy, Display)]
 pub enum Surface {
@@ -145,7 +144,7 @@ pub enum Surface {
 #[derive(Clone, Copy, Display)]
 pub enum Transparency {
     SemiTransparent,
-    Solid
+    Solid,
 }
 #[derive(Clone)]
 pub struct DrawCall {
@@ -312,7 +311,7 @@ impl Gpu {
             display_origin_y: 0,
 
             draw_logging_enabled: true,
-            draw_log: vec!(),
+            draw_log: vec![],
 
             force_b15: false,
             interlace: false,
@@ -422,7 +421,7 @@ impl Gpu {
                                 shading: None,
                                 surface: None,
                                 transparency: None,
-                                points: Some(vec!(p1.clone(), p2.clone())),
+                                points: Some(vec![p1.clone(), p2.clone()]),
                                 blending_enabled: false,
                                 call_dropped: false,
                                 clut_size: self.texmode,
@@ -431,8 +430,6 @@ impl Gpu {
                             };
                             self.draw_log.push(call);
                         }
-
-                        
 
                         self.draw_solid_box(
                             p1.x as u32,
@@ -491,24 +488,23 @@ impl Gpu {
                                 self.gp0_buffer[4],
                                 ((self.gp0_buffer[5] >> 8) & 0xFF) as i16,
                                 (self.gp0_buffer[5] & 0xFF) as i16,
-                                b24color_to_b15color(self.gp0_buffer[3] & 0x1FFFFFF)
+                                b24color_to_b15color(self.gp0_buffer[3] & 0x1FFFFFF),
                             ),
                             Point::new_textured_point_with_color(
                                 self.gp0_buffer[7],
                                 ((self.gp0_buffer[8] >> 8) & 0xFF) as i16,
                                 (self.gp0_buffer[8] & 0xFF) as i16,
-                                b24color_to_b15color(self.gp0_buffer[6] & 0x1FFFFFF)
+                                b24color_to_b15color(self.gp0_buffer[6] & 0x1FFFFFF),
                             ),
                             Point::new_textured_point_with_color(
                                 self.gp0_buffer[10],
                                 ((self.gp0_buffer[11] >> 8) & 0xFF) as i16,
                                 (self.gp0_buffer[11] & 0xFF) as i16,
-                                b24color_to_b15color(self.gp0_buffer[9] & 0x1FFFFFF)
+                                b24color_to_b15color(self.gp0_buffer[9] & 0x1FFFFFF),
                             ),
                         ];
 
                         trace!("points {:?}", points);
-                        
 
                         for point in &mut points {
                             point.x += self.draw_offset.x;
@@ -536,7 +532,11 @@ impl Gpu {
                                 operation: DrawOperation::Quad,
                                 shading: Some(Shading::Gouraud),
                                 surface: Some(Surface::Textured),
-                                transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                transparency: Some(if command.get_bit(25) {
+                                    Transparency::SemiTransparent
+                                } else {
+                                    Transparency::Solid
+                                }),
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
@@ -596,7 +596,7 @@ impl Gpu {
                         let clut_y = (self.gp0_buffer[2] >> 22) & 0x1FF;
                         let page_x = (self.gp0_buffer[4] >> 16) & 0xF;
                         let page_y = (self.gp0_buffer[4] >> 20) & 0x1;
-                        
+
                         self.update_draw_settings(self.gp0_buffer[4] >> 16);
 
                         self.blend_color = fill;
@@ -613,7 +613,11 @@ impl Gpu {
                                 operation: DrawOperation::Quad,
                                 shading: Some(Shading::Flat),
                                 surface: Some(Surface::Textured),
-                                transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                transparency: Some(if command.get_bit(25) {
+                                    Transparency::SemiTransparent
+                                } else {
+                                    Transparency::Solid
+                                }),
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
@@ -672,7 +676,11 @@ impl Gpu {
                                 operation: DrawOperation::Quad,
                                 shading: Some(Shading::Gouraud),
                                 surface: Some(Surface::Flat),
-                                transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                transparency: Some(if command.get_bit(25) {
+                                    Transparency::SemiTransparent
+                                } else {
+                                    Transparency::Solid
+                                }),
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
@@ -706,8 +714,6 @@ impl Gpu {
 
                         let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
                         let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
-                        
-
 
                         let should_drop = max_x - min_x > 1023 || max_y - min_y > 511;
 
@@ -716,7 +722,11 @@ impl Gpu {
                                 operation: DrawOperation::Quad,
                                 shading: Some(Shading::Flat),
                                 surface: Some(Surface::Flat),
-                                transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                transparency: Some(if command.get_bit(25) {
+                                    Transparency::SemiTransparent
+                                } else {
+                                    Transparency::Solid
+                                }),
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
@@ -749,19 +759,19 @@ impl Gpu {
                                 self.gp0_buffer[1],
                                 ((self.gp0_buffer[2] >> 8) & 0xFF) as i16,
                                 (self.gp0_buffer[2] & 0xFF) as i16,
-                                fill
+                                fill,
                             ),
                             Point::new_textured_point_with_color(
                                 self.gp0_buffer[4],
                                 ((self.gp0_buffer[5] >> 8) & 0xFF) as i16,
                                 (self.gp0_buffer[5] & 0xFF) as i16,
-                                b24color_to_b15color(self.gp0_buffer[3] & 0x1FFFFFF)
+                                b24color_to_b15color(self.gp0_buffer[3] & 0x1FFFFFF),
                             ),
                             Point::new_textured_point_with_color(
                                 self.gp0_buffer[7],
                                 ((self.gp0_buffer[8] >> 8) & 0xFF) as i16,
                                 (self.gp0_buffer[8] & 0xFF) as i16,
-                                b24color_to_b15color(self.gp0_buffer[6] & 0x1FFFFFF)
+                                b24color_to_b15color(self.gp0_buffer[6] & 0x1FFFFFF),
                             ),
                         ];
 
@@ -776,7 +786,7 @@ impl Gpu {
                         let clut_y = (self.gp0_buffer[2] >> 22) & 0x1FF;
                         let page_x = (self.gp0_buffer[5] >> 16) & 0xF;
                         let page_y = (self.gp0_buffer[5] >> 20) & 0x1;
-                        
+
                         self.update_draw_settings(self.gp0_buffer[5] >> 16);
 
                         self.blend_color = fill;
@@ -793,7 +803,11 @@ impl Gpu {
                                 operation: DrawOperation::Triangle,
                                 shading: Some(Shading::Gouraud),
                                 surface: Some(Surface::Textured),
-                                transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                transparency: Some(if command.get_bit(25) {
+                                    Transparency::SemiTransparent
+                                } else {
+                                    Transparency::Solid
+                                }),
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
@@ -846,7 +860,7 @@ impl Gpu {
                         let clut_y = (self.gp0_buffer[2] >> 22) & 0x1FF;
                         let page_x = (self.gp0_buffer[4] >> 16) & 0xF;
                         let page_y = (self.gp0_buffer[4] >> 20) & 0x1;
-                        
+
                         self.update_draw_settings(self.gp0_buffer[4] >> 16);
 
                         self.blend_color = fill;
@@ -863,7 +877,11 @@ impl Gpu {
                                 operation: DrawOperation::Triangle,
                                 shading: Some(Shading::Flat),
                                 surface: Some(Surface::Textured),
-                                transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                transparency: Some(if command.get_bit(25) {
+                                    Transparency::SemiTransparent
+                                } else {
+                                    Transparency::Solid
+                                }),
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
@@ -918,7 +936,11 @@ impl Gpu {
                                 operation: DrawOperation::Triangle,
                                 shading: Some(Shading::Gouraud),
                                 surface: Some(Surface::Flat),
-                                transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                transparency: Some(if command.get_bit(25) {
+                                    Transparency::SemiTransparent
+                                } else {
+                                    Transparency::Solid
+                                }),
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
@@ -961,7 +983,11 @@ impl Gpu {
                                 operation: DrawOperation::Triangle,
                                 shading: Some(Shading::Flat),
                                 surface: Some(Surface::Flat),
-                                transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
+                                transparency: Some(if command.get_bit(25) {
+                                    Transparency::SemiTransparent
+                                } else {
+                                    Transparency::Solid
+                                }),
                                 points: Some(points.clone()),
                                 blending_enabled: self.blend_enabled,
                                 call_dropped: should_drop,
@@ -1022,14 +1048,13 @@ impl Gpu {
                         //Draw single pixel
                         let point = Point::from_word(self.gp0_buffer[1], 0);
 
-
                         if self.draw_logging_enabled {
                             let call = DrawCall {
                                 operation: DrawOperation::Pixel,
                                 shading: None,
                                 surface: None,
                                 transparency: None,
-                                points: Some(vec!(point.clone())),
+                                points: Some(vec![point.clone()]),
                                 blending_enabled: false,
                                 call_dropped: false,
                                 clut_size: self.texmode,
@@ -1072,8 +1097,12 @@ impl Gpu {
                                     operation: DrawOperation::RectangleDynamic,
                                     shading: None,
                                     surface: Some(Surface::Textured),
-                                    transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
-                                    points: Some(vec!(tl_point.clone(), br_point)),
+                                    transparency: Some(if command.get_bit(25) {
+                                        Transparency::SemiTransparent
+                                    } else {
+                                        Transparency::Solid
+                                    }),
+                                    points: Some(vec![tl_point.clone(), br_point]),
                                     blending_enabled: false,
                                     call_dropped: false,
                                     clut_size: self.texmode,
@@ -1092,13 +1121,17 @@ impl Gpu {
 
                             trace!("tl: {:?} br: {:?}", tl_point, br_point);
 
-                            if self.draw_logging_enabled {                                
+                            if self.draw_logging_enabled {
                                 let call = DrawCall {
                                     operation: DrawOperation::RectangleDynamic,
                                     shading: None,
                                     surface: Some(Surface::Flat),
-                                    transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
-                                    points: Some(vec!(tl_point.clone(), br_point.clone())),
+                                    transparency: Some(if command.get_bit(25) {
+                                        Transparency::SemiTransparent
+                                    } else {
+                                        Transparency::Solid
+                                    }),
+                                    points: Some(vec![tl_point.clone(), br_point.clone()]),
                                     blending_enabled: false,
                                     call_dropped: false,
                                     clut_size: self.texmode,
@@ -1148,8 +1181,12 @@ impl Gpu {
                                     operation: DrawOperation::Rectangle8,
                                     shading: None,
                                     surface: Some(Surface::Textured),
-                                    transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
-                                    points: Some(vec!(tl_point.clone(), br_point)),
+                                    transparency: Some(if command.get_bit(25) {
+                                        Transparency::SemiTransparent
+                                    } else {
+                                        Transparency::Solid
+                                    }),
+                                    points: Some(vec![tl_point.clone(), br_point]),
                                     blending_enabled: false,
                                     call_dropped: false,
                                     clut_size: self.texmode,
@@ -1175,13 +1212,17 @@ impl Gpu {
                                     operation: DrawOperation::Rectangle8,
                                     shading: None,
                                     surface: Some(Surface::Flat),
-                                    transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
-                                    points: Some(vec!(tl_point.clone(), br_point)),
+                                    transparency: Some(if command.get_bit(25) {
+                                        Transparency::SemiTransparent
+                                    } else {
+                                        Transparency::Solid
+                                    }),
+                                    points: Some(vec![tl_point.clone(), br_point]),
                                     blending_enabled: false,
                                     call_dropped: false,
                                     clut_size: self.texmode,
-                                tex_base_x: self.texpage_x_base,
-                                tex_base_y: self.texpage_y_base,
+                                    tex_base_x: self.texpage_x_base,
+                                    tex_base_y: self.texpage_y_base,
                                 };
                                 self.draw_log.push(call);
                             }
@@ -1226,13 +1267,17 @@ impl Gpu {
                                     operation: DrawOperation::Rectangle16,
                                     shading: None,
                                     surface: Some(Surface::Textured),
-                                    transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
-                                    points: Some(vec!(tl_point.clone(), br_point)),
+                                    transparency: Some(if command.get_bit(25) {
+                                        Transparency::SemiTransparent
+                                    } else {
+                                        Transparency::Solid
+                                    }),
+                                    points: Some(vec![tl_point.clone(), br_point]),
                                     blending_enabled: false,
                                     call_dropped: false,
                                     clut_size: self.texmode,
-                                tex_base_x: self.texpage_x_base,
-                                tex_base_y: self.texpage_y_base,
+                                    tex_base_x: self.texpage_x_base,
+                                    tex_base_y: self.texpage_y_base,
                                 };
                                 self.draw_log.push(call);
                             }
@@ -1253,13 +1298,17 @@ impl Gpu {
                                     operation: DrawOperation::Rectangle16,
                                     shading: None,
                                     surface: Some(Surface::Flat),
-                                    transparency: Some(if command.get_bit(25) {Transparency::SemiTransparent} else {Transparency::Solid}),
-                                    points: Some(vec!(tl_point.clone(), br_point)),
+                                    transparency: Some(if command.get_bit(25) {
+                                        Transparency::SemiTransparent
+                                    } else {
+                                        Transparency::Solid
+                                    }),
+                                    points: Some(vec![tl_point.clone(), br_point]),
                                     blending_enabled: false,
                                     call_dropped: false,
                                     clut_size: self.texmode,
-                                tex_base_x: self.texpage_x_base,
-                                tex_base_y: self.texpage_y_base,
+                                    tex_base_x: self.texpage_x_base,
+                                    tex_base_y: self.texpage_y_base,
                                 };
                                 self.draw_log.push(call);
                             }
@@ -1326,9 +1375,9 @@ impl Gpu {
                 if height == 0 {
                     height = 512
                 };
-                let extra_half_word = if (width * height) % 2 != 0 {1} else {0};
-                
-                let length = (((width * height) + extra_half_word) / 2)  + 3;
+                let extra_half_word = if (width * height) % 2 != 0 { 1 } else { 0 };
+
+                let length = (((width * height) + extra_half_word) / 2) + 3;
                 if self.gp0_buffer.len() < length as usize {
                     //Not enough commands
                     return;
@@ -1356,17 +1405,17 @@ impl Gpu {
                         shading: None,
                         surface: None,
                         transparency: None,
-                        points: Some(vec!(tl_point, br_point)),
+                        points: Some(vec![tl_point, br_point]),
                         blending_enabled: false,
                         call_dropped: false,
                         clut_size: self.texmode,
-                                tex_base_x: self.texpage_x_base,
-                                tex_base_y: self.texpage_y_base,
+                        tex_base_x: self.texpage_x_base,
+                        tex_base_y: self.texpage_y_base,
                     };
                     self.draw_log.push(call);
                 }
 
-                for index in 0..(width*height) {
+                for index in 0..(width * height) {
                     let val = if index % 2 == 0 {
                         (self.gp0_buffer[((index / 2) + 3) as usize] & 0xFFFF) as u16
                     } else {
@@ -1374,7 +1423,7 @@ impl Gpu {
                     };
                     let x = base_x + (index % width);
                     let y = base_y + (index / width);
-                    self.vram[min(point_to_address(x,y) as usize, 524287)] = val;
+                    self.vram[min(point_to_address(x, y) as usize, 524287)] = val;
                 }
             }
 
@@ -1477,7 +1526,7 @@ impl Gpu {
             1 => BlendMode::BAF,
             2 => BlendMode::BSF,
             3 => BlendMode::BF4,
-            mode => panic!("Unknown blend mode! {}", mode)
+            mode => panic!("Unknown blend mode! {}", mode),
         };
     }
 
@@ -1548,7 +1597,7 @@ impl Gpu {
                 } else {
                     240
                 };
-           
+
                 self.color_depth = match command.get_bit(4) {
                     true => ColorDepth::Full,
                     false => ColorDepth::Reduced,
@@ -1669,7 +1718,10 @@ impl Gpu {
         width: u32,
     ) {
         for x_offset in 0..=width {
-            let val = self.vram[min(point_to_address(x_source + x_offset, y_source) as usize, 524287)];
+            let val = self.vram[min(
+                point_to_address(x_source + x_offset, y_source) as usize,
+                524287,
+            )];
             let addr = point_to_address(x_dest + x_offset, y_dest) as usize;
             self.vram[min(addr, 524287)] = val;
         }
@@ -1746,13 +1798,20 @@ impl Gpu {
                 self.texpage_x_base as u32,
                 self.texpage_y_base as u32,
                 self.palette_x as u32,
-                self.palette_y as u32            );
+                self.palette_y as u32,
+            );
 
             self.composite_and_place_pixel(address, fill, transparent, false);
         }
     }
 
-    fn composite_and_place_pixel(&mut self, addr: usize, fill: u16, transparent: bool, force_black: bool) {
+    fn composite_and_place_pixel(
+        &mut self,
+        addr: usize,
+        fill: u16,
+        transparent: bool,
+        force_black: bool,
+    ) {
         let mut color = if transparent && fill.get_bit(15) {
             alpha_composite(self.vram[addr], fill, &self.blend_mode)
         } else {
@@ -1762,7 +1821,7 @@ impl Gpu {
         if fill == 0 && !force_black {
             return;
         }
-        
+
         if self.force_b15 {
             color.set_bit(15, true);
         }
@@ -1781,7 +1840,14 @@ impl Gpu {
         clip: bool,
     ) {
         for y in y1..y2 {
-            self.draw_horizontal_line(x1, x2, y, fill | if transparent {0x8000} else {0}, transparent, clip);
+            self.draw_horizontal_line(
+                x1,
+                x2,
+                y,
+                fill | if transparent { 0x8000 } else { 0 },
+                transparent,
+                clip,
+            );
         }
     }
 
@@ -1814,7 +1880,7 @@ impl Gpu {
         let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
         let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
 
-        let final_fill = fill | if transparent {0x8000} else {0};
+        let final_fill = fill | if transparent { 0x8000 } else { 0 };
 
         for x in min_x..=max_x {
             for y in min_y..=max_y {
@@ -1960,28 +2026,34 @@ impl Gpu {
                     let tex_fill =
                         self.get_texel(tex_x as i32, tex_y as i32, page_x, page_y, clut_x, clut_y);
 
-
                     let final_fill = if draw_type == TextureDraw::Shaded {
                         let c1 = b15_to_rgb(points[0].color);
                         let c2 = b15_to_rgb(points[1].color);
                         let c3 = b15_to_rgb(points[2].color);
 
-                        let shaded_red = ((w0 * c1.0 as f32) + (w1 * c2.0 as f32) + (w2 * c3.0 as f32)) as u16;
-                        let shaded_green = ((w0 * c1.1 as f32) + (w1 * c2.1 as f32) + (w2 * c3.1 as f32)) as u16;
-                        let shaded_blue = ((w0 * c1.2 as f32) + (w1 * c2.2 as f32) + (w2 * c3.2 as f32)) as u16;
+                        let shaded_red =
+                            ((w0 * c1.0 as f32) + (w1 * c2.0 as f32) + (w2 * c3.0 as f32)) as u16;
+                        let shaded_green =
+                            ((w0 * c1.1 as f32) + (w1 * c2.1 as f32) + (w2 * c3.1 as f32)) as u16;
+                        let shaded_blue =
+                            ((w0 * c1.2 as f32) + (w1 * c2.2 as f32) + (w2 * c3.2 as f32)) as u16;
 
                         let shade_fill = ((shaded_blue & 0x1f) << 10)
-                        | (shaded_green << 5)
-                        | (shaded_red as u8 as u16);
+                            | (shaded_green << 5)
+                            | (shaded_red as u8 as u16);
 
                         allow_black_pixel = tex_fill != 0;
                         blend_b15(tex_fill, shade_fill) | 0x8000
-
                     } else {
                         tex_fill
                     };
-                    
-                    self.composite_and_place_pixel(addr as usize, final_fill, transparent, allow_black_pixel);
+
+                    self.composite_and_place_pixel(
+                        addr as usize,
+                        final_fill,
+                        transparent,
+                        allow_black_pixel,
+                    );
                 }
             }
         }
@@ -2047,7 +2119,6 @@ impl Gpu {
                 self.vram[addr]
             }
             TextureColorMode::EightBit => {
-
                 let tex_x = (page_x * 64) as u32 + (x / 2) as u32;
                 let tex_y = (page_y * 256) as u32 + y as u32;
                 let (masked_x, masked_y) = self.apply_texture_mask(tex_x, tex_y);
@@ -2066,10 +2137,7 @@ impl Gpu {
                 let value = self.vram[min(point_to_address(masked_x, masked_y) as usize, 524287)];
                 let clut_index = (value >> ((x % 4) * 4)) & 0xF;
                 self.vram[min(
-                    point_to_address(
-                        (clut_x * 16 + clut_index as u32) as u32,
-                        clut_y as u32,
-                    ),
+                    point_to_address((clut_x * 16 + clut_index as u32) as u32, clut_y as u32),
                     524287,
                 ) as usize]
             }
@@ -2091,16 +2159,14 @@ fn b24color_to_b15color(color: u32) -> u16 {
 
 fn b15_to_rgb(color: u16) -> (u8, u8, u8) {
     (
-        (color & 0x1F) as u8,          //red
-        ((color >> 5) & 0x1F) as u8,   //green
-        ((color >> 10) & 0x1F) as u8,  //blue
+        (color & 0x1F) as u8,         //red
+        ((color >> 5) & 0x1F) as u8,  //green
+        ((color >> 10) & 0x1F) as u8, //blue
     )
 }
 
 fn rgb_to_b15(r: u8, g: u8, b: u8) -> u16 {
-    (((b & 0x1F) as u16) << 10)
-        | (((g & 0x1F) as u16) << 5)
-        | ((r & 0x1F) as u16)
+    (((b & 0x1F) as u16) << 10) | (((g & 0x1F) as u16) << 5) | ((r & 0x1F) as u16)
 }
 
 fn lerp_coords(y0: i32, y1: i32, x0: i32, x1: i32, x: i32) -> i32 {
@@ -2115,8 +2181,11 @@ fn blend_b15(bg_color: u16, fg_color: u16) -> u16 {
     let blend_g = clamp((b_g as f32 / 31.0) * ((f_g) as f32 / 31.0) * 2.0, 0.0, 1.0);
     let blend_b = clamp((b_b as f32 / 31.0) * ((f_b) as f32 / 31.0) * 2.0, 0.0, 1.0);
 
-
-    rgb_to_b15((blend_r * 31.0) as u8, (blend_g * 31.0) as u8, (blend_b * 31.0) as u8) | (bg_color & 0x8000)
+    rgb_to_b15(
+        (blend_r * 31.0) as u8,
+        (blend_g * 31.0) as u8,
+        (blend_b * 31.0) as u8,
+    ) | (bg_color & 0x8000)
 }
 
 #[derive(Debug)]
@@ -2137,9 +2206,21 @@ fn alpha_composite(background_color: u16, alpha_color: u16, mode: &BlendMode) ->
             clamp((a_g / 2) as i16 + (b_g / 2) as i16, 0, 0x1F) as u8,
             clamp((a_b / 2) as i16 + (b_b / 2) as i16, 0, 0x1F) as u8,
         ),
-        BlendMode::BAF => rgb_to_b15(clamp(a_r as i16 + b_r as i16, 0, 0x1F) as u8, clamp(a_g as i16 + b_g as i16, 0, 0x1F) as u8, clamp(a_b as i16 + b_b as i16, 0, 0x1F) as u8),
-        BlendMode::BSF => rgb_to_b15(clamp(b_r as i16 - a_r as i16, 0, 0x1F) as u8, clamp(b_g as i16 - a_g as i16, 0, 0x1F) as u8, clamp(b_b as i16 - a_b as i16, 0, 0x1F) as u8),
-        BlendMode::BF4 => rgb_to_b15(clamp(b_r as i16 + (a_r / 4) as i16, 0, 0x1F) as u8, clamp(b_g as i16 + (a_g / 4) as i16, 0, 0x1F) as u8, clamp(b_b as i16 + (a_b / 4) as i16, 0 ,0x1F) as u8),
+        BlendMode::BAF => rgb_to_b15(
+            clamp(a_r as i16 + b_r as i16, 0, 0x1F) as u8,
+            clamp(a_g as i16 + b_g as i16, 0, 0x1F) as u8,
+            clamp(a_b as i16 + b_b as i16, 0, 0x1F) as u8,
+        ),
+        BlendMode::BSF => rgb_to_b15(
+            clamp(b_r as i16 - a_r as i16, 0, 0x1F) as u8,
+            clamp(b_g as i16 - a_g as i16, 0, 0x1F) as u8,
+            clamp(b_b as i16 - a_b as i16, 0, 0x1F) as u8,
+        ),
+        BlendMode::BF4 => rgb_to_b15(
+            clamp(b_r as i16 + (a_r / 4) as i16, 0, 0x1F) as u8,
+            clamp(b_g as i16 + (a_g / 4) as i16, 0, 0x1F) as u8,
+            clamp(b_b as i16 + (a_b / 4) as i16, 0, 0x1F) as u8,
+        ),
     }
 }
 

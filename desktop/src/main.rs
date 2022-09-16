@@ -7,20 +7,20 @@ use getopts::Options;
 use psx_emu::controller::ButtonState;
 use psx_emu::gpu::DrawCall;
 use psx_emu::gpu::Resolution;
-use psx_emu::PSXEmu;
 use psx_emu::toggle_memory_logging;
+use psx_emu::PSXEmu;
+use simple_logger::SimpleLogger;
 use std::env;
 use std::fs;
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
+use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::SystemTime;
-use simple_logger::SimpleLogger;
 
 mod disc;
 mod gdb;
@@ -50,7 +50,7 @@ struct EmuState {
     redraw_signal: Option<Arc<dyn RepaintSignal>>,
     frame_limited: bool,
     current_origin: (usize, usize),
-    latest_draw_log: Vec<DrawCall>
+    latest_draw_log: Vec<DrawCall>,
 }
 
 fn main() {
@@ -99,20 +99,18 @@ fn main() {
         frame_limited: START_FRAME_LIMITED,
     };
 
-    
     if !headless {
         gui::run_gui(state);
     } else {
         run_headless(state);
     }
-    
 }
 
 fn run_headless(state: ClientState) {
     state.comm.tx.send(EmuMessage::Continue).unwrap();
     loop {
         match state.comm.rx.try_recv() {
-            _ => ()
+            _ => (),
         };
     }
 }
@@ -188,7 +186,7 @@ fn create_emu(matches: Matches, emu_comm: EmuComms) -> EmuState {
         redraw_signal: None,
         frame_limited: START_FRAME_LIMITED,
         current_origin: (0, 0),
-        latest_draw_log: vec!(),
+        latest_draw_log: vec![],
     }
 }
 
@@ -231,16 +229,21 @@ struct ClientComms {
     tx: Sender<EmuMessage>,
 }
 
-fn start_emu_thread(
-    matches: Matches,
-    emu_comm: EmuComms
-) -> JoinHandle<()> {
+fn start_emu_thread(matches: Matches, emu_comm: EmuComms) -> JoinHandle<()> {
     thread::spawn(move || {
         let mut state = create_emu(matches, emu_comm);
         let mut debugger = if state.debugging {
-            state.comm.tx.send(ClientMessage::AwaitingGDBClient).unwrap();
+            state
+                .comm
+                .tx
+                .send(ClientMessage::AwaitingGDBClient)
+                .unwrap();
             let gdb_conn = wait_for_gdb_connection(DEFAULT_GDB_PORT).unwrap();
-            state.comm.tx.send(ClientMessage::GDBClientConnected).unwrap();
+            state
+                .comm
+                .tx
+                .send(ClientMessage::GDBClientConnected)
+                .unwrap();
             Some(GdbStub::<EmuState, TcpStream>::new(gdb_conn))
         } else {
             None
@@ -281,9 +284,17 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
         match msg {
             EmuMessage::Halt => {
                 state.halted = true;
-                state.comm.tx.send(ClientMessage::LatestPC(state.emu.pc())).unwrap();
-                state.comm.tx.send(ClientMessage::LatestGPULog(state.latest_draw_log.clone())).unwrap();
-            },
+                state
+                    .comm
+                    .tx
+                    .send(ClientMessage::LatestPC(state.emu.pc()))
+                    .unwrap();
+                state
+                    .comm
+                    .tx
+                    .send(ClientMessage::LatestGPULog(state.latest_draw_log.clone()))
+                    .unwrap();
+            }
             EmuMessage::Continue => {
                 state.halted = false;
                 state.emu.clear_halt();
@@ -315,14 +326,22 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
             //Check for any viewport resolution changes
             if state.emu.display_resolution() != state.current_resolution {
                 state.current_resolution = state.emu.display_resolution();
-                state.comm.tx.send(ClientMessage::ResolutionChanged(
-                    state.current_resolution.clone(),
-                )).unwrap();
+                state
+                    .comm
+                    .tx
+                    .send(ClientMessage::ResolutionChanged(
+                        state.current_resolution.clone(),
+                    ))
+                    .unwrap();
             };
 
             if state.emu.display_origin() != state.current_origin {
                 state.current_origin = state.emu.display_origin();
-                state.comm.tx.send(ClientMessage::DisplayOriginChanged(state.current_origin)).unwrap();
+                state
+                    .comm
+                    .tx
+                    .send(ClientMessage::DisplayOriginChanged(state.current_origin))
+                    .unwrap();
             }
 
             //Calculate frame time delta
@@ -330,17 +349,17 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
                 .duration_since(state.last_frame_time)
                 .expect("Error getting frame duration")
                 .as_millis();
-    
+
             let frame = state.emu.get_vram().clone();
             let depth_full = state.emu.is_full_color_depth();
             // Wait for frame limiter time to pass
             while state.frame_limited && frame_time < 17 {
                 frame_time = SystemTime::now()
-                .duration_since(state.last_frame_time)
-                .expect("Error getting frame duration")
-                .as_millis();
+                    .duration_since(state.last_frame_time)
+                    .expect("Error getting frame duration")
+                    .as_millis();
             }
-    
+
             // Send the new frame over to the gui thread
             if let Err(_) = state
                 .comm
@@ -362,10 +381,7 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
         };
     } else {
         //thread::sleep(Duration::from_millis(1));
-
-
     }
 
-   
     Ok(())
 }

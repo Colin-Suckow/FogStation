@@ -255,15 +255,12 @@ impl Controllers {
                 }
 
                 if !self.joy_ctrl.get_bit(13) && !self.joy_ctrl.get_bit(1)
-                || self.joy_ctrl.get_bit(13) && self.joy_ctrl.get_bit(1)
+                    || self.joy_ctrl.get_bit(13) && self.joy_ctrl.get_bit(1)
                 {
                     // Controller 2
                     self.push_rx_buf(0);
                     return;
                 }
-
-               
-
 
                 self.push_rx_buf(0);
                 self.queue_interrupt();
@@ -278,8 +275,7 @@ impl Controllers {
                         // Invalid command for digital pad. Send junk
                         self.push_rx_buf(0xFF);
                         TXstate::Ready
-                    } else
-                    {
+                    } else {
                         // Normal digital pad communication
                         let response = match step {
                             0 => 0x41, // Digital pad idlo

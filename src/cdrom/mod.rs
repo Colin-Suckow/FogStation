@@ -150,7 +150,6 @@ impl CDDrive {
 
             //Probably useless registers
             reg_sound_map_data_out: 0,
-        
         }
     }
 
@@ -185,7 +184,8 @@ impl CDDrive {
                             // println!("Loaded a sector!");
                             //println!("Sector index is {}, sector # {}", sector.index(), sector.index().sector_number());
                             //println!("Filling buffer with sector size {:?}", self.sector_size());
-                            self.response_data_queue.extend(sector.consume(self.sector_size()));
+                            self.response_data_queue
+                                .extend(sector.consume(self.sector_size()));
                         } else {
                             //println!("Game requested sector load, but the input buffer was empty!");
                         }
@@ -256,9 +256,8 @@ impl CDDrive {
     }
 
     fn execute_command(&mut self, command: u8) {
-
         //println!("Received command {:#X}", command);
-        
+
         //Execute
         {
             let parameters: Vec<u8> = self.parameter_queue.iter().map(|v| v.clone()).collect();
@@ -299,7 +298,11 @@ impl CDDrive {
     }
 
     fn busy(&self) -> bool {
-        self.reg_interrupt_flag != 0 || (self.running_commands.iter().any(|p| p.cause != IntCause::INT1))
+        self.reg_interrupt_flag != 0
+            || (self
+                .running_commands
+                .iter()
+                .any(|p| p.cause != IntCause::INT1))
     }
 
     fn get_status_register(&self) -> u8 {
@@ -368,7 +371,6 @@ impl CDDrive {
         &mut self.response_data_queue
     }
 
-
     pub fn pop_data(&mut self) -> u8 {
         self.response_data_queue.remove(0) // This is slow, but whatever for now. Using a proper deque is a bit difficult here
     }
@@ -390,10 +392,16 @@ impl CDDrive {
 }
 
 fn take_next_ready_packet(running_commands: &mut Vec<Packet>) -> Option<Packet> {
-    if running_commands.iter().any(|c| (c.cause == IntCause::INT3 || c.cause == IntCause::INT2)) {
+    if running_commands
+        .iter()
+        .any(|c| (c.cause == IntCause::INT3 || c.cause == IntCause::INT2))
+    {
         //println!("CDROM taking int3");
         for i in 0..running_commands.len() {
-            if running_commands[i].execution_cycles == 0 && (running_commands[i].cause == IntCause::INT3 || running_commands[i].cause == IntCause::INT2) {
+            if running_commands[i].execution_cycles == 0
+                && (running_commands[i].cause == IntCause::INT3
+                    || running_commands[i].cause == IntCause::INT2)
+            {
                 let packet = running_commands[i].clone();
                 running_commands.remove(i);
                 return Some(packet);
@@ -414,14 +422,13 @@ fn take_next_ready_packet(running_commands: &mut Vec<Packet>) -> Option<Packet> 
 pub fn step_cycle(cpu: &mut R3000) {
     let cd = &mut cpu.main_bus.cd_drive;
 
-    
     // If the current interrupt hasn't been acknowledged yet, abort
     if cd.reg_interrupt_flag != 0 {
         return;
     }
 
     //println!("Full cd response queue {:?}", cd.running_commands);
-    
+
     //Update cycles on all inflight commands
     for packet in &mut cd.running_commands {
         if packet.execution_cycles > 0 {
@@ -433,9 +440,8 @@ pub fn step_cycle(cpu: &mut R3000) {
         None => {
             //No response ready right now
             return;
-        },
+        }
     };
-
 
     // If this is a read packet and reading has already been disabled, abort the entire command sequence
     if packet.cause == IntCause::INT1 && !cpu.main_bus.cd_drive.read_enabled {
@@ -516,7 +522,6 @@ pub fn step_cycle(cpu: &mut R3000) {
             //}
 
             if packet.cause == IntCause::INT1 {
-
                 let new_sector = cpu
                     .main_bus
                     .cd_drive
@@ -527,7 +532,7 @@ pub fn step_cycle(cpu: &mut R3000) {
                         cpu.main_bus
                             .cd_drive
                             .next_seek_target
-                            .plus_sector_offset(cpu.main_bus.cd_drive.read_offset)
+                            .plus_sector_offset(cpu.main_bus.cd_drive.read_offset),
                     );
 
                 //println!("Read {} from disc. Read offset {}", new_sector.index(), cpu.main_bus.cd_drive.read_offset);
@@ -541,7 +546,10 @@ pub fn step_cycle(cpu: &mut R3000) {
                 // Get rid of all the middle sectors, leave only the oldest
                 // let sector_size = *cpu.main_bus.cd_drive.sector_size() as usize;
                 if cpu.main_bus.cd_drive.data_queue.len() > 0 {
-                    cpu.main_bus.cd_drive.data_queue.drain(1..cpu.main_bus.cd_drive.data_queue.len());
+                    cpu.main_bus
+                        .cd_drive
+                        .data_queue
+                        .drain(1..cpu.main_bus.cd_drive.data_queue.len());
                 }
 
                 //cpu.main_bus.cd_drive.data_queue.clear();
@@ -560,12 +568,9 @@ pub fn step_cycle(cpu: &mut R3000) {
                         extra_response: None,
                         command: 0x6,
                     };
-    
+
                     cpu.main_bus.cd_drive.running_commands.push(response_packet);
                 }
-
-
-                
             }
         }
         _ => (), //No actions for this command

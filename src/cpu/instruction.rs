@@ -1,13 +1,13 @@
 use std::{convert::TryFrom, fmt::Display};
 
 use bit_field::BitField;
-use num_derive::FromPrimitive;    
+use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
 use crate::timer::TimerState;
 
-use super::R3000;
 use super::interpreter;
+use super::R3000;
 
 pub trait InstructionArgs {
     fn opcode(&self) -> u8;
@@ -96,79 +96,78 @@ impl InstructionArgs for u32 {
 
 #[derive(Debug)]
 pub(super) enum Instruction {
-    SLL{rt: u8, rd: u8, sa: u8},
-    SRL{rt: u8, rd: u8, sa: u8},
-    SRA{rt: u8, rd: u8, sa: u8},
-    SLLV{rd: u8, rt: u8, rs: u8},
-    SRLV{rd: u8, rt: u8, rs: u8},
-    SRAV{rd: u8, rt: u8, rs: u8},
-    JR{rs: u8},
-    JALR{rd: u8, rs: u8},
-    SYSCALL{code: u32},
-    BREAK{code: u32},
-    MFHI{rd: u8},
-    MTHI{rs: u8},
-    MFLO{rd: u8},
-    MTLO{rs: u8},
-    DIV{rs: u8, rt: u8},
-    DIVU{rs: u8, rt: u8},
-    ADD{rd: u8, rs: u8, rt: u8},
-    SUB{rd: u8, rs: u8, rt: u8},
-    SLTU{rd: u8, rs: u8, rt: u8},
-    SUBU{rd: u8, rs: u8, rt: u8},
-    AND{rd: u8, rs: u8, rt: u8},
-    OR{rd: u8, rs: u8, rt: u8},
-    XOR{rd: u8, rs: u8, rt: u8},
-    NOR{rd: u8, rs: u8, rt: u8},
-    ADDU{rd: u8, rs: u8, rt: u8},
-    MULT{rs: u8, rt: u8},
-    MULTU{rs: u8, rt: u8},
-    SLT{rd: u8, rs: u8, rt: u8},
-    BLTZ{rs: u8, offset: u16, opcode: u32},
-    BGEZ{rs: u8, offset: u16, opcode: u32},
-    BLTZAL{rs: u8, offset: u16, opcode: u32},
-    BGEZAL{rs: u8, offset: u16, opcode: u32},
-    MALBRCH{rs: u8, offset: u16, opcode: u32}, //Malformed branch
-    J{target: u32},
-    JAL{target: u32},
-    BEQ{rs: u8, rt: u8, offset: u16},
-    BNE{rs: u8, rt: u8, offset: u16},
-    BLEZ{rs: u8, offset: u16},
-    BGTZ{rs: u8, offset: u16},
-    ADDI{rt: u8, rs: u8, immediate: u16},
-    ADDIU{rt: u8, rs: u8, immediate: u16},
-    SLTI{rt: u8, rs: u8, immediate: u16},
-    SLTIU{rt: u8, rs: u8, immediate: u16},
-    ANDI{rt: u8, rs: u8, immediate: u16},
-    ORI{rt: u8, rs: u8, immediate: u16},
-    XORI{rt: u8, rs: u8, immediate: u16},
-    LUI{rt: u8, immediate: u16},
-    MTC0{rt: u8, rd: u8},
-    MFC0{rt: u8, rd: u8},
+    SLL { rt: u8, rd: u8, sa: u8 },
+    SRL { rt: u8, rd: u8, sa: u8 },
+    SRA { rt: u8, rd: u8, sa: u8 },
+    SLLV { rd: u8, rt: u8, rs: u8 },
+    SRLV { rd: u8, rt: u8, rs: u8 },
+    SRAV { rd: u8, rt: u8, rs: u8 },
+    JR { rs: u8 },
+    JALR { rd: u8, rs: u8 },
+    SYSCALL { code: u32 },
+    BREAK { code: u32 },
+    MFHI { rd: u8 },
+    MTHI { rs: u8 },
+    MFLO { rd: u8 },
+    MTLO { rs: u8 },
+    DIV { rs: u8, rt: u8 },
+    DIVU { rs: u8, rt: u8 },
+    ADD { rd: u8, rs: u8, rt: u8 },
+    SUB { rd: u8, rs: u8, rt: u8 },
+    SLTU { rd: u8, rs: u8, rt: u8 },
+    SUBU { rd: u8, rs: u8, rt: u8 },
+    AND { rd: u8, rs: u8, rt: u8 },
+    OR { rd: u8, rs: u8, rt: u8 },
+    XOR { rd: u8, rs: u8, rt: u8 },
+    NOR { rd: u8, rs: u8, rt: u8 },
+    ADDU { rd: u8, rs: u8, rt: u8 },
+    MULT { rs: u8, rt: u8 },
+    MULTU { rs: u8, rt: u8 },
+    SLT { rd: u8, rs: u8, rt: u8 },
+    BLTZ { rs: u8, offset: u16, opcode: u32 },
+    BGEZ { rs: u8, offset: u16, opcode: u32 },
+    BLTZAL { rs: u8, offset: u16, opcode: u32 },
+    BGEZAL { rs: u8, offset: u16, opcode: u32 },
+    MALBRCH { rs: u8, offset: u16, opcode: u32 }, //Malformed branch
+    J { target: u32 },
+    JAL { target: u32 },
+    BEQ { rs: u8, rt: u8, offset: u16 },
+    BNE { rs: u8, rt: u8, offset: u16 },
+    BLEZ { rs: u8, offset: u16 },
+    BGTZ { rs: u8, offset: u16 },
+    ADDI { rt: u8, rs: u8, immediate: u16 },
+    ADDIU { rt: u8, rs: u8, immediate: u16 },
+    SLTI { rt: u8, rs: u8, immediate: u16 },
+    SLTIU { rt: u8, rs: u8, immediate: u16 },
+    ANDI { rt: u8, rs: u8, immediate: u16 },
+    ORI { rt: u8, rs: u8, immediate: u16 },
+    XORI { rt: u8, rs: u8, immediate: u16 },
+    LUI { rt: u8, immediate: u16 },
+    MTC0 { rt: u8, rd: u8 },
+    MFC0 { rt: u8, rd: u8 },
     RFE,
-    MFC2{rt: u8, rd: u8},
-    CTC2{rt: u8, rd: u8},
-    MTC2{rt: u8, rd: u8},
-    CFC2{rt: u8, rd: u8},
-    IMM25{command: u32},
-    LB{rt: u8, offset: u16, base: u8},
-    LH{rt: u8, offset: u16, base: u8},
-    LW{rt: u8, offset: u16, base: u8},
-    LBU{rt: u8, offset: u16, base: u8},
-    LHU{rt: u8, offset: u16, base: u8},
-    SB{rt: u8, offset: u16, base: u8},
-    SH{rt: u8, offset: u16, base: u8},
-    LWL{rt: u8, offset: u16, base: u8},
-    LWR{rt: u8, offset: u16, base: u8},
-    SWL{rt: u8, offset: u16, base: u8},
-    SWR{rt: u8, offset: u16, base: u8},
-    SW{rt: u8, offset: u16, base: u8},
-    LWC2{rt: u8, offset: u16, base: u8},
-    SWC2{rt: u8, offset: u16, base: u8},
+    MFC2 { rt: u8, rd: u8 },
+    CTC2 { rt: u8, rd: u8 },
+    MTC2 { rt: u8, rd: u8 },
+    CFC2 { rt: u8, rd: u8 },
+    IMM25 { command: u32 },
+    LB { rt: u8, offset: u16, base: u8 },
+    LH { rt: u8, offset: u16, base: u8 },
+    LW { rt: u8, offset: u16, base: u8 },
+    LBU { rt: u8, offset: u16, base: u8 },
+    LHU { rt: u8, offset: u16, base: u8 },
+    SB { rt: u8, offset: u16, base: u8 },
+    SH { rt: u8, offset: u16, base: u8 },
+    LWL { rt: u8, offset: u16, base: u8 },
+    LWR { rt: u8, offset: u16, base: u8 },
+    SWL { rt: u8, offset: u16, base: u8 },
+    SWR { rt: u8, offset: u16, base: u8 },
+    SW { rt: u8, offset: u16, base: u8 },
+    LWC2 { rt: u8, offset: u16, base: u8 },
+    SWC2 { rt: u8, offset: u16, base: u8 },
 }
 
 impl Instruction {
-
     #[allow(unused_variables)] // I should replace all these unused variables with underscores, but thats a lot of work
     pub fn mnemonic(&self) -> &str {
         match self {
@@ -247,93 +246,182 @@ impl Instruction {
     #[allow(unused_variables)]
     pub fn arguments(&self, cpu: &R3000) -> String {
         match self {
-            Instruction::SLL { rt, rd, sa } |
-            Instruction::SRL { rt, rd, sa } |
-            Instruction::SRA { rt, rd, sa } => format!("${}({:08x}), {:#x}", RegisterNames::from_u8(*rt).unwrap(), cpu.gen_registers[*rt as usize], sa),
+            Instruction::SLL { rt, rd, sa }
+            | Instruction::SRL { rt, rd, sa }
+            | Instruction::SRA { rt, rd, sa } => format!(
+                "${}({:08x}), {:#x}",
+                RegisterNames::from_u8(*rt).unwrap(),
+                cpu.gen_registers[*rt as usize],
+                sa
+            ),
 
-            Instruction::JR { rs } =>  format!("${}({:08x}", RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize]),
-            
-            Instruction::JALR { rd, rs } => format!("${}({:08x}", RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize]),
+            Instruction::JR { rs } => format!(
+                "${}({:08x}",
+                RegisterNames::from_u8(*rs).unwrap(),
+                cpu.gen_registers[*rs as usize]
+            ),
 
-            Instruction::SYSCALL { code } |
-            Instruction::BREAK { code } => format!("{:#08x}", code),
+            Instruction::JALR { rd, rs } => format!(
+                "${}({:08x}",
+                RegisterNames::from_u8(*rs).unwrap(),
+                cpu.gen_registers[*rs as usize]
+            ),
 
-            Instruction::MFHI { rd } => format!("${}({:08x}, $hi({:08x})", RegisterNames::from_u8(*rd).unwrap(), cpu.gen_registers[*rd as usize], cpu.hi),
-            Instruction::MFLO { rd } => format!("${}({:08x}, $lo({:08x})", RegisterNames::from_u8(*rd).unwrap(), cpu.gen_registers[*rd as usize], cpu.lo),
-            
-            Instruction::MTHI { rs } => format!("$hi({:08x}), ${}({:08x}",  cpu.hi, RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize]),
-            Instruction::MTLO { rs } => format!("$lo({:08x}), ${}({:08x}",  cpu.lo, RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize]),
+            Instruction::SYSCALL { code } | Instruction::BREAK { code } => format!("{:#08x}", code),
 
-            Instruction::DIV { rs, rt } |
-            Instruction::DIVU { rs, rt } |
-            Instruction::MULT { rs, rt } |
-            Instruction::MULTU { rs, rt } => format!("${}({:08x}, ${}({:08x})", RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize], RegisterNames::from_u8(*rt).unwrap(), cpu.gen_registers[*rt as usize]),
+            Instruction::MFHI { rd } => format!(
+                "${}({:08x}, $hi({:08x})",
+                RegisterNames::from_u8(*rd).unwrap(),
+                cpu.gen_registers[*rd as usize],
+                cpu.hi
+            ),
+            Instruction::MFLO { rd } => format!(
+                "${}({:08x}, $lo({:08x})",
+                RegisterNames::from_u8(*rd).unwrap(),
+                cpu.gen_registers[*rd as usize],
+                cpu.lo
+            ),
 
-            Instruction::SLLV { rd, rt, rs } |
-            Instruction::SRLV { rd, rt, rs } |
-            Instruction::SRAV { rd, rt, rs } |
-            Instruction::ADD { rd, rs, rt } |
-            Instruction::SUB { rd, rs, rt } |
-            Instruction::SLTU { rd, rs, rt } |
-            Instruction::SUBU { rd, rs, rt } |
-            Instruction::AND { rd, rs, rt } |
-            Instruction::OR { rd, rs, rt } |
-            Instruction::XOR { rd, rs, rt } |
-            Instruction::NOR { rd, rs, rt } |
-            Instruction::ADDU { rd, rs, rt } |           
-            Instruction::SLT { rd, rs, rt } => format!("${}({:08x}, ${}({:08x}, ${}({:08x})", RegisterNames::from_u8(*rd).unwrap(), cpu.gen_registers[*rd as usize], RegisterNames::from_u8(*rt).unwrap(), cpu.gen_registers[*rt as usize], RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize]),
+            Instruction::MTHI { rs } => format!(
+                "$hi({:08x}), ${}({:08x}",
+                cpu.hi,
+                RegisterNames::from_u8(*rs).unwrap(),
+                cpu.gen_registers[*rs as usize]
+            ),
+            Instruction::MTLO { rs } => format!(
+                "$lo({:08x}), ${}({:08x}",
+                cpu.lo,
+                RegisterNames::from_u8(*rs).unwrap(),
+                cpu.gen_registers[*rs as usize]
+            ),
 
-            Instruction::BLTZ { rs, offset, .. } |
-            Instruction::BGEZ { rs, offset, .. } |
-            Instruction::BLTZAL { rs, offset, .. } |
-            Instruction::BLEZ { rs, offset } |
-            Instruction::BGTZ { rs, offset } |
-            Instruction::MALBRCH { rs, offset, .. } |
-            Instruction::BGEZAL { rs, offset, .. } => format!("${}({:08x}), {:#x}", RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize], offset),
+            Instruction::DIV { rs, rt }
+            | Instruction::DIVU { rs, rt }
+            | Instruction::MULT { rs, rt }
+            | Instruction::MULTU { rs, rt } => format!(
+                "${}({:08x}, ${}({:08x})",
+                RegisterNames::from_u8(*rs).unwrap(),
+                cpu.gen_registers[*rs as usize],
+                RegisterNames::from_u8(*rt).unwrap(),
+                cpu.gen_registers[*rt as usize]
+            ),
 
-            Instruction::J { target } |
-            Instruction::JAL { target } => format!("{:#08x}", target),
+            Instruction::SLLV { rd, rt, rs }
+            | Instruction::SRLV { rd, rt, rs }
+            | Instruction::SRAV { rd, rt, rs }
+            | Instruction::ADD { rd, rs, rt }
+            | Instruction::SUB { rd, rs, rt }
+            | Instruction::SLTU { rd, rs, rt }
+            | Instruction::SUBU { rd, rs, rt }
+            | Instruction::AND { rd, rs, rt }
+            | Instruction::OR { rd, rs, rt }
+            | Instruction::XOR { rd, rs, rt }
+            | Instruction::NOR { rd, rs, rt }
+            | Instruction::ADDU { rd, rs, rt }
+            | Instruction::SLT { rd, rs, rt } => format!(
+                "${}({:08x}, ${}({:08x}, ${}({:08x})",
+                RegisterNames::from_u8(*rd).unwrap(),
+                cpu.gen_registers[*rd as usize],
+                RegisterNames::from_u8(*rt).unwrap(),
+                cpu.gen_registers[*rt as usize],
+                RegisterNames::from_u8(*rs).unwrap(),
+                cpu.gen_registers[*rs as usize]
+            ),
 
-            Instruction::BEQ { rs, rt, offset } |
-            Instruction::BNE { rs, rt, offset } => format!("${}({:08x}, ${}({:08x}), {:#08x}", RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize], RegisterNames::from_u8(*rt).unwrap(), cpu.gen_registers[*rt as usize], offset),
+            Instruction::BLTZ { rs, offset, .. }
+            | Instruction::BGEZ { rs, offset, .. }
+            | Instruction::BLTZAL { rs, offset, .. }
+            | Instruction::BLEZ { rs, offset }
+            | Instruction::BGTZ { rs, offset }
+            | Instruction::MALBRCH { rs, offset, .. }
+            | Instruction::BGEZAL { rs, offset, .. } => format!(
+                "${}({:08x}), {:#x}",
+                RegisterNames::from_u8(*rs).unwrap(),
+                cpu.gen_registers[*rs as usize],
+                offset
+            ),
 
+            Instruction::J { target } | Instruction::JAL { target } => format!("{:#08x}", target),
 
-            Instruction::ADDI { rt, rs, immediate } |
-            Instruction::ADDIU { rt, rs, immediate } |
-            Instruction::SLTI { rt, rs, immediate } |
-            Instruction::SLTIU { rt, rs, immediate } |
-            Instruction::ANDI { rt, rs, immediate } |
-            Instruction::ORI { rt, rs, immediate } |
-            Instruction::XORI { rt, rs, immediate } => format!("${}({:08x}, ${}({:08x}), {:#04x}", RegisterNames::from_u8(*rt).unwrap(), cpu.gen_registers[*rt as usize], RegisterNames::from_u8(*rs).unwrap(), cpu.gen_registers[*rs as usize], immediate),
+            Instruction::BEQ { rs, rt, offset } | Instruction::BNE { rs, rt, offset } => format!(
+                "${}({:08x}, ${}({:08x}), {:#08x}",
+                RegisterNames::from_u8(*rs).unwrap(),
+                cpu.gen_registers[*rs as usize],
+                RegisterNames::from_u8(*rt).unwrap(),
+                cpu.gen_registers[*rt as usize],
+                offset
+            ),
 
-            Instruction::LUI { rt, immediate } => format!("${}({:08x}, {:#04x}", RegisterNames::from_u8(*rt).unwrap(), cpu.gen_registers[*rt as usize], immediate),
+            Instruction::ADDI { rt, rs, immediate }
+            | Instruction::ADDIU { rt, rs, immediate }
+            | Instruction::SLTI { rt, rs, immediate }
+            | Instruction::SLTIU { rt, rs, immediate }
+            | Instruction::ANDI { rt, rs, immediate }
+            | Instruction::ORI { rt, rs, immediate }
+            | Instruction::XORI { rt, rs, immediate } => format!(
+                "${}({:08x}, ${}({:08x}), {:#04x}",
+                RegisterNames::from_u8(*rt).unwrap(),
+                cpu.gen_registers[*rt as usize],
+                RegisterNames::from_u8(*rs).unwrap(),
+                cpu.gen_registers[*rs as usize],
+                immediate
+            ),
+
+            Instruction::LUI { rt, immediate } => format!(
+                "${}({:08x}, {:#04x}",
+                RegisterNames::from_u8(*rt).unwrap(),
+                cpu.gen_registers[*rt as usize],
+                immediate
+            ),
 
             Instruction::RFE => "".to_string(),
 
-            Instruction::MFC0 { rt, rd } |
-            Instruction::MFC2 { rt, rd } |
-            Instruction::CFC2 { rt, rd } => format!("${}({:08x}, ${}({:08x})", RegisterNames::from_u8(*rd).unwrap(), cpu.gen_registers[*rd as usize], rt, cpu.cop0.read_reg(*rt as u8)),
+            Instruction::MFC0 { rt, rd }
+            | Instruction::MFC2 { rt, rd }
+            | Instruction::CFC2 { rt, rd } => format!(
+                "${}({:08x}, ${}({:08x})",
+                RegisterNames::from_u8(*rd).unwrap(),
+                cpu.gen_registers[*rd as usize],
+                rt,
+                cpu.cop0.read_reg(*rt as u8)
+            ),
 
-            Instruction::MTC0 { rt, rd } |
-            Instruction::MTC2 { rt, rd } |
-            Instruction::CTC2 { rt, rd } => format!("${}({:08x}, ${}({:08x})",rt, cpu.cop0.read_reg(*rt as u8), RegisterNames::from_u8(*rd).unwrap(), cpu.gen_registers[*rd as usize]),
+            Instruction::MTC0 { rt, rd }
+            | Instruction::MTC2 { rt, rd }
+            | Instruction::CTC2 { rt, rd } => format!(
+                "${}({:08x}, ${}({:08x})",
+                rt,
+                cpu.cop0.read_reg(*rt as u8),
+                RegisterNames::from_u8(*rd).unwrap(),
+                cpu.gen_registers[*rd as usize]
+            ),
 
             Instruction::IMM25 { command } => format!("{:08x}", command),
 
-            Instruction::LB { rt, offset, base } |
-            Instruction::LH { rt, offset, base } |
-            Instruction::LW { rt, offset, base } |
-            Instruction::LBU { rt, offset, base } |
-            Instruction::LHU { rt, offset, base } |
-            Instruction::SB { rt, offset, base } |
-            Instruction::SH { rt, offset, base } |
-            Instruction::LWL { rt, offset, base } |
-            Instruction::LWR { rt, offset, base } |
-            Instruction::SWL { rt, offset, base } |
-            Instruction::SWR { rt, offset, base } |
-            Instruction::SW { rt, offset, base } |
-            Instruction::LWC2 { rt, offset, base } |
-            Instruction::SWC2 { rt, offset, base } => format!("${}({:08x}), {:#04x}({})([{:08x}] = {:08x})", RegisterNames::from_u8(*rt).unwrap(), cpu.read_reg(*rt as u8), offset, RegisterNames::from_u8(*base).unwrap(), cpu.gen_registers[*base as usize] + *offset as u32, cpu.main_bus.peek_word((cpu.gen_registers[*base as usize] as i32 + (*offset  as i16)as i32) as u32)),
+            Instruction::LB { rt, offset, base }
+            | Instruction::LH { rt, offset, base }
+            | Instruction::LW { rt, offset, base }
+            | Instruction::LBU { rt, offset, base }
+            | Instruction::LHU { rt, offset, base }
+            | Instruction::SB { rt, offset, base }
+            | Instruction::SH { rt, offset, base }
+            | Instruction::LWL { rt, offset, base }
+            | Instruction::LWR { rt, offset, base }
+            | Instruction::SWL { rt, offset, base }
+            | Instruction::SWR { rt, offset, base }
+            | Instruction::SW { rt, offset, base }
+            | Instruction::LWC2 { rt, offset, base }
+            | Instruction::SWC2 { rt, offset, base } => format!(
+                "${}({:08x}), {:#04x}({})([{:08x}] = {:08x})",
+                RegisterNames::from_u8(*rt).unwrap(),
+                cpu.read_reg(*rt as u8),
+                offset,
+                RegisterNames::from_u8(*base).unwrap(),
+                cpu.gen_registers[*base as usize] + *offset as u32,
+                cpu.main_bus.peek_word(
+                    (cpu.gen_registers[*base as usize] as i32 + (*offset as i16) as i32) as u32
+                )
+            ),
         }
     }
 
@@ -373,17 +461,35 @@ impl Instruction {
             Instruction::BGEZAL { opcode, .. } => interpreter::op_branch(cpu, *opcode),
             Instruction::J { target } => interpreter::op_j(cpu, *target),
             Instruction::JAL { target } => interpreter::op_jal(cpu, *target),
-            Instruction::BEQ { rs, rt, offset } => interpreter::op_beq(cpu, *rs, *rt, *offset as u32),
-            Instruction::BNE { rs, rt, offset } => interpreter::op_bne(cpu, *rs, *rt, *offset as u32),
+            Instruction::BEQ { rs, rt, offset } => {
+                interpreter::op_beq(cpu, *rs, *rt, *offset as u32)
+            }
+            Instruction::BNE { rs, rt, offset } => {
+                interpreter::op_bne(cpu, *rs, *rt, *offset as u32)
+            }
             Instruction::BLEZ { rs, offset } => interpreter::op_blez(cpu, *rs, *offset as u32),
             Instruction::BGTZ { rs, offset } => interpreter::op_bgtz(cpu, *rs, *offset as u32),
-            Instruction::ADDI { rt, rs, immediate } => interpreter::op_addi(cpu, *rs, *rt, *immediate as u32),
-            Instruction::ADDIU { rt, rs, immediate } => interpreter::op_addiu(cpu, *rs, *rt, *immediate as u32),
-            Instruction::SLTI { rt, rs, immediate } => interpreter::op_slti(cpu, *rs, *rt, *immediate as u32),
-            Instruction::SLTIU { rt, rs, immediate } => interpreter::op_sltiu(cpu, *rs, *rt, *immediate as u32),
-            Instruction::ANDI { rt, rs, immediate } => interpreter::op_andi(cpu, *rs, *rt, *immediate as u32),
-            Instruction::ORI { rt, rs, immediate } => interpreter::op_ori(cpu, *rs, *rt, *immediate as u32),
-            Instruction::XORI { rt, rs, immediate } => interpreter::op_xori(cpu, *rs, *rt, *immediate as u32),
+            Instruction::ADDI { rt, rs, immediate } => {
+                interpreter::op_addi(cpu, *rs, *rt, *immediate as u32)
+            }
+            Instruction::ADDIU { rt, rs, immediate } => {
+                interpreter::op_addiu(cpu, *rs, *rt, *immediate as u32)
+            }
+            Instruction::SLTI { rt, rs, immediate } => {
+                interpreter::op_slti(cpu, *rs, *rt, *immediate as u32)
+            }
+            Instruction::SLTIU { rt, rs, immediate } => {
+                interpreter::op_sltiu(cpu, *rs, *rt, *immediate as u32)
+            }
+            Instruction::ANDI { rt, rs, immediate } => {
+                interpreter::op_andi(cpu, *rs, *rt, *immediate as u32)
+            }
+            Instruction::ORI { rt, rs, immediate } => {
+                interpreter::op_ori(cpu, *rs, *rt, *immediate as u32)
+            }
+            Instruction::XORI { rt, rs, immediate } => {
+                interpreter::op_xori(cpu, *rs, *rt, *immediate as u32)
+            }
             Instruction::LUI { rt, immediate } => interpreter::op_lui(cpu, *rt, *immediate as u32),
             Instruction::MTC0 { rt, rd } => interpreter::op_mtc0(cpu, *rd, *rt),
             Instruction::MFC0 { rt, rd } => interpreter::op_mfc0(cpu, *rd, *rt),
@@ -393,24 +499,51 @@ impl Instruction {
             Instruction::MTC2 { rt, rd } => interpreter::op_mtc2(cpu, *rt, *rd),
             Instruction::CFC2 { rt, rd } => interpreter::op_cfc2(cpu, *rt, *rd),
             Instruction::IMM25 { command } => interpreter::op_imm25(cpu, *command),
-            Instruction::LB { rt, offset, base } => interpreter::op_lb(cpu, *base, *rt, *offset as u32),
-            Instruction::LH { rt, offset, base } => interpreter::op_lh(cpu, *base, *rt, *offset as u32, timers),
-            Instruction::LW { rt, offset, base } => interpreter::op_lw(cpu, *base, *rt, *offset as u32, timers),
-            Instruction::LBU { rt, offset, base } => interpreter::op_lbu(cpu, *base, *rt, *offset as u32),
-            Instruction::LHU { rt, offset, base } => interpreter::op_lhu(cpu, *base, *rt, *offset as u32, timers),
-            Instruction::SB { rt, offset, base } => interpreter::op_sb(cpu, *base, *rt, *offset as u32),
-            Instruction::SH { rt, offset, base } => interpreter::op_sh(cpu, *base, *rt, *offset as u32, timers),
-            Instruction::LWL { rt, offset, base } => interpreter::op_lwl(cpu, *base, *rt, *offset as u32, timers),
-            Instruction::LWR { rt, offset, base } => interpreter::op_lwr(cpu, *base, *rt, *offset as u32, timers),
-            Instruction::SWL { rt, offset, base } => interpreter::op_swl(cpu, *base, *rt, *offset as u32, timers),
-            Instruction::SWR { rt, offset, base } => interpreter::op_swr(cpu, *base, *rt, *offset as u32, timers),
-            Instruction::SW { rt, offset, base } => interpreter::op_sw(cpu, *base, *rt, *offset as u32, timers),
-            Instruction::LWC2 { rt, offset, base } => interpreter::op_lwc2(cpu, *base, *rt, *offset as u32, timers),
-            Instruction::SWC2 { rt, offset, base } => interpreter::op_swc2(cpu, *base, *rt, *offset as u32, timers),
-            Instruction::MALBRCH {opcode , ..} => interpreter::op_branch(cpu, *opcode),
+            Instruction::LB { rt, offset, base } => {
+                interpreter::op_lb(cpu, *base, *rt, *offset as u32)
+            }
+            Instruction::LH { rt, offset, base } => {
+                interpreter::op_lh(cpu, *base, *rt, *offset as u32, timers)
+            }
+            Instruction::LW { rt, offset, base } => {
+                interpreter::op_lw(cpu, *base, *rt, *offset as u32, timers)
+            }
+            Instruction::LBU { rt, offset, base } => {
+                interpreter::op_lbu(cpu, *base, *rt, *offset as u32)
+            }
+            Instruction::LHU { rt, offset, base } => {
+                interpreter::op_lhu(cpu, *base, *rt, *offset as u32, timers)
+            }
+            Instruction::SB { rt, offset, base } => {
+                interpreter::op_sb(cpu, *base, *rt, *offset as u32)
+            }
+            Instruction::SH { rt, offset, base } => {
+                interpreter::op_sh(cpu, *base, *rt, *offset as u32, timers)
+            }
+            Instruction::LWL { rt, offset, base } => {
+                interpreter::op_lwl(cpu, *base, *rt, *offset as u32, timers)
+            }
+            Instruction::LWR { rt, offset, base } => {
+                interpreter::op_lwr(cpu, *base, *rt, *offset as u32, timers)
+            }
+            Instruction::SWL { rt, offset, base } => {
+                interpreter::op_swl(cpu, *base, *rt, *offset as u32, timers)
+            }
+            Instruction::SWR { rt, offset, base } => {
+                interpreter::op_swr(cpu, *base, *rt, *offset as u32, timers)
+            }
+            Instruction::SW { rt, offset, base } => {
+                interpreter::op_sw(cpu, *base, *rt, *offset as u32, timers)
+            }
+            Instruction::LWC2 { rt, offset, base } => {
+                interpreter::op_lwc2(cpu, *base, *rt, *offset as u32, timers)
+            }
+            Instruction::SWC2 { rt, offset, base } => {
+                interpreter::op_swc2(cpu, *base, *rt, *offset as u32, timers)
+            }
+            Instruction::MALBRCH { opcode, .. } => interpreter::op_branch(cpu, *opcode),
         }
     }
-
 }
 
 pub(super) fn decode_opcode(inst: u32) -> Option<Instruction> {
@@ -418,68 +551,226 @@ pub(super) fn decode_opcode(inst: u32) -> Option<Instruction> {
         0x0 => {
             //SPECIAL INSTRUCTIONS
             match inst.funct() {
-                0x0 => Some(Instruction::SLL {rt: inst.rt(), rd: inst.rd(), sa: inst.shamt()}),
-                0x2 => Some(Instruction::SRL {rt: inst.rt(), rd: inst.rd(), sa: inst.shamt()}),
-                0x3 => Some(Instruction::SRA {rt: inst.rt(), rd: inst.rd(), sa: inst.shamt()}),
-                0x4 => Some(Instruction::SLLV {rd: inst.rd(), rt: inst.rt(), rs: inst.rs()}),
-                0x6 => Some(Instruction::SRLV {rd: inst.rd(), rt: inst.rt(), rs: inst.rs()}),
-                0x7 => Some(Instruction::SRAV {rd: inst.rd(), rt: inst.rt(), rs: inst.rs()}),
-                0x8 => Some(Instruction::JR {rs: inst.rs()}),
-                0x9 => Some(Instruction::JALR {rd: inst.rd(), rs: inst.rs()}),
-                0xC => Some(Instruction::SYSCALL {code: (inst >> 5) & 0x1FFFFF}),
-                0xD => Some(Instruction::BREAK {code: (inst >> 5) & 0x1FFFFF}),
-                0x10 => Some(Instruction::MFHI {rd: inst.rd()}),
-                0x11 => Some(Instruction::MTHI {rs: inst.rs()}),
-                0x12 => Some(Instruction::MFLO {rd: inst.rd()}),
-                0x13 => Some(Instruction::MTLO {rs: inst.rs()}),
-                0x1A => Some(Instruction::DIV {rs: inst.rs(), rt: inst.rt()}),
-                0x1B => Some(Instruction::DIVU {rs: inst.rs(), rt: inst.rt()}),
-                0x20 => Some(Instruction::ADD {rd: inst.rd(), rt: inst.rt(), rs: inst.rs()}),
-                0x22 => Some(Instruction::SUB {rd: inst.rd(), rt: inst.rt(), rs: inst.rs()}),
-                0x2B => Some(Instruction::SLTU {rd: inst.rd(), rt: inst.rt(), rs: inst.rs()}),
-                0x23 => Some(Instruction::SUBU {rd: inst.rd(), rt: inst.rt(), rs: inst.rs()}),
-                0x24 => Some(Instruction::AND {rd: inst.rd(), rt: inst.rt(), rs: inst.rs()}),
-                0x25 => Some(Instruction::OR {rd: inst.rd(), rt: inst.rt(), rs: inst.rs()}),
-                0x26 => Some(Instruction::XOR {rd: inst.rd(), rt: inst.rt(), rs: inst.rs()}),
-                0x27 => Some(Instruction::NOR {rd: inst.rd(), rt: inst.rt(), rs: inst.rs()}),
-                0x21 => Some(Instruction::ADDU {rd: inst.rd(), rt: inst.rt(), rs: inst.rs()}),
-                0x18 => Some(Instruction::MULT {rt: inst.rt(), rs: inst.rs()}),
-                0x19 => Some(Instruction::MULTU {rt: inst.rt(), rs: inst.rs()}),
-                0x2A => Some(Instruction::SLT {rd: inst.rd(), rt: inst.rt(), rs: inst.rs()}),
-                _ => None
+                0x0 => Some(Instruction::SLL {
+                    rt: inst.rt(),
+                    rd: inst.rd(),
+                    sa: inst.shamt(),
+                }),
+                0x2 => Some(Instruction::SRL {
+                    rt: inst.rt(),
+                    rd: inst.rd(),
+                    sa: inst.shamt(),
+                }),
+                0x3 => Some(Instruction::SRA {
+                    rt: inst.rt(),
+                    rd: inst.rd(),
+                    sa: inst.shamt(),
+                }),
+                0x4 => Some(Instruction::SLLV {
+                    rd: inst.rd(),
+                    rt: inst.rt(),
+                    rs: inst.rs(),
+                }),
+                0x6 => Some(Instruction::SRLV {
+                    rd: inst.rd(),
+                    rt: inst.rt(),
+                    rs: inst.rs(),
+                }),
+                0x7 => Some(Instruction::SRAV {
+                    rd: inst.rd(),
+                    rt: inst.rt(),
+                    rs: inst.rs(),
+                }),
+                0x8 => Some(Instruction::JR { rs: inst.rs() }),
+                0x9 => Some(Instruction::JALR {
+                    rd: inst.rd(),
+                    rs: inst.rs(),
+                }),
+                0xC => Some(Instruction::SYSCALL {
+                    code: (inst >> 5) & 0x1FFFFF,
+                }),
+                0xD => Some(Instruction::BREAK {
+                    code: (inst >> 5) & 0x1FFFFF,
+                }),
+                0x10 => Some(Instruction::MFHI { rd: inst.rd() }),
+                0x11 => Some(Instruction::MTHI { rs: inst.rs() }),
+                0x12 => Some(Instruction::MFLO { rd: inst.rd() }),
+                0x13 => Some(Instruction::MTLO { rs: inst.rs() }),
+                0x1A => Some(Instruction::DIV {
+                    rs: inst.rs(),
+                    rt: inst.rt(),
+                }),
+                0x1B => Some(Instruction::DIVU {
+                    rs: inst.rs(),
+                    rt: inst.rt(),
+                }),
+                0x20 => Some(Instruction::ADD {
+                    rd: inst.rd(),
+                    rt: inst.rt(),
+                    rs: inst.rs(),
+                }),
+                0x22 => Some(Instruction::SUB {
+                    rd: inst.rd(),
+                    rt: inst.rt(),
+                    rs: inst.rs(),
+                }),
+                0x2B => Some(Instruction::SLTU {
+                    rd: inst.rd(),
+                    rt: inst.rt(),
+                    rs: inst.rs(),
+                }),
+                0x23 => Some(Instruction::SUBU {
+                    rd: inst.rd(),
+                    rt: inst.rt(),
+                    rs: inst.rs(),
+                }),
+                0x24 => Some(Instruction::AND {
+                    rd: inst.rd(),
+                    rt: inst.rt(),
+                    rs: inst.rs(),
+                }),
+                0x25 => Some(Instruction::OR {
+                    rd: inst.rd(),
+                    rt: inst.rt(),
+                    rs: inst.rs(),
+                }),
+                0x26 => Some(Instruction::XOR {
+                    rd: inst.rd(),
+                    rt: inst.rt(),
+                    rs: inst.rs(),
+                }),
+                0x27 => Some(Instruction::NOR {
+                    rd: inst.rd(),
+                    rt: inst.rt(),
+                    rs: inst.rs(),
+                }),
+                0x21 => Some(Instruction::ADDU {
+                    rd: inst.rd(),
+                    rt: inst.rt(),
+                    rs: inst.rs(),
+                }),
+                0x18 => Some(Instruction::MULT {
+                    rt: inst.rt(),
+                    rs: inst.rs(),
+                }),
+                0x19 => Some(Instruction::MULTU {
+                    rt: inst.rt(),
+                    rs: inst.rs(),
+                }),
+                0x2A => Some(Instruction::SLT {
+                    rd: inst.rd(),
+                    rt: inst.rt(),
+                    rs: inst.rs(),
+                }),
+                _ => None,
             }
         }
 
         0x1 => {
             //"PC-relative" test and branch instructions
             match inst.rt() {
-                0x0 => Some(Instruction::BLTZ{rs: inst.rs(), offset: inst.immediate(), opcode: inst}),
-                0x1 => Some(Instruction::BGEZ{rs: inst.rs(), offset: inst.immediate(), opcode: inst}),
-                0x10 => Some(Instruction::BLTZAL{rs: inst.rs(), offset: inst.immediate(), opcode: inst}),
-                0x11 => Some(Instruction::BGEZAL{rs: inst.rs(), offset: inst.immediate(), opcode: inst}),
-                _ => Some(Instruction::MALBRCH{rs: inst.rs(), offset: inst.immediate(), opcode: inst})
+                0x0 => Some(Instruction::BLTZ {
+                    rs: inst.rs(),
+                    offset: inst.immediate(),
+                    opcode: inst,
+                }),
+                0x1 => Some(Instruction::BGEZ {
+                    rs: inst.rs(),
+                    offset: inst.immediate(),
+                    opcode: inst,
+                }),
+                0x10 => Some(Instruction::BLTZAL {
+                    rs: inst.rs(),
+                    offset: inst.immediate(),
+                    opcode: inst,
+                }),
+                0x11 => Some(Instruction::BGEZAL {
+                    rs: inst.rs(),
+                    offset: inst.immediate(),
+                    opcode: inst,
+                }),
+                _ => Some(Instruction::MALBRCH {
+                    rs: inst.rs(),
+                    offset: inst.immediate(),
+                    opcode: inst,
+                }),
             }
         }
 
-        0x2 => Some(Instruction::J{target: inst.address()}),
-        0x3 => Some(Instruction::JAL{target: inst.address()}),
-        0x4 => Some(Instruction::BEQ{rs: inst.rs(), rt: inst.rt(), offset: inst.immediate()}),
-        0x5 => Some(Instruction::BNE{rs: inst.rs(), rt: inst.rt(), offset: inst.immediate()}),
-        0x6 => Some(Instruction::BLEZ{rs: inst.rs(), offset: inst.immediate()}),
-        0x7 => Some(Instruction::BGTZ{rs: inst.rs(), offset: inst.immediate()}),
-        0x8 => Some(Instruction::ADDI{rt: inst.rt(), rs: inst.rs(), immediate: inst.immediate()}),
-        0x9 => Some(Instruction::ADDIU{rt: inst.rt(), rs: inst.rs(), immediate: inst.immediate()}),
-        0xA => Some(Instruction::SLTI{rt: inst.rt(), rs: inst.rs(), immediate: inst.immediate()}),
-        0xB => Some(Instruction::SLTIU{rt: inst.rt(), rs: inst.rs(), immediate: inst.immediate()}),
-        0xC => Some(Instruction::ANDI{rt: inst.rt(), rs: inst.rs(), immediate: inst.immediate()}),
-        0xD => Some(Instruction::ORI{rt: inst.rt(), rs: inst.rs(), immediate: inst.immediate()}),
-        0xE => Some(Instruction::XORI{rt: inst.rt(), rs: inst.rs(), immediate: inst.immediate()}),
-        0xF => Some(Instruction::LUI{rt: inst.rt(), immediate: inst.immediate()}),
+        0x2 => Some(Instruction::J {
+            target: inst.address(),
+        }),
+        0x3 => Some(Instruction::JAL {
+            target: inst.address(),
+        }),
+        0x4 => Some(Instruction::BEQ {
+            rs: inst.rs(),
+            rt: inst.rt(),
+            offset: inst.immediate(),
+        }),
+        0x5 => Some(Instruction::BNE {
+            rs: inst.rs(),
+            rt: inst.rt(),
+            offset: inst.immediate(),
+        }),
+        0x6 => Some(Instruction::BLEZ {
+            rs: inst.rs(),
+            offset: inst.immediate(),
+        }),
+        0x7 => Some(Instruction::BGTZ {
+            rs: inst.rs(),
+            offset: inst.immediate(),
+        }),
+        0x8 => Some(Instruction::ADDI {
+            rt: inst.rt(),
+            rs: inst.rs(),
+            immediate: inst.immediate(),
+        }),
+        0x9 => Some(Instruction::ADDIU {
+            rt: inst.rt(),
+            rs: inst.rs(),
+            immediate: inst.immediate(),
+        }),
+        0xA => Some(Instruction::SLTI {
+            rt: inst.rt(),
+            rs: inst.rs(),
+            immediate: inst.immediate(),
+        }),
+        0xB => Some(Instruction::SLTIU {
+            rt: inst.rt(),
+            rs: inst.rs(),
+            immediate: inst.immediate(),
+        }),
+        0xC => Some(Instruction::ANDI {
+            rt: inst.rt(),
+            rs: inst.rs(),
+            immediate: inst.immediate(),
+        }),
+        0xD => Some(Instruction::ORI {
+            rt: inst.rt(),
+            rs: inst.rs(),
+            immediate: inst.immediate(),
+        }),
+        0xE => Some(Instruction::XORI {
+            rt: inst.rt(),
+            rs: inst.rs(),
+            immediate: inst.immediate(),
+        }),
+        0xF => Some(Instruction::LUI {
+            rt: inst.rt(),
+            immediate: inst.immediate(),
+        }),
         0x10 => {
             //COP0 instructions
             match inst.rs() {
-                0x4 => Some(Instruction::MTC0{rt: inst.rt(), rd: inst.rd()}),
-                0x0 => Some(Instruction::MFC0{rt: inst.rt(), rd: inst.rd()}),
+                0x4 => Some(Instruction::MTC0 {
+                    rt: inst.rt(),
+                    rd: inst.rd(),
+                }),
+                0x0 => Some(Instruction::MFC0 {
+                    rt: inst.rt(),
+                    rd: inst.rd(),
+                }),
 
                 0x10 => Some(Instruction::RFE),
                 _ => None,
@@ -489,35 +780,104 @@ pub(super) fn decode_opcode(inst: u32) -> Option<Instruction> {
         0x12 => {
             //COP2 (GTE) instructions
             if inst.get_bit(25) {
-                Some(Instruction::IMM25{command: inst & 0x1FFFFFF})
+                Some(Instruction::IMM25 {
+                    command: inst & 0x1FFFFFF,
+                })
             } else {
                 match inst.rs() {
-                    0x0 => Some(Instruction::MFC2{rt: inst.rt(), rd: inst.rd()}),
-                    0x6 => Some(Instruction::CTC2{rt: inst.rt(), rd: inst.rd()}),
-                    0x4 => Some(Instruction::MTC2{rt: inst.rt(), rd: inst.rd()}),
-                    0x2 => Some(Instruction::CFC2{rt: inst.rt(), rd: inst.rd()}),
-                    _ => None
+                    0x0 => Some(Instruction::MFC2 {
+                        rt: inst.rt(),
+                        rd: inst.rd(),
+                    }),
+                    0x6 => Some(Instruction::CTC2 {
+                        rt: inst.rt(),
+                        rd: inst.rd(),
+                    }),
+                    0x4 => Some(Instruction::MTC2 {
+                        rt: inst.rt(),
+                        rd: inst.rd(),
+                    }),
+                    0x2 => Some(Instruction::CFC2 {
+                        rt: inst.rt(),
+                        rd: inst.rd(),
+                    }),
+                    _ => None,
                 }
             }
         }
 
-        0x20 => Some(Instruction::LB{rt: inst.rt(), offset: inst.immediate(), base: inst.rs()}),
-        0x21 => Some(Instruction::LH{rt: inst.rt(), offset: inst.immediate(), base: inst.rs()}),
-        0x23 => Some(Instruction::LW{rt: inst.rt(), offset: inst.immediate(), base: inst.rs()}),
-        0x24 => Some(Instruction::LBU{rt: inst.rt(), offset: inst.immediate(), base: inst.rs()}),
-        0x25 => Some(Instruction::LHU{rt: inst.rt(), offset: inst.immediate(), base: inst.rs()}),
-        0x28 => Some(Instruction::SB{rt: inst.rt(), offset: inst.immediate(), base: inst.rs()}),
-        0x29 => Some(Instruction::SH{rt: inst.rt(), offset: inst.immediate(), base: inst.rs()}),
-        0x22 => Some(Instruction::LWL{rt: inst.rt(), offset: inst.immediate(), base: inst.rs()}),
-        0x26 => Some(Instruction::LWR{rt: inst.rt(), offset: inst.immediate(), base: inst.rs()}),
-        0x2A => Some(Instruction::SWL{rt: inst.rt(), offset: inst.immediate(), base: inst.rs()}),
-        0x2E => Some(Instruction::SWR{rt: inst.rt(), offset: inst.immediate(), base: inst.rs()}),
-        0x2B => Some(Instruction::SW{rt: inst.rt(), offset: inst.immediate(), base: inst.rs()}),
-        0x32 => Some(Instruction::LWC2{rt: inst.rt(), offset: inst.immediate(), base: inst.rs()}),
-        0x3A => Some(Instruction::SWC2{rt: inst.rt(), offset: inst.immediate(), base: inst.rs()}),
+        0x20 => Some(Instruction::LB {
+            rt: inst.rt(),
+            offset: inst.immediate(),
+            base: inst.rs(),
+        }),
+        0x21 => Some(Instruction::LH {
+            rt: inst.rt(),
+            offset: inst.immediate(),
+            base: inst.rs(),
+        }),
+        0x23 => Some(Instruction::LW {
+            rt: inst.rt(),
+            offset: inst.immediate(),
+            base: inst.rs(),
+        }),
+        0x24 => Some(Instruction::LBU {
+            rt: inst.rt(),
+            offset: inst.immediate(),
+            base: inst.rs(),
+        }),
+        0x25 => Some(Instruction::LHU {
+            rt: inst.rt(),
+            offset: inst.immediate(),
+            base: inst.rs(),
+        }),
+        0x28 => Some(Instruction::SB {
+            rt: inst.rt(),
+            offset: inst.immediate(),
+            base: inst.rs(),
+        }),
+        0x29 => Some(Instruction::SH {
+            rt: inst.rt(),
+            offset: inst.immediate(),
+            base: inst.rs(),
+        }),
+        0x22 => Some(Instruction::LWL {
+            rt: inst.rt(),
+            offset: inst.immediate(),
+            base: inst.rs(),
+        }),
+        0x26 => Some(Instruction::LWR {
+            rt: inst.rt(),
+            offset: inst.immediate(),
+            base: inst.rs(),
+        }),
+        0x2A => Some(Instruction::SWL {
+            rt: inst.rt(),
+            offset: inst.immediate(),
+            base: inst.rs(),
+        }),
+        0x2E => Some(Instruction::SWR {
+            rt: inst.rt(),
+            offset: inst.immediate(),
+            base: inst.rs(),
+        }),
+        0x2B => Some(Instruction::SW {
+            rt: inst.rt(),
+            offset: inst.immediate(),
+            base: inst.rs(),
+        }),
+        0x32 => Some(Instruction::LWC2 {
+            rt: inst.rt(),
+            offset: inst.immediate(),
+            base: inst.rs(),
+        }),
+        0x3A => Some(Instruction::SWC2 {
+            rt: inst.rt(),
+            offset: inst.immediate(),
+            base: inst.rs(),
+        }),
         _ => None,
     }
-
 }
 
 #[derive(FromPrimitive)]
@@ -555,44 +915,43 @@ pub enum RegisterNames {
     sp = 29,
     fp = 30,
     ra = 31,
-
 }
 
 impl Display for RegisterNames {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RegisterNames::zero => write!(f, "ze"),
-            RegisterNames::at => write!(f,"at"),
-            RegisterNames::v0 => write!(f,"v0"),
-            RegisterNames::v1 => write!(f,"v1"),
-            RegisterNames::a0 => write!(f,"a0"),
-            RegisterNames::a1 => write!(f,"a1"),
-            RegisterNames::a2 => write!(f,"a2"),
-            RegisterNames::a3 => write!(f,"a3"),
-            RegisterNames::t0 => write!(f,"t0"),
-            RegisterNames::t1 => write!(f,"t1"),
-            RegisterNames::t2 => write!(f,"t2"),
-            RegisterNames::t3 => write!(f,"t3"),
-            RegisterNames::t4 => write!(f,"t4"),
-            RegisterNames::t5 => write!(f,"t5"),
-            RegisterNames::t6 => write!(f,"t6"),
-            RegisterNames::t7 => write!(f,"t7"),
-            RegisterNames::s0 => write!(f,"s0"),
-            RegisterNames::s1 => write!(f,"s1"),
-            RegisterNames::s2 => write!(f,"s2"),
-            RegisterNames::s3 => write!(f,"s3"),
-            RegisterNames::s4 => write!(f,"s4"),
-            RegisterNames::s5 => write!(f,"s5"),
-            RegisterNames::s6 => write!(f,"s6"),
-            RegisterNames::s7 => write!(f,"s7"),
-            RegisterNames::t8 => write!(f,"t8"),
-            RegisterNames::t9 => write!(f,"t9"),
-            RegisterNames::k0 => write!(f,"k0"),
-            RegisterNames::k1 => write!(f,"k1"),
-            RegisterNames::gp => write!(f,"gp"),
-            RegisterNames::sp => write!(f,"sp"),
-            RegisterNames::fp => write!(f,"fp"),
-            RegisterNames::ra => write!(f,"ra"),
+            RegisterNames::at => write!(f, "at"),
+            RegisterNames::v0 => write!(f, "v0"),
+            RegisterNames::v1 => write!(f, "v1"),
+            RegisterNames::a0 => write!(f, "a0"),
+            RegisterNames::a1 => write!(f, "a1"),
+            RegisterNames::a2 => write!(f, "a2"),
+            RegisterNames::a3 => write!(f, "a3"),
+            RegisterNames::t0 => write!(f, "t0"),
+            RegisterNames::t1 => write!(f, "t1"),
+            RegisterNames::t2 => write!(f, "t2"),
+            RegisterNames::t3 => write!(f, "t3"),
+            RegisterNames::t4 => write!(f, "t4"),
+            RegisterNames::t5 => write!(f, "t5"),
+            RegisterNames::t6 => write!(f, "t6"),
+            RegisterNames::t7 => write!(f, "t7"),
+            RegisterNames::s0 => write!(f, "s0"),
+            RegisterNames::s1 => write!(f, "s1"),
+            RegisterNames::s2 => write!(f, "s2"),
+            RegisterNames::s3 => write!(f, "s3"),
+            RegisterNames::s4 => write!(f, "s4"),
+            RegisterNames::s5 => write!(f, "s5"),
+            RegisterNames::s6 => write!(f, "s6"),
+            RegisterNames::s7 => write!(f, "s7"),
+            RegisterNames::t8 => write!(f, "t8"),
+            RegisterNames::t9 => write!(f, "t9"),
+            RegisterNames::k0 => write!(f, "k0"),
+            RegisterNames::k1 => write!(f, "k1"),
+            RegisterNames::gp => write!(f, "gp"),
+            RegisterNames::sp => write!(f, "sp"),
+            RegisterNames::fp => write!(f, "fp"),
+            RegisterNames::ra => write!(f, "ra"),
         }
     }
 }
@@ -637,11 +996,7 @@ impl TryFrom<usize> for RegisterNames {
             _ => Err(()),
         }
     }
-
-    
 }
-
-
 
 #[cfg(test)]
 mod instruction_tests {

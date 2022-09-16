@@ -2,7 +2,10 @@ use std::collections::VecDeque;
 
 use bit_field::BitField;
 
-use self::{decode_macroblock::DecodeMacroblockCommand, set_quant_table::SetQuantTableCommand, set_scale_table::SetScaleTableCommand};
+use self::{
+    decode_macroblock::DecodeMacroblockCommand, set_quant_table::SetQuantTableCommand,
+    set_scale_table::SetScaleTableCommand,
+};
 
 mod decode_macroblock;
 mod set_quant_table;
@@ -30,13 +33,15 @@ trait MdecCommand {
     fn set_status(&self, status: &mut u32);
 }
 
-
 fn decode_command(command_word: u32) -> Box<dyn MdecCommand> {
     match command_word >> 29 {
         1 => Box::new(DecodeMacroblockCommand::new(command_word)),
         2 => Box::new(SetQuantTableCommand::new(command_word)),
         3 => Box::new(SetScaleTableCommand::new(command_word)),
-        n => panic!("Invalid MDEC command {}! (Full word: {:#X})", n, command_word)
+        n => panic!(
+            "Invalid MDEC command {}! (Full word: {:#X})",
+            n, command_word
+        ),
     }
 }
 
@@ -56,10 +61,10 @@ impl MDEC {
     pub(crate) fn new() -> Self {
         Self {
             input_state: InputState::Idle,
-            parameter_buffer: vec!(),
-            luminance_quant_table: vec!(),
-            color_quant_table: vec!(),
-            scale_table: vec!(),
+            parameter_buffer: vec![],
+            luminance_quant_table: vec![],
+            color_quant_table: vec![],
+            scale_table: vec![],
 
             dma_out_enabled: false,
             dma_in_enabled: false,
@@ -69,7 +74,7 @@ impl MDEC {
 
     fn reset(&mut self) {
         self.input_state = InputState::Idle;
-        self.parameter_buffer = vec!();
+        self.parameter_buffer = vec![];
     }
 
     pub(crate) fn bus_read_word(&mut self, addr: u32) -> u32 {
@@ -94,7 +99,7 @@ impl MDEC {
             InputState::Idle => {
                 let command = decode_command(word);
                 self.input_state = InputState::AwaitingParameters(command);
-            },
+            }
             InputState::AwaitingParameters(command) => {
                 let expected_words = command.parameter_words();
                 self.parameter_buffer.push(word);
@@ -105,7 +110,7 @@ impl MDEC {
                     self.input_state = InputState::Idle;
                     self.parameter_buffer.clear();
                 }
-            },
+            }
         }
     }
 
@@ -113,12 +118,12 @@ impl MDEC {
         let mut result: u32 = 0;
 
         if let InputState::AwaitingParameters(command) = &self.input_state {
-            let remaining_words = command.parameter_words() as isize - self.parameter_buffer.len() as isize;
+            let remaining_words =
+                command.parameter_words() as isize - self.parameter_buffer.len() as isize;
             result.set_bit(29, true);
             command.set_status(&mut result);
             if remaining_words <= 0 {
                 result |= 0x4000FFFF;
-                
             } else {
                 result |= (remaining_words & 0xFFFF) as u32;
             }
@@ -131,7 +136,6 @@ impl MDEC {
         result.set_bit(31, self.result_buffer.is_empty());
         //println!("MDEC status {:#X}", result);
         result
-
     }
 
     fn write_control(&mut self, word: u32) {

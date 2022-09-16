@@ -29,9 +29,9 @@ impl Timer {
         // if self.timer_number == 2 {
         //    self.value += 2;
         // } else {
-            self.value += 1;
+        self.value += 1;
         //}
-        
+
         if self.value == self.target {
             self.trigger(cpu, Cause::Target);
         }
@@ -189,7 +189,7 @@ impl TimerState {
 
     pub fn read_half_word(&mut self, addr: u32) -> u16 {
         //println!("Reading halfword timer addr {:#X}", addr);
-        
+
         match addr {
             0x1F801100 => self.timer_0.value as u16,
             0x1F801102 => (self.timer_0.value >> 16) as u16,

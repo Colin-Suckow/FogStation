@@ -504,7 +504,7 @@ impl GTE {
             0x3d => self.gpf(command),
             0x3e => self.gpl(command),
             0x3f => self.ncct(command),
-            _ => panic!("Unknown GTE command {:#X}!", command & 0x3F)
+            _ => panic!("Unknown GTE command {:#X}!", command & 0x3F),
         };
     }
 }
@@ -905,9 +905,18 @@ impl GTE {
         let shift = (command.get_bit(19) as usize) * 12;
         let lm = command.get_bit(10);
 
-        self.truncate_write_mac1((self.IR1 as i64 * self.IR0 as i64) + ((self.MAC1 as i64) << shift), shift);
-        self.truncate_write_mac2((self.IR2 as i64 * self.IR0 as i64) + ((self.MAC2 as i64) << shift), shift);
-        self.truncate_write_mac3((self.IR3 as i64 * self.IR0 as i64) + ((self.MAC3 as i64) << shift), shift);
+        self.truncate_write_mac1(
+            (self.IR1 as i64 * self.IR0 as i64) + ((self.MAC1 as i64) << shift),
+            shift,
+        );
+        self.truncate_write_mac2(
+            (self.IR2 as i64 * self.IR0 as i64) + ((self.MAC2 as i64) << shift),
+            shift,
+        );
+        self.truncate_write_mac3(
+            (self.IR3 as i64 * self.IR0 as i64) + ((self.MAC3 as i64) << shift),
+            shift,
+        );
 
         self.truncate_write_ir1(self.MAC1, lm);
         self.truncate_write_ir2(self.MAC2, lm);

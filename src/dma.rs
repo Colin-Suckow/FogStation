@@ -4,15 +4,7 @@ use log::{error, info, trace};
 
 const NUM_CHANNELS: usize = 7;
 
-const DMA_CHANNEL_NAMES: [&str; 7] = [
-    "MDECin",
-    "MDECout",
-    "GPU",
-    "CDROM",
-    "SPU",
-    "PIO",
-    "OTC"
-];
+const DMA_CHANNEL_NAMES: [&str; 7] = ["MDECin", "MDECout", "GPU", "CDROM", "SPU", "PIO", "OTC"];
 
 #[derive(Clone)]
 struct Channel {
@@ -33,11 +25,12 @@ impl Channel {
     }
 
     fn enabled(&self) -> bool {
-        self.control.get_bit(24) && if self.sync_mode() == 0 {
-            self.control.get_bit(28)
-        } else {
-            true
-        }
+        self.control.get_bit(24)
+            && if self.sync_mode() == 0 {
+                self.control.get_bit(28)
+            } else {
+                true
+            }
     }
 
     fn complete(&mut self) {
@@ -53,7 +46,7 @@ impl Channel {
             1 => "Sync (1)",
             2 => "Linked list (2)",
             3 => "Reserved (3)",
-            _ => "Invalid sync mode"
+            _ => "Invalid sync mode",
         };
 
         info!("SyncMode: {}", sync_mode);
@@ -61,18 +54,63 @@ impl Channel {
 
         match (self.control & 0x600) >> 9 {
             0 => info!("BC: {} words", self.block & 0xFFFF),
-            1 => info!("BS: {} words per block  BA: {} blocks", self.block & 0xFFFF, (self.block >> 16) & 0xFFFF),
-            _ => ()
+            1 => info!(
+                "BS: {} words per block  BA: {} blocks",
+                self.block & 0xFFFF,
+                (self.block >> 16) & 0xFFFF
+            ),
+            _ => (),
         };
- 
-        info!("Direction: {} RAM", if self.control.get_bit(0) {"From"} else {"To"});
-        info!("Address Step: {}", if self.control.get_bit(1) {"Backward"} else {"Forward"});
-        info!("Chopping: {}", if self.control.get_bit(8) {"True"} else {"False"});
 
-        info!("Chopping DMA Window Size: {} words", self.control.get_bits(16..18) << 1);
-        info!("Chopping CPU Window Size: {} cycles", self.control.get_bits(20..22) << 1);
-        info!("Start/Busy: {}", if self.control.get_bit(24) {"Start"} else {"Stopped"});
-        info!("Start/Trigger: {}", if self.control.get_bit(28) {"Start"} else {"Stopped"});
+        info!(
+            "Direction: {} RAM",
+            if self.control.get_bit(0) {
+                "From"
+            } else {
+                "To"
+            }
+        );
+        info!(
+            "Address Step: {}",
+            if self.control.get_bit(1) {
+                "Backward"
+            } else {
+                "Forward"
+            }
+        );
+        info!(
+            "Chopping: {}",
+            if self.control.get_bit(8) {
+                "True"
+            } else {
+                "False"
+            }
+        );
+
+        info!(
+            "Chopping DMA Window Size: {} words",
+            self.control.get_bits(16..18) << 1
+        );
+        info!(
+            "Chopping CPU Window Size: {} cycles",
+            self.control.get_bits(20..22) << 1
+        );
+        info!(
+            "Start/Busy: {}",
+            if self.control.get_bit(24) {
+                "Start"
+            } else {
+                "Stopped"
+            }
+        );
+        info!(
+            "Start/Trigger: {}",
+            if self.control.get_bit(28) {
+                "Start"
+            } else {
+                "Stopped"
+            }
+        );
         info!("");
     }
 
@@ -99,7 +137,7 @@ impl DMAState {
                 Channel::new(4),
                 Channel::new(5),
                 Channel::new(6),
-                ],
+            ],
             control: 0x07654321, //Initial value on reset
             interrupt: 0,
             cycles_to_wait: 0,
@@ -175,11 +213,8 @@ impl DMAState {
     pub fn read_byte(&mut self, addr: u32) -> u8 {
         let _channel_num = (((addr & 0x000000F0) >> 4) - 0x8) as usize;
         match addr {
-            0x1F8010F6 => {
-                ((self.interrupt >> 16) & 0xFF) as u8
-            },
+            0x1F8010F6 => ((self.interrupt >> 16) & 0xFF) as u8,
             _ => panic!("Unknown DMA read byte {:#X}", addr),
-            
         }
     }
 
@@ -189,9 +224,8 @@ impl DMAState {
             0x1F8010F6 => {
                 self.interrupt &= !(0xFF << 16);
                 self.interrupt |= (value as u32) << 16
-            },
+            }
             _ => panic!("Unknown DMA read byte {:#X}", addr),
-            
         }
     }
 
@@ -200,7 +234,6 @@ impl DMAState {
             || (self.interrupt.get_bit(23)
                 && (self.interrupt.get_bits(16..=22) > 0 && self.interrupt.get_bits(24..=30) > 0));
         self.interrupt.set_bit(31, should_flag);
-
     }
 
     fn channel_enabled(&self, channel_num: usize) -> bool {
@@ -214,12 +247,13 @@ impl DMAState {
     }
 
     fn irq_channel_enabled(&self, channel_num: usize) -> bool {
-        self.interrupt.get_bit(15) || self.interrupt.get_bit(16 + channel_num) && self.interrupt.get_bit(23)//  && !self.interrupt.get_bit(24 + channel_num)
+        self.interrupt.get_bit(15)
+            || self.interrupt.get_bit(16 + channel_num) && self.interrupt.get_bit(23)
+        //  && !self.interrupt.get_bit(24 + channel_num)
     }
 }
 
 pub fn execute_dma_cycle(cpu: &mut R3000) {
-    
     // if cpu.main_bus.dma.cycles_to_wait > 0 {
     //     cpu.main_bus.dma.cycles_to_wait -= 1;
     //     return;
@@ -239,7 +273,6 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
         cpu.main_bus.dma.channels[num].print_stats();
         //cpu.main_bus.dma.channels[num].control.set_bit(28, false); // Disable this channel's Start/Trigger bit because the transfer has begun
         match num {
-
             0 => {
                 //MDEC_in
 
@@ -247,8 +280,12 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 let mut block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                 let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
 
-                if entries == 0 {entries = 1};
-                if block_size == 0 {block_size = 1};
+                if entries == 0 {
+                    entries = 1
+                };
+                if block_size == 0 {
+                    block_size = 1
+                };
 
                 match cpu.main_bus.dma.channels[num].control {
                     0x01000201 => {
@@ -260,11 +297,10 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                                 cpu.main_bus.mdec.bus_write_word(0x1f801820, word);
                             }
                         }
-                    },
-                    control => panic!("Unknown MDEC DMA transfer! {:#X}", control)
+                    }
+                    control => panic!("Unknown MDEC DMA transfer! {:#X}", control),
                 }
 
-                
                 cpu.main_bus.dma.channels[num].complete();
                 cpu.main_bus.dma.raise_irq(num);
                 if cpu.main_bus.dma.irq_channel_enabled(num) {
@@ -273,7 +309,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                     trace!("DMA IRQ Rejected");
                     trace!("DICR: {:#X}", cpu.main_bus.dma.interrupt);
                 }
-            },
+            }
 
             1 => {
                 //MDEC_out
@@ -282,27 +318,28 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 let mut block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                 let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
 
-                if entries == 0 {entries = 1};
-                if block_size == 0 {block_size = 1};
+                if entries == 0 {
+                    entries = 1
+                };
+                if block_size == 0 {
+                    block_size = 1
+                };
 
                 match cpu.main_bus.dma.channels[num].control {
                     0x01000200 => {
                         for i in 0..entries {
                             for j in 0..block_size {
-                                let word =  cpu.main_bus.mdec.bus_read_word(0x1f801820);
+                                let word = cpu.main_bus.mdec.bus_read_word(0x1f801820);
                                 //println!("MDEC_out DMA pushing word {:#X}", word);
-                                cpu
-                                    .main_bus
+                                cpu.main_bus
                                     .write_word(base_addr + ((i * block_size) * 4) + (j * 4), word);
-                               
                             }
                         }
                         trace!("MDEC_out transfer done!")
-                    },
-                    control => println!("Unknown MDEC DMA transfer! {:#X}", control)
+                    }
+                    control => println!("Unknown MDEC DMA transfer! {:#X}", control),
                 }
 
-                
                 cpu.main_bus.dma.channels[num].complete();
                 cpu.main_bus.dma.raise_irq(num);
                 if cpu.main_bus.dma.irq_channel_enabled(num) {
@@ -312,8 +349,8 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                     trace!("DMA IRQ Rejected");
                     trace!("DICR: {:#X}", cpu.main_bus.dma.interrupt);
                 }
-            },
-            
+            }
+
             2 => {
                 //GPU
                 match cpu.main_bus.dma.channels[num].control {
@@ -348,7 +385,6 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                         //println!("DMA2 linked list transfer done.");
                         cpu.main_bus.dma.channels[num].complete();
 
-
                         cpu.main_bus.dma.raise_irq(num);
                         if cpu.main_bus.dma.irq_channel_enabled(num) {
                             cpu.fire_external_interrupt(InterruptSource::DMA);
@@ -364,9 +400,18 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                         let mut entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
                         let mut block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                         let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
-                        if entries == 0 {entries = 1};
-                        if block_size == 0 {block_size = 1};
-                        trace!("Block size {} Num blocks {} base {:#X}", block_size, entries, base_addr);
+                        if entries == 0 {
+                            entries = 1
+                        };
+                        if block_size == 0 {
+                            block_size = 1
+                        };
+                        trace!(
+                            "Block size {} Num blocks {} base {:#X}",
+                            block_size,
+                            entries,
+                            base_addr
+                        );
                         for i in 0..entries {
                             for j in 0..block_size {
                                 let packet = cpu
@@ -394,15 +439,17 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                         let mut entries = (cpu.main_bus.dma.channels[num].block >> 16) & 0xFFFF;
                         let mut block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                         let base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
-                        if entries == 0 {entries = 1};
-                        if block_size == 0 {block_size = 1};
+                        if entries == 0 {
+                            entries = 1
+                        };
+                        if block_size == 0 {
+                            block_size = 1
+                        };
                         for i in 0..entries {
                             for j in 0..block_size {
                                 let val = cpu.main_bus.gpu.read_word_gp0();
-                                cpu.main_bus.write_word(
-                                    base_addr + ((i * block_size) * 4) + (j * 4),
-                                    val,
-                                );
+                                cpu.main_bus
+                                    .write_word(base_addr + ((i * block_size) * 4) + (j * 4), val);
                             }
                         }
                         cpu.main_bus.dma.channels[num].base_addr += entries * block_size * 4;
@@ -441,9 +488,8 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                     }
                 }
 
-
                 trace!("Words {} base_addr {:#X}", words, base_addr);
-                
+
                 for i in 0..(words * 4) {
                     cpu.main_bus.memory.data[(base_addr + i as usize)] = data[i as usize];
                 }
@@ -456,7 +502,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 } else {
                     trace!("DMA IRQ Rejected");
                     trace!("DICR: {:#X}", cpu.main_bus.dma.interrupt);
-                }     
+                }
             }
 
             4 => {
@@ -466,8 +512,12 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 let mut block_size = (cpu.main_bus.dma.channels[num].block) & 0xFFFF;
                 let _base_addr = cpu.main_bus.dma.channels[num].base_addr & 0xFFFFFF;
 
-                if entries == 0 {entries = 1};
-                if block_size == 0 {block_size = 1};
+                if entries == 0 {
+                    entries = 1
+                };
+                if block_size == 0 {
+                    block_size = 1
+                };
 
                 match cpu.main_bus.dma.channels[num].control {
                     0x01000201 => {
@@ -477,10 +527,9 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                                 cpu.main_bus.spu.write_half_word(0x1F801DA8, 0);
                             }
                         }
-                    },
-                    control => println!("Unknown SPU DMA transfer! {:#X}", control)
+                    }
+                    control => println!("Unknown SPU DMA transfer! {:#X}", control),
                 }
-
 
                 cpu.main_bus.dma.channels[num].complete();
                 cpu.main_bus.dma.raise_irq(num);
@@ -502,7 +551,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
                 if entries == 0 {
                     entries = 1;
                 }
-                
+
                 for i in 0..entries {
                     let addr = base - (((entries - 1) - i) * 4);
                     if i == 0 {
@@ -538,7 +587,9 @@ pub fn execute_dma_cycle(cpu: &mut R3000) {
 }
 
 fn write_dicr(current_value: u32, value: u32) -> u32 {
-    if value.get_bit(15) {error!("OH GOD BIT 15 IS SET")}
+    if value.get_bit(15) {
+        error!("OH GOD BIT 15 IS SET")
+    }
     let normal_bits = value & 0xFFFFFF; //These bits are written normally
     let ack_bits = (value >> 24) & 0x7F; //These bits are written as a one to clear. 0x7F0000
     let acked_bits = ((current_value >> 24) & 0x7F) & !ack_bits;

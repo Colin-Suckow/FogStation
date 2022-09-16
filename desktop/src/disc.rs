@@ -1,9 +1,8 @@
+use cue::cd::CD;
 use psx_emu::cdrom::disc::{Disc, DiscTrack};
-use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::io::Read;
-use cue::cd::CD;
-
+use std::path::{Path, PathBuf};
 
 pub fn load_disc_from_cuesheet(cuesheet_path: PathBuf) -> Disc {
     let mut cue_dir = cuesheet_path.clone();

@@ -11,12 +11,12 @@ enum SpuMode {
 
 enum DeltaMode {
     Linear,
-    Exponential
+    Exponential,
 }
 
 enum DeltaDirection {
     Increase,
-    Decrease
+    Decrease,
 }
 
 struct Voice {
@@ -34,7 +34,6 @@ struct Voice {
 
     start_address: u16,
     current_address: u16,
-
 }
 
 pub struct SPU {
@@ -74,22 +73,22 @@ impl SPU {
 
             pending_irq_acked: true,
 
-
             cycle_count: 0,
         }
     }
 
     pub fn read_half_word(&mut self, addr: u32) -> u16 {
-        
-        let val  = match addr {
+        let val = match addr {
             0x1F801DAE => self.status_register(),
             0x1F801DAA => self.spu_control,
             0x1F801DAC => 0x4, //SPU transfer control
             0x1F801DA6 => self.transfer_address_register,
-            0x1F801C00 ..= 0x1F801E5F => {
+            0x1F801C00..=0x1F801E5F => {
                 let offset = addr - 0x1F801C00;
-                LittleEndian::read_u16(&self.voice_registers[offset as usize..(offset + 2) as usize])
-            },
+                LittleEndian::read_u16(
+                    &self.voice_registers[offset as usize..(offset + 2) as usize],
+                )
+            }
             _ => 0, //{println!("Read unknown SPU address {:#X}", addr); 0}
         };
         //println!("Reading spu {:#X}  val {:#X}", addr, val);
@@ -108,16 +107,19 @@ impl SPU {
                     1 => SpuMode::ManualWrite,
                     2 => SpuMode::DMAwrite,
                     3 => SpuMode::DMAread,
-                    i => panic!("Unknown SPU mode {}", i)
+                    i => panic!("Unknown SPU mode {}", i),
                 };
-            },
+            }
             0x1F801DA6 => self.set_transfer_address(value),
 
-            0x1F801C00 ..= 0x1F801E5F => {
+            0x1F801C00..=0x1F801E5F => {
                 let offset = addr - 0x1F801C00;
-                LittleEndian::write_u16(&mut self.voice_registers[offset as usize..(offset + 2) as usize], value);
-            },
-            _ => println!("Wrote unknown SPU address {:#X} with {:#X}", addr, value)
+                LittleEndian::write_u16(
+                    &mut self.voice_registers[offset as usize..(offset + 2) as usize],
+                    value,
+                );
+            }
+            _ => println!("Wrote unknown SPU address {:#X} with {:#X}", addr, value),
         }
     }
 
@@ -128,7 +130,11 @@ impl SPU {
 
     fn push_transfer_fifo(&mut self, value: u16) {
         //println!("SPU FIFO pushing value: {:#X} to addr {:#X}", value, self.internal_transfer_address);
-        LittleEndian::write_u16(&mut self.memory[self.internal_transfer_address as usize..(self.internal_transfer_address + 2) as usize], value);
+        LittleEndian::write_u16(
+            &mut self.memory[self.internal_transfer_address as usize
+                ..(self.internal_transfer_address + 2) as usize],
+            value,
+        );
         self.internal_transfer_address += 2;
         if self.check_irq() {
             self.queue_irq();

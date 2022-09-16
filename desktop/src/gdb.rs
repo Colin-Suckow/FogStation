@@ -1,5 +1,17 @@
-use gdbstub::{arch, target::{Target, TargetResult, ext::{base::{ResumeAction, singlethread::{SingleThreadOps, StopReason}}, breakpoints::{HwBreakpoint, HwWatchpoint, SwBreakpoint}}}};
-use crate::{ClientMessage, EmuState, emu_loop_step};
+use crate::{emu_loop_step, ClientMessage, EmuState};
+use gdbstub::{
+    arch,
+    target::{
+        ext::{
+            base::{
+                singlethread::{SingleThreadOps, StopReason},
+                ResumeAction,
+            },
+            breakpoints::{HwBreakpoint, HwWatchpoint, SwBreakpoint},
+        },
+        Target, TargetResult,
+    },
+};
 
 impl Target for EmuState {
     type Arch = arch::mips::Mips;
@@ -10,15 +22,21 @@ impl Target for EmuState {
         gdbstub::target::ext::base::BaseOps::SingleThread(self)
     }
 
-    fn sw_breakpoint(&mut self) -> Option<gdbstub::target::ext::breakpoints::SwBreakpointOps<Self>> {
+    fn sw_breakpoint(
+        &mut self,
+    ) -> Option<gdbstub::target::ext::breakpoints::SwBreakpointOps<Self>> {
         Some(self)
     }
 
-    fn hw_breakpoint(&mut self) -> Option<gdbstub::target::ext::breakpoints::HwBreakpointOps<Self>> {
+    fn hw_breakpoint(
+        &mut self,
+    ) -> Option<gdbstub::target::ext::breakpoints::HwBreakpointOps<Self>> {
         Some(self)
     }
 
-    fn hw_watchpoint(&mut self) -> Option<gdbstub::target::ext::breakpoints::HwWatchpointOps<Self>> {
+    fn hw_watchpoint(
+        &mut self,
+    ) -> Option<gdbstub::target::ext::breakpoints::HwWatchpointOps<Self>> {
         Some(self)
     }
 
@@ -26,17 +44,25 @@ impl Target for EmuState {
         None
     }
 
-    fn extended_mode(&mut self) -> Option<gdbstub::target::ext::extended_mode::ExtendedModeOps<Self>> {
+    fn extended_mode(
+        &mut self,
+    ) -> Option<gdbstub::target::ext::extended_mode::ExtendedModeOps<Self>> {
         None
     }
 
-    fn section_offsets(&mut self) -> Option<gdbstub::target::ext::section_offsets::SectionOffsetsOps<Self>> {
+    fn section_offsets(
+        &mut self,
+    ) -> Option<gdbstub::target::ext::section_offsets::SectionOffsetsOps<Self>> {
         None
     }
 
     fn target_description_xml_override(
         &mut self,
-    ) -> Option<gdbstub::target::ext::target_description_xml_override::TargetDescriptionXmlOverrideOps<Self>> {
+    ) -> Option<
+        gdbstub::target::ext::target_description_xml_override::TargetDescriptionXmlOverrideOps<
+            Self,
+        >,
+    > {
         None
     }
 }
@@ -67,8 +93,7 @@ impl SingleThreadOps for EmuState {
                     }
                 }
             }
-            _ => Err("cannot resume")
-            
+            _ => Err("cannot resume"),
         }
     }
 
@@ -76,11 +101,9 @@ impl SingleThreadOps for EmuState {
         &mut self,
         regs: &mut gdbstub::arch::mips::reg::MipsCoreRegs<u32>,
     ) -> gdbstub::target::TargetResult<(), Self> {
-       
-       
         for i in 0..31 {
             regs.r[i] = self.emu.read_gen_reg(i);
-        };
+        }
 
         regs.hi = self.emu.r3000.hi;
         regs.lo = self.emu.r3000.lo;
@@ -93,12 +116,13 @@ impl SingleThreadOps for EmuState {
         Ok(())
     }
 
-    fn write_registers(&mut self, regs: &gdbstub::arch::mips::reg::MipsCoreRegs<u32>)
-        -> gdbstub::target::TargetResult<(), Self> {
-        
+    fn write_registers(
+        &mut self,
+        regs: &gdbstub::arch::mips::reg::MipsCoreRegs<u32>,
+    ) -> gdbstub::target::TargetResult<(), Self> {
         for i in 0..31 {
             self.emu.set_gen_reg(i, regs.r[i]);
-        };
+        }
 
         self.emu.r3000.hi = regs.hi;
         self.emu.r3000.lo = regs.lo;
@@ -128,7 +152,10 @@ impl SingleThreadOps for EmuState {
         data: &[u8],
     ) -> gdbstub::target::TargetResult<(), Self> {
         for i in 0..data.len() {
-            self.emu.r3000.main_bus.write_byte(start_addr + i as u32, data[i]);
+            self.emu
+                .r3000
+                .main_bus
+                .write_byte(start_addr + i as u32, data[i]);
         }
 
         Ok(())
@@ -141,10 +168,7 @@ impl SwBreakpoint for EmuState {
         TargetResult::<bool, Self>::Ok(true)
     }
 
-    fn remove_sw_breakpoint(
-        &mut self,
-        addr: u32,
-    ) -> gdbstub::target::TargetResult<bool, Self> {
+    fn remove_sw_breakpoint(&mut self, addr: u32) -> gdbstub::target::TargetResult<bool, Self> {
         self.emu.remove_sw_breakpoint(addr);
         TargetResult::<bool, Self>::Ok(true)
     }
@@ -157,10 +181,7 @@ impl HwBreakpoint for EmuState {
         TargetResult::<bool, Self>::Ok(true)
     }
 
-    fn remove_hw_breakpoint(
-        &mut self,
-        addr: u32,
-    ) -> TargetResult<bool, Self> {
+    fn remove_hw_breakpoint(&mut self, addr: u32) -> TargetResult<bool, Self> {
         self.emu.remove_sw_breakpoint(addr);
         TargetResult::<bool, Self>::Ok(true)
     }

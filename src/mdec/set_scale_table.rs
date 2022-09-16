@@ -23,7 +23,8 @@ impl MdecCommand for SetScaleTableCommand {
     fn execute(&self, ctx: &mut super::MDEC) {
         ctx.scale_table.clear();
         for i in 0..32 {
-            ctx.scale_table.push((ctx.parameter_buffer[i] & 0xFFFF) as i16);
+            ctx.scale_table
+                .push((ctx.parameter_buffer[i] & 0xFFFF) as i16);
             ctx.scale_table.push((ctx.parameter_buffer[i] >> 16) as i16);
         }
     }
@@ -36,6 +37,5 @@ impl MdecCommand for SetScaleTableCommand {
         "SetScaleTable"
     }
 
-    fn set_status(&self, _status: &mut u32) {
-    }
+    fn set_status(&self, _status: &mut u32) {}
 }

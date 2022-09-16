@@ -1,8 +1,8 @@
 use bios::Bios;
 use bus::MainBus;
-use controller::{ButtonState, controller_execute_cycle};
+use controller::{controller_execute_cycle, ButtonState};
 use cpu::R3000;
-use gpu::{Resolution, DrawCall};
+use gpu::{DrawCall, Resolution};
 use timer::TimerState;
 
 use crate::cdrom::disc::Disc;
@@ -18,10 +18,10 @@ pub mod controller;
 pub mod cpu;
 mod dma;
 pub mod gpu;
+mod mdec;
 mod memory;
 mod spu;
 mod timer;
-mod mdec;
 
 static mut LOGGING: bool = false;
 
@@ -31,7 +31,7 @@ pub struct PSXEmu {
     cycle_count: u32,
     halt_requested: bool,
     sw_breakpoints: Vec<u32>,
-    watchpoints: Vec<u32>
+    watchpoints: Vec<u32>,
 }
 
 impl PSXEmu {
@@ -64,7 +64,9 @@ impl PSXEmu {
     /// Runs a single time unit. Each unit has the correct-ish ratio of cpu:gpu cycles
     pub fn step_cycle(&mut self) {
         for _ in 0..2 {
-            if self.halt_requested {return};
+            if self.halt_requested {
+                return;
+            };
             self.run_cpu_cycle();
             self.run_gpu_cycle();
         }
@@ -85,8 +87,6 @@ impl PSXEmu {
             return;
         }
 
-        
- 
         controller_execute_cycle(&mut self.r3000);
         cdrom::step_cycle(&mut self.r3000);
         self.r3000.step_instruction(&mut self.timers);
@@ -205,7 +205,11 @@ impl PSXEmu {
     }
 
     pub fn add_watchpoint(&mut self, addr: u32) {
-        println!("Adding watchpoint for addr {:#X} ({:#X} masked)", addr, addr & 0x1fffffff);
+        println!(
+            "Adding watchpoint for addr {:#X} ({:#X} masked)",
+            addr,
+            addr & 0x1fffffff
+        );
         self.watchpoints.push(addr & 0x1FFFFFFF);
     }
 
@@ -220,9 +224,10 @@ impl PSXEmu {
     pub fn display_origin(&self) -> (usize, usize) {
         self.r3000.main_bus.gpu.display_origin()
     }
-
 }
 
 pub fn toggle_memory_logging(enabled: bool) {
-    unsafe {LOGGING = enabled;}
+    unsafe {
+        LOGGING = enabled;
+    }
 }

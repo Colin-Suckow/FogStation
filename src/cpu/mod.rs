@@ -3,18 +3,18 @@ use std::convert::TryFrom;
 use bit_field::BitField;
 
 use cop0::Cop0;
-use instruction:: decode_opcode;
+use instruction::decode_opcode;
 use log::warn;
 
+use crate::bus::MainBus;
 use crate::cpu::instruction::RegisterNames;
 use crate::timer::TimerState;
-use crate::bus::MainBus;
 
 use self::gte::GTE;
 
 mod cop0;
-mod instruction;
 mod gte;
+mod instruction;
 mod interpreter;
 
 #[derive(Debug, Clone, Copy)]
@@ -52,7 +52,7 @@ pub enum Exception {
 #[derive(Debug)]
 struct LoadDelay {
     register: u8,
-    value: u32
+    value: u32,
 }
 
 pub struct R3000 {
@@ -128,7 +128,11 @@ impl R3000 {
 
     fn print_registers(&self) {
         for r in 0..=32 {
-            print!("{:#4} : {:#10X}, ", RegisterNames::try_from(r as usize).unwrap(), self.read_reg(r));
+            print!(
+                "{:#4} : {:#10X}, ",
+                RegisterNames::try_from(r as usize).unwrap(),
+                self.read_reg(r)
+            );
             if r % 8 == 0 && r != 0 {
                 println!("");
             }
@@ -155,23 +159,19 @@ impl R3000 {
                         let base = self.read_reg(RegisterNames::a1 as u8);
                         for i in 0..len {
                             let char = self.read_bus_byte(base + i);
-                            print!("{}",
-                            unsafe { std::str::from_utf8_unchecked(&[char]) }
-                            );
+                            print!("{}", unsafe { std::str::from_utf8_unchecked(&[char]) });
                         }
                     }
-                },
+                }
 
                 0x3D => {
-                    print!(
-                    "{}",
-                    unsafe {std::str::from_utf8_unchecked(&[self.read_reg(4) as u8])} )
-                },
-                _ => ()
+                    print!("{}", unsafe {
+                        std::str::from_utf8_unchecked(&[self.read_reg(4) as u8])
+                    })
+                }
+                _ => (),
             }
-            
         }
-
 
         if self.pc == 0xA0 {
             //println!("SYSCALL A({:#X}) pc: {:#X}", self.read_reg(9), self.current_pc);
@@ -198,40 +198,34 @@ impl R3000 {
         if self.main_bus.gpu.consume_vblank() {
             self.fire_external_interrupt(InterruptSource::VBLANK);
         };
-        
+
         // Handle interrupts
         let mut cause = self.cop0.read_reg(13);
         cause.set_bit(10, self.i_status & self.i_mask != 0);
         self.cop0.write_reg(13, cause);
-        
-        
+
         if self.cop0.interrupts_enabled() && cause & 0x700 != 0 {
             //println!("Interrupt hit! i_status: {:#X}", self.i_status);
             self.fire_exception(Exception::Int);
         }
-        
 
         let instruction = self.main_bus.read_word(self.pc);
         self.current_pc = self.pc;
         self.pc += 4;
 
-        
-
         self.exec_delay = false;
         self.last_was_branch = false;
-        
-        if self.log  {
+
+        if self.log {
             self.log_instruction(instruction);
         }
         self.cycle_count = self.cycle_count.wrapping_add(1);
         self.execute_instruction(instruction, timers);
 
-
         // if self.main_bus.last_touched_addr == 0x121CA8 {
         //     println!("lta pc {:#X} val {:#X}", self.current_pc, self.main_bus.read_word(0x121CA8));
         //     self.last_touched_addr = 0;
         // }
-
 
         //Execute branch delay operation
         if self.delay_slot != 0 {
@@ -245,11 +239,9 @@ impl R3000 {
             self.cycle_count = self.cycle_count.wrapping_add(1);
             self.execute_instruction(delay_instruction, timers);
             self.exec_delay = false;
-            self.delay_slot = 0;    
+            self.delay_slot = 0;
         }
-        
     }
-
 
     fn flush_load_delay(&mut self) {
         if let Some(delay) = self.load_delay.take() {
@@ -268,7 +260,13 @@ impl R3000 {
         //     self.read_reg(instruction.rd()),
         // );
 
-        println!("{:08x} {:08x}: {:<7}{}", self.current_pc, instruction, inst.mnemonic(), inst.arguments(self));
+        println!(
+            "{:08x} {:08x}: {:<7}{}",
+            self.current_pc,
+            instruction,
+            inst.mnemonic(),
+            inst.arguments(self)
+        );
     }
 
     pub fn execute_instruction(&mut self, opcode: u32, timers: &mut TimerState) {
@@ -284,8 +282,6 @@ impl R3000 {
             panic!("Unknown opcode! {:X}", opcode);
         }
     }
-
-    
 
     pub fn fire_exception(&mut self, exception: Exception) {
         //println!("CPU EXCEPTION: Type: {:?} PC: {:#X}", exception, self.current_pc);
@@ -342,16 +338,13 @@ impl R3000 {
     pub fn write_bus_word(&mut self, addr: u32, val: u32, timers: &mut TimerState) {
         self.last_touched_addr = addr & 0x1fffffff;
 
-        
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
             return;
         }
-        
 
         match addr & 0x1fffffff {
             0x1F801070 => {
-
                 self.i_status &= val & 0x3FF;
             }
             0x1F801074 => {
@@ -374,7 +367,7 @@ impl R3000 {
             _ => self.main_bus.read_half_word(addr),
         }
     }
-    
+
     pub fn read_bus_byte(&mut self, addr: u32) -> u8 {
         //self.last_touched_addr = addr & 0x1fffffff;
         if addr & 0x1fffffff == 0x1f801040 {
@@ -388,7 +381,6 @@ impl R3000 {
             _ => self.main_bus.read_byte(addr),
         }
     }
-   
 
     fn write_bus_half_word(&mut self, addr: u32, val: u16, timers: &mut TimerState) {
         self.last_touched_addr = addr & 0x1fffffff;
@@ -442,7 +434,7 @@ impl R3000 {
                 self.write_reg(current_delay.register, current_delay.value);
             }
         }
-        self.load_delay = Some(LoadDelay{
+        self.load_delay = Some(LoadDelay {
             register: register_number,
             value: value,
         });

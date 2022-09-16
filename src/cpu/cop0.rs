@@ -29,7 +29,6 @@ impl Cop0 {
         } else {
             self.gen_registers[register_number as usize] = value;
         }
-       
     }
 
     pub fn cache_isolated(&self) -> bool {
@@ -38,7 +37,7 @@ impl Cop0 {
 
     pub fn set_cause_execode(&mut self, exception: &Exception) {
         self.gen_registers[13] =
-            (((!((0x1F as u32) << 2)) & self.gen_registers[13])) | ((exception.clone() as u32) << 2);
+            ((!((0x1F as u32) << 2)) & self.gen_registers[13]) | ((exception.clone() as u32) << 2);
     }
 
     pub fn interrupts_enabled(&self) -> bool {

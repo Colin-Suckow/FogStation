@@ -1,5 +1,5 @@
-use super::{CDDrive, DriveState, IntCause, MotorState, Packet, disc::dec_to_bcd};
-use crate::cdrom::{DriveSpeed, disc::DiscIndex};
+use super::{disc::dec_to_bcd, CDDrive, DriveState, IntCause, MotorState, Packet};
+use crate::cdrom::{disc::DiscIndex, DriveSpeed};
 
 pub(super) const AVG_FIRST_RESPONSE_TIME: u32 = 0xc4e1;
 
@@ -21,7 +21,7 @@ fn stat(state: &CDDrive, command: u8) -> Packet {
         response: vec![state.get_stat()],
         execution_cycles: AVG_FIRST_RESPONSE_TIME,
         extra_response: None,
-        command
+        command,
     }
 }
 
@@ -49,7 +49,7 @@ pub(super) fn get_id(state: &CDDrive) -> Packet {
             response: vec![0x08, 0x40, 0, 0, 0, 0, 0, 0], //No disk
             execution_cycles: 0x4a00,
             extra_response: None,
-            command: 0x1a
+            command: 0x1a,
         };
         first_response.extra_response = Some(Box::new(second_response));
         first_response
@@ -68,7 +68,8 @@ pub(super) fn init(state: &mut CDDrive) -> Packet {
 }
 
 pub(super) fn set_loc(state: &mut CDDrive, minutes: u8, seconds: u8, frames: u8) -> Packet {
-    state.next_seek_target = DiscIndex::new_bcd(minutes as usize, seconds as usize, frames as usize);
+    state.next_seek_target =
+        DiscIndex::new_bcd(minutes as usize, seconds as usize, frames as usize);
     state.seek_complete = false;
     state.data_queue.clear();
     //println!("set_loc to {}", state.next_seek_target);
@@ -106,7 +107,6 @@ pub(super) fn set_mode(state: &mut CDDrive, mode: u8) -> Packet {
 //This is only the initial return. All of the reading is handled in the post condition
 //It's messy, but it works for now
 pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
-
     let mut initial_response = stat(state, 0x6);
     state.drive_state = DriveState::Read;
     state.read_enabled = true;
@@ -136,12 +136,11 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
 pub(super) fn pause_read(state: &mut CDDrive) -> Packet {
     //println!("stop read (pause)");
     let mut initial_response = stat(state, 0x9);
-   
 
     let cycles = if state.drive_state == DriveState::Idle {
         0x1df2 // pausing is much faster when already paused
     } else {
-        match state.drive_speed(){
+        match state.drive_speed() {
             DriveSpeed::Double => 0x10bd93,
             DriveSpeed::Single => 0x21181c,
         }
@@ -172,7 +171,14 @@ pub(super) fn demute(state: &mut CDDrive) -> Packet {
 // Assumes theres only one session
 pub(super) fn get_tn(state: &mut CDDrive) -> Packet {
     let first_track = 0x1;
-    let last_track = dec_to_bcd(state.disc.as_ref().expect("Tried to read non-existent disc!").track_count() + 1);
+    let last_track = dec_to_bcd(
+        state
+            .disc
+            .as_ref()
+            .expect("Tried to read non-existent disc!")
+            .track_count()
+            + 1,
+    );
 
     let mut initial_response = stat(state, 0x13);
 
@@ -202,7 +208,6 @@ pub(super) fn play(state: &mut CDDrive) -> Packet {
 pub(super) fn mute(state: &mut CDDrive) -> Packet {
     stat(state, 0xB)
 }
-
 
 // Slams the brakes on the drive completely
 pub(super) fn stop(state: &mut CDDrive) -> Packet {

@@ -4,7 +4,7 @@ use super::MdecCommand;
 
 #[derive(Clone, Copy)]
 pub(crate) struct SetQuantTableCommand {
-    color: bool
+    color: bool,
 }
 
 impl SetQuantTableCommand {
@@ -17,7 +17,7 @@ impl SetQuantTableCommand {
         };
 
         Self {
-            color: command_word.get_bit(0) as bool
+            color: command_word.get_bit(0) as bool,
         }
     }
 }
@@ -55,6 +55,5 @@ impl MdecCommand for SetQuantTableCommand {
         "SetQuantTable"
     }
 
-    fn set_status(&self, _status: &mut u32) {
-    }
+    fn set_status(&self, _status: &mut u32) {}
 }

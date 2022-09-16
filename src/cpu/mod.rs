@@ -11,6 +11,7 @@ use crate::timer::TimerState;
 use crate::bus::MainBus;
 
 use self::gte::GTE;
+use self::instruction::Instruction;
 
 mod cop0;
 mod instruction;
@@ -272,437 +273,443 @@ impl R3000 {
         println!("{:08x} {:08x}: {:<7}{}", self.current_pc, instruction, inst.mnemonic(), inst.arguments(self));
     }
 
-    pub fn execute_instruction(&mut self, instruction: u32, timers: &mut TimerState) {
+    pub fn execute_instruction(&mut self, opcode: u32, timers: &mut TimerState) {
         if self.pc % 4 != 0 || self.delay_slot % 4 != 0 {
             warn!("Tried to execute out of alignment");
             self.fire_exception(Exception::AdEL);
             return;
         }
 
-        match instruction.opcode() {
-            0x0 => {
-                //SPECIAL INSTRUCTIONS
-                match instruction.funct() {
-                    0x0 => {
-                        //SLL
-                        // if instruction.rt() == 0 {
-                        //     //Actually a NOP
-                        //     return;
-                        // }
-                        self.op_sll(instruction);
-                        //println!("{:#X} << {:#X} = {:#X}", self.read_reg(instruction.rt()), instruction.shamt(), self.read_reg(instruction.rd()));
-                    }
+        if let Some(inst) = decode_opcode(opcode) {
+            inst.execute(self);
+        } else {
+            panic!("Unknown opcode! {:x}", opcode);
+        }
 
-                    0x2 => {
-                        //SRL
-                        self.op_srl(instruction);
-                    }
+        // match instruction.opcode() {
+        //     0x0 => {
+        //         //SPECIAL INSTRUCTIONS
+        //         match instruction.funct() {
+        //             0x0 => {
+        //                 //SLL
+        //                 // if instruction.rt() == 0 {
+        //                 //     //Actually a NOP
+        //                 //     return;
+        //                 // }
+        //                 self.op_sll(instruction);
+        //                 //println!("{:#X} << {:#X} = {:#X}", self.read_reg(instruction.rt()), instruction.shamt(), self.read_reg(instruction.rd()));
+        //             }
 
-                    0x3 => {
-                        //SRA
-                        self.op_sra(instruction);
-                    }
+        //             0x2 => {
+        //                 //SRL
+        //                 self.op_srl(instruction);
+        //             }
 
-                    0x4 => {
-                        //SLLV
-                        self.op_sllv(instruction);
-                    }
+        //             0x3 => {
+        //                 //SRA
+        //                 self.op_sra(instruction);
+        //             }
 
-                    0x6 => {
-                        //SRLV
-                        self.op_srlv(instruction);
-                    }
+        //             0x4 => {
+        //                 //SLLV
+        //                 self.op_sllv(instruction);
+        //             }
 
-                    0x7 => {
-                        //SRAV
-                        self.op_srav(instruction);
-                    }
+        //             0x6 => {
+        //                 //SRLV
+        //                 self.op_srlv(instruction);
+        //             }
 
-                    0x8 => {
-                        //JR
-                        self.op_jr(instruction)
-                    }
+        //             0x7 => {
+        //                 //SRAV
+        //                 self.op_srav(instruction);
+        //             }
 
-                    0x9 => {
-                        //JALR
-                        self.op_jalr(instruction)
-                    }
+        //             0x8 => {
+        //                 //JR
+        //                 self.op_jr(instruction)
+        //             }
 
-                    0xC => {
-                        //SYSCALL
-                        //println!("SYSCALL {:#X}", self.read_reg(9));
-                        self.op_syscall();
-                    }
+        //             0x9 => {
+        //                 //JALR
+        //                 self.op_jalr(instruction)
+        //             }
 
-                    0xD => {
-                        //BREAK
-                        self.op_break();
-                    }
+        //             0xC => {
+        //                 //SYSCALL
+        //                 //println!("SYSCALL {:#X}", self.read_reg(9));
+        //                 self.op_syscall();
+        //             }
 
-                    0x10 => {
-                        //MFHI
-                        self.op_mfhi(instruction);
-                    }
+        //             0xD => {
+        //                 //BREAK
+        //                 self.op_break();
+        //             }
 
-                    0x11 => {
-                        //MTHI
-                        self.op_mthi(instruction);
-                    }
+        //             0x10 => {
+        //                 //MFHI
+        //                 self.op_mfhi(instruction);
+        //             }
 
-                    0x12 => {
-                        //MFLO
-                        self.op_mflo(instruction);
-                    }
+        //             0x11 => {
+        //                 //MTHI
+        //                 self.op_mthi(instruction);
+        //             }
 
-                    0x13 => {
-                        //MTLO
-                        self.op_mtlo(instruction);
-                    }
+        //             0x12 => {
+        //                 //MFLO
+        //                 self.op_mflo(instruction);
+        //             }
 
-                    0x1A => {
-                        //DIV
-                        self.op_div(instruction);
-                    }
+        //             0x13 => {
+        //                 //MTLO
+        //                 self.op_mtlo(instruction);
+        //             }
 
-                    0x1B => {
-                        //DIVU
-                        self.op_divu(instruction);
-                    }
+        //             0x1A => {
+        //                 //DIV
+        //                 self.op_div(instruction);
+        //             }
 
-                    0x20 => {
-                        //ADD
-                        self.op_add(instruction);
-                    }
+        //             0x1B => {
+        //                 //DIVU
+        //                 self.op_divu(instruction);
+        //             }
 
-                    0x22 => {
-                        //SUB
-                        self.op_sub(instruction);
-                    }
+        //             0x20 => {
+        //                 //ADD
+        //                 self.op_add(instruction);
+        //             }
 
-                    0x2B => {
-                        //SLTU
-                        self.op_sltu(instruction);
-                    }
+        //             0x22 => {
+        //                 //SUB
+        //                 self.op_sub(instruction);
+        //             }
 
-                    0x23 => {
-                        //SUBU
-                        self.op_subu(instruction);
-                    }
+        //             0x2B => {
+        //                 //SLTU
+        //                 self.op_sltu(instruction);
+        //             }
 
-                    0x24 => {
-                        //AND
-                        //println!("{} ({:#X}) & {} ({:#X}) = {} ({:#X})", instruction.rs(), self.read_reg(instruction.rs()), instruction.rt(), self.read_reg(instruction.rt()), instruction.rd(), self.read_reg(instruction.rs()) & self.read_reg(instruction.rt()));
-                        self.op_and(instruction);
-                    }
+        //             0x23 => {
+        //                 //SUBU
+        //                 self.op_subu(instruction);
+        //             }
 
-                    0x25 => {
-                        //OR
-                        self.op_or(instruction);
-                    }
+        //             0x24 => {
+        //                 //AND
+        //                 //println!("{} ({:#X}) & {} ({:#X}) = {} ({:#X})", instruction.rs(), self.read_reg(instruction.rs()), instruction.rt(), self.read_reg(instruction.rt()), instruction.rd(), self.read_reg(instruction.rs()) & self.read_reg(instruction.rt()));
+        //                 self.op_and(instruction);
+        //             }
 
-                    0x26 => {
-                        //XOR
-                        self.op_xor(instruction);
-                    }
+        //             0x25 => {
+        //                 //OR
+        //                 self.op_or(instruction);
+        //             }
 
-                    0x27 => {
-                        //NOR
-                        self.op_nor(instruction);
-                    }
+        //             0x26 => {
+        //                 //XOR
+        //                 self.op_xor(instruction);
+        //             }
 
-                    0x21 => {
-                        //ADDU
-                        self.op_addu(instruction);
-                    }
+        //             0x27 => {
+        //                 //NOR
+        //                 self.op_nor(instruction);
+        //             }
 
-                    0x18 => {
-                        //MULT
-                        self.op_mult(instruction);
-                    }
+        //             0x21 => {
+        //                 //ADDU
+        //                 self.op_addu(instruction);
+        //             }
 
-                    0x19 => {
-                        //MULTU
-                        self.op_multu(instruction);
-                    }
+        //             0x18 => {
+        //                 //MULT
+        //                 self.op_mult(instruction);
+        //             }
 
-                    0x2A => {
-                        //SLT
-                        self.op_slt(instruction);
-                    }
+        //             0x19 => {
+        //                 //MULTU
+        //                 self.op_multu(instruction);
+        //             }
 
-                    _ => panic!(
-                        "CPU: Unknown SPECIAL instruction. FUNCT is {0} ({0:#08b}, {0:#X}) PC {1:#X} FULL {2:#X}",
-                        instruction.funct(),
-                        self.pc,
-                        instruction
-                    ),
-                }
-            }
+        //             0x2A => {
+        //                 //SLT
+        //                 self.op_slt(instruction);
+        //             }
 
-            0x1 => {
-                // Wacky branch instructions. Copied from rustation
-                let s = instruction.rs();
+        //             _ => panic!(
+        //                 "CPU: Unknown SPECIAL instruction. FUNCT is {0} ({0:#08b}, {0:#X}) PC {1:#X} FULL {2:#X}",
+        //                 instruction.funct(),
+        //                 self.pc,
+        //                 instruction
+        //             ),
+        //         }
+        //     }
 
-                let is_bgez = instruction.get_bit(16) as u32;
-                let is_link = (instruction >> 17) & 0xf == 0x8;
+        //     0x1 => {
+        //         // Wacky branch instructions. Copied from rustation
+        //         let s = instruction.rs();
 
-                let v = self.read_reg(s) as i32;
-                let test = (v < 0) as u32;
+        //         let is_bgez = instruction.get_bit(16) as u32;
+        //         let is_link = (instruction >> 17) & 0xf == 0x8;
 
-                let test = test ^ is_bgez;
+        //         let v = self.read_reg(s) as i32;
+        //         let test = (v < 0) as u32;
 
-                self.flush_load_delay();
+        //         let test = test ^ is_bgez;
 
-                if is_link {
-                    self.write_reg(31, self.pc + 4);
-                }
+        //         self.flush_load_delay();
 
-                if test != 0 {
-                    self.delay_slot = self.pc;
-                    self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
-                }
+        //         if is_link {
+        //             self.write_reg(31, self.pc + 4);
+        //         }
+
+        //         if test != 0 {
+        //             self.delay_slot = self.pc;
+        //             self.pc = ((instruction.immediate_sign_extended() as u32) << 2).wrapping_add(self.delay_slot);
+        //         }
 
     
-            }
+        //     }
 
-            0x2 => {
-                //J
-                self.op_j(instruction);
-            }
+        //     0x2 => {
+        //         //J
+        //         self.op_j(instruction);
+        //     }
 
-            0x3 => {
-                //JAL
-                self.op_jal(instruction);
-            }
+        //     0x3 => {
+        //         //JAL
+        //         self.op_jal(instruction);
+        //     }
 
-            0x4 => {
-                //BEQ
-                self.last_was_branch = true;
-                self.op_beq(instruction);
-            }
+        //     0x4 => {
+        //         //BEQ
+        //         self.last_was_branch = true;
+        //         self.op_beq(instruction);
+        //     }
 
-            0x5 => {
-                //BNE
-                self.last_was_branch = true;
-                self.op_bne(instruction);
-            }
+        //     0x5 => {
+        //         //BNE
+        //         self.last_was_branch = true;
+        //         self.op_bne(instruction);
+        //     }
 
-            0x6 => {
-                //BLEZ
-                self.last_was_branch = true;
-                self.op_blez(instruction);
-            }
+        //     0x6 => {
+        //         //BLEZ
+        //         self.last_was_branch = true;
+        //         self.op_blez(instruction);
+        //     }
 
-            0x7 => {
-                //BGTZ
-                self.last_was_branch = true;
-                self.op_bgtz(instruction);
-            }
+        //     0x7 => {
+        //         //BGTZ
+        //         self.last_was_branch = true;
+        //         self.op_bgtz(instruction);
+        //     }
 
-            0x8 => {
-                //ADDI
-                self.op_addi(instruction);
-            }
+        //     0x8 => {
+        //         //ADDI
+        //         self.op_addi(instruction);
+        //     }
 
-            0x9 => {
-                //ADDIU
-                //println!("Value {:#X}", instruction.immediate_sign_extended());
-                self.op_addiu(instruction);
-            }
+        //     0x9 => {
+        //         //ADDIU
+        //         //println!("Value {:#X}", instruction.immediate_sign_extended());
+        //         self.op_addiu(instruction);
+        //     }
 
-            0xA => {
-                //SLTI
-                self.op_slti(instruction);
-            }
+        //     0xA => {
+        //         //SLTI
+        //         self.op_slti(instruction);
+        //     }
 
-            0xB => {
-                //SLTIU
-                self.op_sltiu(instruction);
-            }
+        //     0xB => {
+        //         //SLTIU
+        //         self.op_sltiu(instruction);
+        //     }
 
-            0xC => {
-                //ANDI
-                self.op_andi(instruction);
-            }
+        //     0xC => {
+        //         //ANDI
+        //         self.op_andi(instruction);
+        //     }
 
-            0xD => {
-                //ORI
-                self.op_ori(instruction);
-            }
+        //     0xD => {
+        //         //ORI
+        //         self.op_ori(instruction);
+        //     }
 
-            0xE => {
-                //XORI
-                self.op_xori(instruction);
-            }
-            0xF => {
-                //LUI
-                self.op_lui(instruction);
-            }
+        //     0xE => {
+        //         //XORI
+        //         self.op_xori(instruction);
+        //     }
+        //     0xF => {
+        //         //LUI
+        //         self.op_lui(instruction);
+        //     }
 
-            0x10 => {
-                //COP0 instructions
-                match instruction.rs() {
-                    0x4 => {
-                        //MTC0
-                        self.op_mtc0(instruction);
-                    }
-                    0x0 => {
-                        //MFC0
-                        //println!("Reading COP0 reg {}. Val {:#X}", instruction.rd(), self.cop0.read_reg(instruction.rd()));
-                        self.op_mfc0(instruction);
-                    }
+        //     0x10 => {
+        //         //COP0 instructions
+        //         match instruction.rs() {
+        //             0x4 => {
+        //                 //MTC0
+        //                 self.op_mtc0(instruction);
+        //             }
+        //             0x0 => {
+        //                 //MFC0
+        //                 //println!("Reading COP0 reg {}. Val {:#X}", instruction.rd(), self.cop0.read_reg(instruction.rd()));
+        //                 self.op_mfc0(instruction);
+        //             }
 
-                    0x10 => {
-                        //RFE
-                        self.op_rfe();
-                    }
-                    _ => panic!(
-                        "CPU: Unknown COP0 MFC instruction {:#X} ({0:#b}, {0})",
-                        instruction.rs()
-                    ),
-                }
-            }
+        //             0x10 => {
+        //                 //RFE
+        //                 self.op_rfe();
+        //             }
+        //             _ => panic!(
+        //                 "CPU: Unknown COP0 MFC instruction {:#X} ({0:#b}, {0})",
+        //                 instruction.rs()
+        //             ),
+        //         }
+        //     }
 
-            0x12 => {
-                //COP2 (GTE) instructions
-                if instruction.get_bit(25) {
-                    //COP2 imm25
-                    // Execute immediate GTE command
-                    self.flush_load_delay();
-                    self.gte.execute_command(instruction & 0x1FFFFFF);
-                } else {
-                    match instruction.rs() {
-                        0x0 => {
-                            //MFC2
-                            let val = self.gte.data_register(instruction.rd() as usize);
-                            self.delayed_load(instruction.rt(), val);
-                        }
+        //     0x12 => {
+        //         //COP2 (GTE) instructions
+        //         if instruction.get_bit(25) {
+        //             //COP2 imm25
+        //             // Execute immediate GTE command
+        //             self.flush_load_delay();
+        //             self.gte.execute_command(instruction & 0x1FFFFFF);
+        //         } else {
+        //             match instruction.rs() {
+        //                 0x0 => {
+        //                     //MFC2
+        //                     let val = self.gte.data_register(instruction.rd() as usize);
+        //                     self.delayed_load(instruction.rt(), val);
+        //                 }
     
-                        0x6 => {
-                            //CTC2
-                            let val = self.read_reg(instruction.rt());
-                            self.flush_load_delay();
-                            self.gte.set_control_register(instruction.rd() as usize, val);
-                        }
+        //                 0x6 => {
+        //                     //CTC2
+        //                     let val = self.read_reg(instruction.rt());
+        //                     self.flush_load_delay();
+        //                     self.gte.set_control_register(instruction.rd() as usize, val);
+        //                 }
     
-                        0x4 => {
-                            //MTC2
-                            let val = self.read_reg(instruction.rt());
-                            self.flush_load_delay();
-                            self.gte.set_data_register(instruction.rd() as usize, val);
-                        }
+        //                 0x4 => {
+        //                     //MTC2
+        //                     let val = self.read_reg(instruction.rt());
+        //                     self.flush_load_delay();
+        //                     self.gte.set_data_register(instruction.rd() as usize, val);
+        //                 }
     
-                        0x2 => {
-                            //CFC2
-                            self.delayed_load(instruction.rt(), self.gte.control_register(instruction.rd() as usize));
-                        }
+        //                 0x2 => {
+        //                     //CFC2
+        //                     self.delayed_load(instruction.rt(), self.gte.control_register(instruction.rd() as usize));
+        //                 }
     
-                        _ => panic!(
-                            "CPU: Unknown COP2 MFC instruction {:#X} ({0:#b}, {0}) {:#b}",
-                            instruction.rs(),
-                            instruction
-                        ),
-                    }
-                }
-            }
+        //                 _ => panic!(
+        //                     "CPU: Unknown COP2 MFC instruction {:#X} ({0:#b}, {0}) {:#b}",
+        //                     instruction.rs(),
+        //                     instruction
+        //                 ),
+        //             }
+        //         }
+        //     }
 
-            0x20 => {
-                //LB
-                self.op_lb(instruction);
-            }
+        //     0x20 => {
+        //         //LB
+        //         self.op_lb(instruction);
+        //     }
 
-            0x21 => {
-                //LH
-                self.op_lh(instruction, timers);
-            }
+        //     0x21 => {
+        //         //LH
+        //         self.op_lh(instruction, timers);
+        //     }
 
-            0x23 => {
-                //LW
-                self.op_lw(instruction, timers);
-            }
+        //     0x23 => {
+        //         //LW
+        //         self.op_lw(instruction, timers);
+        //     }
 
-            0x24 => {
-                //LBU
-                self.op_lbu(instruction);
-            }
+        //     0x24 => {
+        //         //LBU
+        //         self.op_lbu(instruction);
+        //     }
 
-            0x25 => {
-                //LHU
-                self.op_lhu(instruction, timers);
-            }
+        //     0x25 => {
+        //         //LHU
+        //         self.op_lhu(instruction, timers);
+        //     }
 
-            0x28 => {
-                //SB
-                self.op_sb(instruction);
-            }
+        //     0x28 => {
+        //         //SB
+        //         self.op_sb(instruction);
+        //     }
 
-            0x29 => {
-                //SH
-                self.op_sh(instruction, timers);
-            }
+        //     0x29 => {
+        //         //SH
+        //         self.op_sh(instruction, timers);
+        //     }
 
-            0x22 => {
-                //LWL
-                self.op_lwl(instruction, timers);
-            }
+        //     0x22 => {
+        //         //LWL
+        //         self.op_lwl(instruction, timers);
+        //     }
 
-            0x26 => {
-                //LWR
-                self.op_lwr(instruction, timers);
-            }
+        //     0x26 => {
+        //         //LWR
+        //         self.op_lwr(instruction, timers);
+        //     }
 
-            0x2A => {
-                //SWL
-                self.op_swl(instruction, timers);
-            }
+        //     0x2A => {
+        //         //SWL
+        //         self.op_swl(instruction, timers);
+        //     }
 
-            0x2E => {
-                //SWR
-                self.op_swr(instruction, timers);
-            }
+        //     0x2E => {
+        //         //SWR
+        //         self.op_swr(instruction, timers);
+        //     }
 
-            0x2B => {
-                //SW
-                //println!("R{} value {:#X}", instruction.rs(), self.read_reg(instruction.rs()));
-                //println!("PC WAS {:#X}", self.pc - 4);
+        //     0x2B => {
+        //         //SW
+        //         //println!("R{} value {:#X}", instruction.rs(), self.read_reg(instruction.rs()));
+        //         //println!("PC WAS {:#X}", self.pc - 4);
 
-                self.op_sw(instruction, timers);
-            }
+        //         self.op_sw(instruction, timers);
+        //     }
 
-            0x32 => {
-                //LWC2
-                let addr = instruction
-                    .immediate_sign_extended()
-                    .wrapping_add(self.read_reg(instruction.rs()));
-                let val = self.read_bus_word(addr, timers);
-                self.flush_load_delay();
-                self.gte.set_data_register(instruction.rt() as usize, val);
+        //     0x32 => {
+        //         //LWC2
+        //         let addr = instruction
+        //             .immediate_sign_extended()
+        //             .wrapping_add(self.read_reg(instruction.rs()));
+        //         let val = self.read_bus_word(addr, timers);
+        //         self.flush_load_delay();
+        //         self.gte.set_data_register(instruction.rt() as usize, val);
 
-            }
+        //     }
 
-            0x3A => {
-                //SWC2
-                let addr = instruction
-                    .immediate_sign_extended()
-                    .wrapping_add(self.read_reg(instruction.rs()));
-                let val = if instruction.rt() > 31 {
-                    self.gte.control_register(instruction.rt() as usize - 32)
-                } else {
-                    self.gte.data_register(instruction.rt() as usize)
-                };
-                self.flush_load_delay();
-                self.write_bus_word(addr, val, timers);
+        //     0x3A => {
+        //         //SWC2
+        //         let addr = instruction
+        //             .immediate_sign_extended()
+        //             .wrapping_add(self.read_reg(instruction.rs()));
+        //         let val = if instruction.rt() > 31 {
+        //             self.gte.control_register(instruction.rt() as usize - 32)
+        //         } else {
+        //             self.gte.data_register(instruction.rt() as usize)
+        //         };
+        //         self.flush_load_delay();
+        //         self.write_bus_word(addr, val, timers);
 
-            }
+        //     }
 
             
-            _ => panic!(
-                "CPU: Unknown opcode {0} ({0:#08b}, {0:#X}) PC {1:#X} FULL {2:#X}",
-                instruction.opcode(),
-                self.current_pc,
-                instruction
-            ),
-        };
+        //     _ => panic!(
+        //         "CPU: Unknown opcode {0} ({0:#08b}, {0:#X}) PC {1:#X} FULL {2:#X}",
+        //         instruction.opcode(),
+        //         self.current_pc,
+        //         instruction
+        //     ),
+        // };
     }
 
     

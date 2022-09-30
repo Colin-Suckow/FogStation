@@ -10,7 +10,7 @@ use log::{error, trace, warn};
 use nalgebra::Vector2;
 use num_traits::clamp;
 
-const CYCLES_PER_SCANLINE: u32 = 2500;
+const CYCLES_PER_SCANLINE: u32 = 3413;
 const TOTAL_SCANLINES: u32 = 263;
 
 #[derive(Copy, Clone, Debug, Display)]
@@ -240,6 +240,7 @@ pub struct Gpu {
 
     ntsc_y1: u32,
     ntsc_y2: u32,
+    cycle_counter: u32,
 
     blend_mode: BlendMode,
     force_mask: bool,
@@ -295,6 +296,7 @@ impl Gpu {
 
             ntsc_y1: 16,
             ntsc_y2: 256,
+            cycle_counter: 0,
 
             blend_mode: BlendMode::BAF,
             force_mask: false,
@@ -1621,27 +1623,49 @@ impl Gpu {
         }
     }
 
-    pub fn execute_cycle(&mut self) {
-        self.pixel_count += 1;
+    fn dotclock_cycled(&mut self) -> bool {
+        self.cycle_counter += 1;
+        self.cycle_counter % (2560 / self.display_h_res) == 0
+    }
 
-        if self.pixel_count % CYCLES_PER_SCANLINE == 0 {
+    pub fn execute_cycle(&mut self) -> bool {
+        if self.cycle_counter % CYCLES_PER_SCANLINE == 0 {
             self.hblank_consumed = false;
         }
 
-        if self.pixel_count > CYCLES_PER_SCANLINE * TOTAL_SCANLINES {
-            self.pixel_count = 0;
+        if self.cycle_counter > CYCLES_PER_SCANLINE * TOTAL_SCANLINES {
+            self.cycle_counter = 0;
             self.vblank_consumed = false;
             self.frame_ready = true;
             trace!("VBLANK DONE");
         }
+        if self.dotclock_cycled() {
+            let dots_per_line = 3413 / (2560 / self.display_h_res);
+            self.pixel_count += 1;
+            // if self.pixel_count % dots_per_line == 0 {
+            //     self.hblank_consumed = false;
+            // }
+            //
+            // if self.pixel_count > dots_per_line * TOTAL_SCANLINES {
+            //     self.pixel_count = 0;
+            //     self.vblank_consumed = false;
+            //     self.frame_ready = true;
+            //     trace!("VBLANK DONE");
+            // }
+            true
+        } else {
+            false
+        }
     }
 
     pub fn is_vblank(&self) -> bool {
-        self.pixel_count > CYCLES_PER_SCANLINE * (self.ntsc_y2 - self.ntsc_y1)
+        self.cycle_counter > CYCLES_PER_SCANLINE * (self.ntsc_y2 - self.ntsc_y1)
+        //self.pixel_count > (3413 / (2560 / self.display_h_res)) * (self.ntsc_y2 - self.ntsc_y1)
     }
 
     pub fn is_hblank(&self) -> bool {
-        self.pixel_count % CYCLES_PER_SCANLINE > self.display_h_res
+        self.cycle_counter % CYCLES_PER_SCANLINE > self.display_h_res
+        //self.pixel_count % 3413 / (2560 / self.display_h_res) > self.display_h_res
     }
 
     pub fn display_origin(&self) -> (usize, usize) {

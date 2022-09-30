@@ -32,7 +32,7 @@ impl Timer {
         self.value += 1;
         //}
 
-        if self.value == self.target {
+        if self.value >= self.target {
             self.trigger(cpu, Cause::Target);
         }
 

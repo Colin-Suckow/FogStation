@@ -63,44 +63,63 @@ impl PSXEmu {
 
     /// Runs a single time unit. Each unit has the correct-ish ratio of cpu:gpu cycles
     pub fn step_cycle(&mut self) {
-        for _ in 0..2 {
+        let mut cpu_cycles = 0;
+        let mut gpu_cycles = 0;
+        while cpu_cycles < 7 {
             if self.halt_requested {
                 return;
             };
-            self.run_cpu_cycle();
+            if self.run_cpu_cycle() {
+                cpu_cycles += 1;
+                self.run_gpu_cycle();
+                gpu_cycles += 1;
+                if cpu_cycles >= 7 {break;}
+            };
+            cpu_cycles += 1;
             self.run_gpu_cycle();
+            gpu_cycles += 1;
         }
 
-        //Two extra gpu cycles gets close enough to correct timing
-        self.run_gpu_cycle();
-        self.run_gpu_cycle();
+        while gpu_cycles < 11 {
+            self.run_gpu_cycle();
+            gpu_cycles += 1;
+        }
+
     }
 
-    pub fn run_cpu_cycle(&mut self) {
+    pub fn run_cpu_cycle(&mut self) -> bool {
+        let mut ran_extra_cycle = false;
         if self.sw_breakpoints.contains(&self.r3000.pc) {
             self.halt_requested = true;
-            return;
+            return false;
         }
 
         if self.watchpoints.contains(&self.r3000.last_touched_addr) {
             self.halt_requested = true;
-            return;
+            return false;
         }
 
         controller_execute_cycle(&mut self.r3000);
         cdrom::step_cycle(&mut self.r3000);
-        self.r3000.step_instruction(&mut self.timers);
+        if self.r3000.step_instruction(&mut self.timers) {
+            // Ran a delay instruction, so increment the sys clock an extra step
+            self.cycle_count += 1;
+            self.timers.update_sys_clock(&mut self.r3000);
+            ran_extra_cycle = true;
+        }
         execute_dma_cycle(&mut self.r3000);
         self.cycle_count += 1;
         self.timers.update_sys_clock(&mut self.r3000);
         if self.cycle_count % 8 == 0 {
             self.timers.update_sys_div_8(&mut self.r3000);
-        }
+        };
+        ran_extra_cycle
     }
 
     fn run_gpu_cycle(&mut self) {
-        self.r3000.main_bus.gpu.execute_cycle();
-        self.timers.update_dot_clock(&mut self.r3000);
+        if self.r3000.main_bus.gpu.execute_cycle() {
+            self.timers.update_dot_clock(&mut self.r3000);
+        }
         if self.r3000.main_bus.gpu.consume_hblank() {
             self.timers.update_h_blank(&mut self.r3000);
         }
@@ -223,6 +242,10 @@ impl PSXEmu {
 
     pub fn display_origin(&self) -> (usize, usize) {
         self.r3000.main_bus.gpu.display_origin()
+    }
+
+    pub fn get_irq_mask(&self) -> u32 {
+        self.r3000.i_mask
     }
 }
 

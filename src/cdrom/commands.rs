@@ -93,7 +93,7 @@ pub(super) fn seek_data(state: &mut CDDrive) -> Packet {
     state.drive_state = DriveState::Seek;
     let mut first_response = stat(state, 0x15);
     second_response.cause = IntCause::INT2;
-    second_response.execution_cycles = 1000000;
+    second_response.execution_cycles = 10000;
     first_response.extra_response = Some(Box::new(second_response));
     first_response
 }
@@ -110,8 +110,9 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
     let mut initial_response = stat(state, 0x6);
     state.drive_state = DriveState::Read;
     state.read_enabled = true;
+    state.data_queue.clear();
 
-    let cycles = 0xE5CA8;
+    let cycles = 0x35CA8;
 
     if !state.seek_complete {
         state.read_offset = 0;
@@ -126,7 +127,7 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
         extra_response: None,
         command: 0x6,
     };
-    initial_response.execution_cycles = 124304;
+    initial_response.execution_cycles = 42430;
     initial_response.extra_response = Some(Box::new(response_packet));
 
     initial_response

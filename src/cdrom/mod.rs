@@ -111,6 +111,8 @@ pub struct CDDrive {
     reg_interrupt_enable: u8,
 
     read_enabled: bool,
+    sector_awaiting_delivery: bool,
+    irq_request: bool,
 
     //Probably useless registers
     reg_sound_map_data_out: u8,
@@ -144,6 +146,8 @@ impl CDDrive {
             read_offset: 0,
 
             read_enabled: false,
+            sector_awaiting_delivery: false,
+            irq_request: false,
 
             reg_interrupt_flag: 0,
             reg_interrupt_enable: 0,
@@ -181,8 +185,8 @@ impl CDDrive {
                         let _sector_size = *self.sector_size() as usize;
                         if self.data_queue.len() > 0 {
                             let sector = self.data_queue.remove(0);
-                            // println!("Loaded a sector!");
-                            //println!("Sector index is {}, sector # {}", sector.index(), sector.index().sector_number());
+                            //println!("Loaded a sector!");
+                            //println!("Loaded sector. Index {}, sector # {}", sector.index(), sector.index().sector_number());
                             //println!("Filling buffer with sector size {:?}", self.sector_size());
                             self.response_data_queue
                                 .extend(sector.consume(self.sector_size()));
@@ -378,6 +382,13 @@ impl CDDrive {
     fn write_interrupt_flag_register(&mut self, val: u8) {
         //println!("Writing flag with val {:#X}   pre flag val {:#X}", val, self.reg_interrupt_flag);
         self.reg_interrupt_flag &= !(val & 0x1F);
+        if val == 1 && self.sector_awaiting_delivery {
+            self.reg_interrupt_flag = 1;
+            if self.reg_interrupt_enable & 1 > 0 {
+                self.queue_irq();
+            }
+            self.sector_awaiting_delivery = false;
+        }
         //println!("Post flag {:#X}", self.reg_interrupt_flag);
         self.response_queue = VecDeque::new(); //Reset queue
         if val.get_bit(6) {
@@ -388,6 +399,10 @@ impl CDDrive {
 
     fn write_interrupt_enable_register(&mut self, val: u8) {
         self.reg_interrupt_enable = val & 0x1f;
+    }
+
+    fn queue_irq(&mut self) {
+        self.irq_request = true;
     }
 }
 
@@ -420,22 +435,27 @@ fn take_next_ready_packet(running_commands: &mut Vec<Packet>) -> Option<Packet> 
 }
 
 pub fn step_cycle(cpu: &mut R3000) {
-    let cd = &mut cpu.main_bus.cd_drive;
 
-    // If the current interrupt hasn't been acknowledged yet, abort
-    if cd.reg_interrupt_flag != 0 {
-        return;
+    if cpu.main_bus.cd_drive.irq_request {
+        cpu.fire_external_interrupt(InterruptSource::CDROM);
+        cpu.main_bus.cd_drive.irq_request = false;
     }
+
+    // // If the current interrupt hasn't been acknowledged yet, abort
+    // if cpu.main_bus.cd_drive.reg_interrupt_flag != 0 {
+    //     return;
+    // }
 
     //println!("Full cd response queue {:?}", cd.running_commands);
 
     //Update cycles on all inflight commands
-    for packet in &mut cd.running_commands {
+    for packet in &mut cpu.main_bus.cd_drive.running_commands {
         if packet.execution_cycles > 0 {
             packet.execution_cycles -= 1;
         }
     }
-    let packet = match take_next_ready_packet(&mut cd.running_commands) {
+
+    let packet = match take_next_ready_packet(&mut cpu.main_bus.cd_drive.running_commands) {
         Some(p) => p,
         None => {
             //No response ready right now
@@ -446,7 +466,7 @@ pub fn step_cycle(cpu: &mut R3000) {
     // If this is a read packet and reading has already been disabled, abort the entire command sequence
     if packet.cause == IntCause::INT1 && !cpu.main_bus.cd_drive.read_enabled {
         //println!("Reading disabled. Aborting ReadN");
-        return;
+        //return;
     }
     trace!(
         "flag before {:#X}",
@@ -459,27 +479,29 @@ pub fn step_cycle(cpu: &mut R3000) {
         .response_queue
         .extend(packet.response.iter());
 
-    cpu.main_bus.cd_drive.reg_interrupt_flag = packet.cause.bitflag();
-    //println!("CD: processed command {:#X}", packet.command);
-
-    trace!("flag after {:#X}", cpu.main_bus.cd_drive.reg_interrupt_flag);
-
-    //println!("CDROM command {:#X} completed", packet.command);
-    //println!("{:?}", cpu.main_bus.cd_drive.running_commands);
-
-    //Check if interrupt enabled. If so, fire interrupt
-    //println!("Interrupts {:#X} cause {:#X} command {:#X}", cpu.main_bus.cd_drive.reg_interrupt_enable, packet.cause.bitflag(), packet.command);
-    if cpu.main_bus.cd_drive.reg_interrupt_enable & packet.cause.bitflag() == packet.cause.bitflag()
-    {
-        //println!("Firing interrupt");
-        // println!(
-        //     "INT_E {:#X} CAUSE {:?}",
-        //     cpu.main_bus.cd_drive.reg_interrupt_enable,
-        //     packet.cause
-        // );
-        cpu.fire_external_interrupt(InterruptSource::CDROM);
+    if packet.cause.bitflag() == 0x1 && cpu.main_bus.cd_drive.reg_interrupt_flag & 0x1 > 0 {
+        cpu.main_bus.cd_drive.sector_awaiting_delivery = true;
     } else {
-        //println!("Interrupt disabled, not firing");
+        cpu.main_bus.cd_drive.reg_interrupt_flag = packet.cause.bitflag();
+        //println!("CD: processed command {:#X}", packet.command);
+
+        trace!("flag after {:#X}", cpu.main_bus.cd_drive.reg_interrupt_flag);
+
+        //println!("CDROM command {:#X} completed", packet.command);
+        //println!("{:?}", cpu.main_bus.cd_drive.running_commands);
+
+        //Check if interrupt enabled. If so, fire interrupt
+        //println!("Interrupts {:#X} cause {:#X} command {:#X}", cpu.main_bus.cd_drive.reg_interrupt_enable, packet.cause.bitflag(), packet.command);
+        if cpu.main_bus.cd_drive.reg_interrupt_enable & packet.cause.bitflag() == packet.cause.bitflag()
+        {
+            //println!("Firing interrupt");
+            // println!(
+            //     "INT_E {:#X} CAUSE {:?}",
+            //     cpu.main_bus.cd_drive.reg_interrupt_enable,
+            //     packet.cause
+            // );
+            cpu.main_bus.cd_drive.queue_irq();
+        }
     }
 
     //If the response has an extra response, push that to the front of the line
@@ -507,20 +529,6 @@ pub fn step_cycle(cpu: &mut R3000) {
 
         0x6 => {
             //ReadN
-
-            //if cpu.main_bus.cd_drive.data_queue.is_empty() {
-            //println!("Fetching more data!");
-            // let data = cpu.main_bus.cd_drive.disc.as_ref().expect("Tried to read nonexistant disc!").read_sector(
-            //     cpu.main_bus.cd_drive.seek_target.plus_sector_offset(cpu.main_bus.cd_drive.read_offset),
-            //     cpu.main_bus.cd_drive.sector_size()
-            //         );
-
-            // cpu.main_bus.cd_drive.read_offset += 1;
-            // cpu.main_bus.cd_drive.data_queue.clear();
-            // cpu.main_bus.cd_drive.data_queue.extend(data.iter());
-            //println!("Fetched {} bytes!", self.data_queue.len())
-            //}
-
             if packet.cause == IntCause::INT1 {
                 let new_sector = cpu
                     .main_bus
@@ -539,27 +547,28 @@ pub fn step_cycle(cpu: &mut R3000) {
 
                 cpu.main_bus.cd_drive.read_offset += 1;
 
-                // if !cpu.main_bus.cd_drive.data_queue.is_empty() {
-                //     panic!("DROPPED SECTOR");
-                // }
+                if cpu.main_bus.cd_drive.data_queue.len() >= 2 {
+                    //println!("DROPPED SECTOR");
+                }
 
                 // Get rid of all the middle sectors, leave only the oldest
-                // let sector_size = *cpu.main_bus.cd_drive.sector_size() as usize;
-                if cpu.main_bus.cd_drive.data_queue.len() > 0 {
+
+                if cpu.main_bus.cd_drive.data_queue.len() > 1 {
                     cpu.main_bus
                         .cd_drive
                         .data_queue
                         .drain(1..cpu.main_bus.cd_drive.data_queue.len());
+
                 }
 
                 //cpu.main_bus.cd_drive.data_queue.clear();
-                cpu.main_bus.cd_drive.data_queue.insert(0, new_sector);
+                cpu.main_bus.cd_drive.data_queue.push(new_sector);
 
                 if cpu.main_bus.cd_drive.read_enabled {
                     trace!("Inserting next ReadN");
                     let cycles = match cpu.main_bus.cd_drive.drive_speed() {
-                        DriveSpeed::Single => 0x6e1cd,
-                        DriveSpeed::Double => 0x36cd2,
+                        DriveSpeed::Single => 0x686da,
+                        DriveSpeed::Double => 0x322df,
                     };
                     let response_packet = Packet {
                         cause: IntCause::INT1,

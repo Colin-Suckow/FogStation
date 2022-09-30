@@ -53,6 +53,16 @@ struct EmuState {
     latest_draw_log: Vec<DrawCall>,
 }
 
+impl EmuState {
+    fn send_message(&mut self, msg: ClientMessage) {
+        self
+            .comm
+            .tx
+            .send(msg)
+            .unwrap();
+    }
+}
+
 fn main() {
     let mut headless = false;
     let args: Vec<String> = env::args().collect();
@@ -217,6 +227,7 @@ enum ClientMessage {
     Continuing,
     DisplayOriginChanged((usize, usize)),
     LatestGPULog(Vec<DrawCall>),
+    LatestIrqMask(u32),
 }
 
 struct EmuComms {
@@ -233,17 +244,9 @@ fn start_emu_thread(matches: Matches, emu_comm: EmuComms) -> JoinHandle<()> {
     thread::spawn(move || {
         let mut state = create_emu(matches, emu_comm);
         let mut debugger = if state.debugging {
-            state
-                .comm
-                .tx
-                .send(ClientMessage::AwaitingGDBClient)
-                .unwrap();
+            state.send_message(ClientMessage::AwaitingGDBClient);
             let gdb_conn = wait_for_gdb_connection(DEFAULT_GDB_PORT).unwrap();
-            state
-                .comm
-                .tx
-                .send(ClientMessage::GDBClientConnected)
-                .unwrap();
+            state.send_message(ClientMessage::GDBClientConnected);
             Some(GdbStub::<EmuState, TcpStream>::new(gdb_conn))
         } else {
             None
@@ -284,16 +287,9 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
         match msg {
             EmuMessage::Halt => {
                 state.halted = true;
-                state
-                    .comm
-                    .tx
-                    .send(ClientMessage::LatestPC(state.emu.pc()))
-                    .unwrap();
-                state
-                    .comm
-                    .tx
-                    .send(ClientMessage::LatestGPULog(state.latest_draw_log.clone()))
-                    .unwrap();
+                state.send_message(ClientMessage::LatestPC(state.emu.pc()));
+                state.send_message(ClientMessage::LatestGPULog(state.latest_draw_log.clone()));
+                state.send_message(ClientMessage::LatestIrqMask(state.emu.get_irq_mask()));
             }
             EmuMessage::Continue => {
                 state.halted = false;
@@ -302,7 +298,7 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
             EmuMessage::AddBreakpoint(addr) => state.emu.add_sw_breakpoint(addr),
             EmuMessage::RemoveBreakpoint(addr) => state.emu.remove_sw_breakpoint(addr),
             EmuMessage::Kill => return Err(EmuThreadError::Killed),
-            EmuMessage::StepCPU => state.emu.run_cpu_cycle(), // Warning! Doing this too many times will desync the gpu
+            EmuMessage::StepCPU => {state.emu.run_cpu_cycle();}, // Warning! Doing this too many times will desync the gpu
             EmuMessage::UpdateControllers(button_state) => {
                 state.emu.update_controller_state(button_state)
             }
@@ -326,22 +322,12 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
             //Check for any viewport resolution changes
             if state.emu.display_resolution() != state.current_resolution {
                 state.current_resolution = state.emu.display_resolution();
-                state
-                    .comm
-                    .tx
-                    .send(ClientMessage::ResolutionChanged(
-                        state.current_resolution.clone(),
-                    ))
-                    .unwrap();
+                state.send_message(ClientMessage::ResolutionChanged(state.current_resolution.clone()));
             };
 
             if state.emu.display_origin() != state.current_origin {
                 state.current_origin = state.emu.display_origin();
-                state
-                    .comm
-                    .tx
-                    .send(ClientMessage::DisplayOriginChanged(state.current_origin))
-                    .unwrap();
+                state.send_message(ClientMessage::DisplayOriginChanged(state.current_origin));
             }
 
             //Calculate frame time delta

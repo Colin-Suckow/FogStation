@@ -25,6 +25,7 @@ struct VaporstationApp {
     latest_resolution: Resolution,
     awaiting_gdb: bool,
     latest_pc: u32,
+    irq_mask: u32,
     vram_texture: Option<TextureId>,
     display_texture: Option<TextureId>,
     show_vram_window: bool,
@@ -53,6 +54,7 @@ impl VaporstationApp {
             latest_resolution: default_resolution,
             awaiting_gdb: false,
             latest_pc: 0,
+            irq_mask: 0,
             vram_texture: None,
             show_vram_window: false,
             gdb_connected: false,
@@ -205,6 +207,9 @@ impl epi::App for VaporstationApp {
                     ClientMessage::LatestPC(pc) => {
                         self.latest_pc = pc;
                     }
+                    ClientMessage::LatestIrqMask(irq_mask) => {
+                        self.irq_mask = irq_mask;
+                    }
                     ClientMessage::Halted => self.emu_handle.halted = true,
                     ClientMessage::Continuing => self.emu_handle.halted = false,
                     ClientMessage::DisplayOriginChanged(new_origin) => {
@@ -271,6 +276,7 @@ impl epi::App for VaporstationApp {
                 ui.with_layout(Layout::right_to_left(), |ui| {
                     if self.halted() {
                         ui.label(format!("HALTED at {:#X}", self.latest_pc));
+                        ui.label(format!("IRQ mask: {:#X}", self.irq_mask));
                     } else {
                         ui.label(format!("{:.2} fps", 1000.0 / self.times.average()));
                     }

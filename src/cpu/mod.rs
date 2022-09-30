@@ -66,7 +66,7 @@ pub struct R3000 {
     delay_slot: u32,
     pub cop0: Cop0,
     load_delay: Option<LoadDelay>,
-    i_mask: u32,
+    pub i_mask: u32,
     pub i_status: u32,
     pub log: bool,
     pub load_exe: bool,
@@ -140,9 +140,11 @@ impl R3000 {
         println!("");
     }
 
-    pub fn step_instruction(&mut self, timers: &mut TimerState) {
-        //Fast load exe
+    pub fn step_instruction(&mut self, timers: &mut TimerState) -> bool {
 
+        let mut ran_delay_inst = false;
+
+        //Fast load exe
         if self.load_exe && self.pc == 0xbfc0700c {
             println!("Jumping to exe...");
             self.pc = self.entrypoint;
@@ -220,7 +222,7 @@ impl R3000 {
             self.log_instruction(instruction);
         }
         self.cycle_count = self.cycle_count.wrapping_add(1);
-        self.execute_instruction(instruction, timers);
+        self.run_opcode(instruction, timers);
 
         // if self.main_bus.last_touched_addr == 0x121CA8 {
         //     println!("lta pc {:#X} val {:#X}", self.current_pc, self.main_bus.read_word(0x121CA8));
@@ -229,6 +231,7 @@ impl R3000 {
 
         //Execute branch delay operation
         if self.delay_slot != 0 {
+            ran_delay_inst = true;
             let delay_instruction = self.main_bus.read_word(self.delay_slot);
             if self.log {
                 self.log_instruction(delay_instruction);
@@ -237,10 +240,11 @@ impl R3000 {
             //println!("{:08x}: {:08x}", self.delay_slot, delay_instruction);
             self.exec_delay = true;
             self.cycle_count = self.cycle_count.wrapping_add(1);
-            self.execute_instruction(delay_instruction, timers);
+            self.run_opcode(delay_instruction, timers);
             self.exec_delay = false;
             self.delay_slot = 0;
-        }
+        };
+        ran_delay_inst
     }
 
     fn flush_load_delay(&mut self) {
@@ -269,7 +273,7 @@ impl R3000 {
         );
     }
 
-    pub fn execute_instruction(&mut self, opcode: u32, timers: &mut TimerState) {
+    pub fn run_opcode(&mut self, opcode: u32, timers: &mut TimerState) {
         if self.pc % 4 != 0 || self.delay_slot % 4 != 0 {
             warn!("Tried to execute out of alignment");
             self.fire_exception(Exception::AdEL);

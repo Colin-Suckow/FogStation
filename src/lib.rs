@@ -28,7 +28,8 @@ static mut LOGGING: bool = false;
 pub struct PSXEmu {
     pub r3000: R3000,
     timers: TimerState,
-    cycle_count: u32,
+    cpu_cycle_count: u32,
+    super_cycle_count: u32,
     halt_requested: bool,
     sw_breakpoints: Vec<u32>,
     watchpoints: Vec<u32>,
@@ -46,7 +47,8 @@ impl PSXEmu {
         let mut emu = PSXEmu {
             r3000: r3000,
             timers: TimerState::new(),
-            cycle_count: 0,
+            cpu_cycle_count: 0,
+            super_cycle_count: 0,
             halt_requested: false,
             sw_breakpoints: Vec::new(),
             watchpoints: Vec::new(),
@@ -61,30 +63,16 @@ impl PSXEmu {
         self.r3000.main_bus.gpu.reset();
     }
 
-    /// Runs a single time unit. Each unit has the correct-ish ratio of cpu:gpu cycles
     pub fn step_cycle(&mut self) {
-        let mut cpu_cycles = 0;
-        let mut gpu_cycles = 0;
-        while cpu_cycles < 7 {
-            if self.halt_requested {
-                return;
-            };
-            if self.run_cpu_cycle() {
-                cpu_cycles += 1;
-                self.run_gpu_cycle();
-                gpu_cycles += 1;
-                if cpu_cycles >= 7 {break;}
-            };
-            cpu_cycles += 1;
-            self.run_gpu_cycle();
-            gpu_cycles += 1;
+        self.super_cycle_count += 1;
+
+        if self.super_cycle_count % 32 == 0 {
+            self.run_cpu_cycle();
         }
 
-        while gpu_cycles < 11 {
+        if self.super_cycle_count % 11 == 0 {
             self.run_gpu_cycle();
-            gpu_cycles += 1;
         }
-
     }
 
     pub fn run_cpu_cycle(&mut self) -> bool {
@@ -103,14 +91,14 @@ impl PSXEmu {
         cdrom::step_cycle(&mut self.r3000);
         if self.r3000.step_instruction(&mut self.timers) {
             // Ran a delay instruction, so increment the sys clock an extra step
-            self.cycle_count += 1;
+            self.cpu_cycle_count += 1;
             self.timers.update_sys_clock(&mut self.r3000);
             ran_extra_cycle = true;
         }
         execute_dma_cycle(&mut self.r3000);
-        self.cycle_count += 1;
+        self.cpu_cycle_count += 1;
         self.timers.update_sys_clock(&mut self.r3000);
-        if self.cycle_count % 8 == 0 {
+        if self.cpu_cycle_count % 8 == 0 {
             self.timers.update_sys_div_8(&mut self.r3000);
         };
         ran_extra_cycle
@@ -127,11 +115,9 @@ impl PSXEmu {
 
     ///Runs the emulator till one frame has been generated
     pub fn run_frame(&mut self) {
-        while !self.r3000.main_bus.gpu.take_frame_ready() {
+        while !self.frame_ready() {
             self.step_cycle();
         }
-        //Step the gpu once more to get it off this frame
-        self.r3000.main_bus.gpu.execute_cycle();
     }
 
     pub fn load_executable(&mut self, start_addr: u32, entrypoint: u32, _sp: u32, data: &Vec<u8>) {

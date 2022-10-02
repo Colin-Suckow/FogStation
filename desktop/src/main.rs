@@ -283,31 +283,41 @@ enum EmuThreadError {
 
 fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
     // Handle incoming messages
-    if let Ok(msg) = state.comm.rx.try_recv() {
-        match msg {
-            EmuMessage::Halt => {
-                state.halted = true;
-                state.send_message(ClientMessage::LatestPC(state.emu.pc()));
-                state.send_message(ClientMessage::LatestGPULog(state.latest_draw_log.clone()));
-                state.send_message(ClientMessage::LatestIrqMask(state.emu.get_irq_mask()));
+    loop {
+        match state.comm.rx.try_recv() {
+            Ok(msg) => {
+                match msg {
+                    EmuMessage::Halt => {
+                        state.halted = true;
+                        state.send_message(ClientMessage::LatestPC(state.emu.pc()));
+                        state.send_message(ClientMessage::LatestGPULog(state.latest_draw_log.clone()));
+                        state.send_message(ClientMessage::LatestIrqMask(state.emu.get_irq_mask()));
+                    }
+                    EmuMessage::Continue => {
+                        state.halted = false;
+                        state.emu.clear_halt();
+                    }
+                    EmuMessage::AddBreakpoint(addr) => state.emu.add_sw_breakpoint(addr),
+                    EmuMessage::RemoveBreakpoint(addr) => state.emu.remove_sw_breakpoint(addr),
+                    EmuMessage::Kill => return Err(EmuThreadError::Killed),
+                    EmuMessage::StepCPU => { state.emu.run_cpu_cycle(); }, // Warning! Doing this too many times will desync the gpu
+                    EmuMessage::UpdateControllers(button_state) => {
+                        state.emu.update_controller_state(button_state)
+                    }
+                    EmuMessage::Reset => state.emu.reset(),
+                    EmuMessage::StartFrame => state.waiting_for_client = false,
+                    EmuMessage::RequestDrawCallback(signal) => state.redraw_signal = Some(signal),
+                    EmuMessage::SetFrameLimiter(val) => state.frame_limited = val,
+                    EmuMessage::ClearGpuLog => state.emu.clear_gpu_call_log(),
+                    EmuMessage::SetMemLogging(enabled) => toggle_memory_logging(enabled),
+                }
             }
-            EmuMessage::Continue => {
-                state.halted = false;
-                state.emu.clear_halt();
+            Err(e) => {
+                match e {
+                    std::sync::mpsc::TryRecvError::Empty => break, // No messages left, break out of the loop
+                    std::sync::mpsc::TryRecvError::Disconnected => panic!("GUI thread died!"),
+                }
             }
-            EmuMessage::AddBreakpoint(addr) => state.emu.add_sw_breakpoint(addr),
-            EmuMessage::RemoveBreakpoint(addr) => state.emu.remove_sw_breakpoint(addr),
-            EmuMessage::Kill => return Err(EmuThreadError::Killed),
-            EmuMessage::StepCPU => {state.emu.run_cpu_cycle();}, // Warning! Doing this too many times will desync the gpu
-            EmuMessage::UpdateControllers(button_state) => {
-                state.emu.update_controller_state(button_state)
-            }
-            EmuMessage::Reset => state.emu.reset(),
-            EmuMessage::StartFrame => state.waiting_for_client = false,
-            EmuMessage::RequestDrawCallback(signal) => state.redraw_signal = Some(signal),
-            EmuMessage::SetFrameLimiter(val) => state.frame_limited = val,
-            EmuMessage::ClearGpuLog => state.emu.clear_gpu_call_log(),
-            EmuMessage::SetMemLogging(enabled) => toggle_memory_logging(enabled),
         }
     }
 
@@ -316,57 +326,54 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
     }
 
     if !state.halted && !state.waiting_for_client {
-        state.emu.step_cycle();
+        state.emu.run_frame();
 
-        if state.emu.frame_ready() {
-            //Check for any viewport resolution changes
-            if state.emu.display_resolution() != state.current_resolution {
-                state.current_resolution = state.emu.display_resolution();
-                state.send_message(ClientMessage::ResolutionChanged(state.current_resolution.clone()));
-            };
 
-            if state.emu.display_origin() != state.current_origin {
-                state.current_origin = state.emu.display_origin();
-                state.send_message(ClientMessage::DisplayOriginChanged(state.current_origin));
-            }
+        //Check for any viewport resolution changes
+        if state.emu.display_resolution() != state.current_resolution {
+            state.current_resolution = state.emu.display_resolution();
+            state.send_message(ClientMessage::ResolutionChanged(state.current_resolution.clone()));
+        };
 
-            //Calculate frame time delta
-            let mut frame_time = SystemTime::now()
+        if state.emu.display_origin() != state.current_origin {
+            state.current_origin = state.emu.display_origin();
+            state.send_message(ClientMessage::DisplayOriginChanged(state.current_origin));
+        }
+
+        //Calculate frame time delta
+        let mut frame_time = SystemTime::now()
+            .duration_since(state.last_frame_time)
+            .expect("Error getting frame duration")
+            .as_millis();
+
+        let frame = state.emu.get_vram().clone();
+        let depth_full = state.emu.is_full_color_depth();
+        // Wait for frame limiter time to pass
+        while state.frame_limited && frame_time < 17 {
+            frame_time = SystemTime::now()
                 .duration_since(state.last_frame_time)
                 .expect("Error getting frame duration")
                 .as_millis();
+        }
 
-            let frame = state.emu.get_vram().clone();
-            let depth_full = state.emu.is_full_color_depth();
-            // Wait for frame limiter time to pass
-            while state.frame_limited && frame_time < 17 {
-                frame_time = SystemTime::now()
-                    .duration_since(state.last_frame_time)
-                    .expect("Error getting frame duration")
-                    .as_millis();
-            }
-
-            // Send the new frame over to the gui thread
-            if let Err(_) = state
-                .comm
-                .tx
-                .send(ClientMessage::FrameReady(frame, frame_time, depth_full))
-            {
-                //The other side hung up, so lets end the emu thread
-                return Err(EmuThreadError::ClientDied);
-            };
-            // Request redraw
-            if let Some(redraw_signal) = &state.redraw_signal {
-                redraw_signal.request_repaint();
-            }
-
-            state.latest_draw_log = state.emu.take_gpu_call_log();
-
-            //state.waiting_for_client = true; // Wait until next frame is ready
-            state.last_frame_time = SystemTime::now();
+        // Send the new frame over to the gui thread
+        if let Err(_) = state
+            .comm
+            .tx
+            .send(ClientMessage::FrameReady(frame, frame_time, depth_full))
+        {
+            //The other side hung up, so lets end the emu thread
+            return Err(EmuThreadError::ClientDied);
         };
-    } else {
-        //thread::sleep(Duration::from_millis(1));
+        // Request redraw
+        if let Some(redraw_signal) = &state.redraw_signal {
+            redraw_signal.request_repaint();
+        }
+
+        state.latest_draw_log = state.emu.take_gpu_call_log();
+
+        //state.waiting_for_client = true; // Wait until next frame is ready
+        state.last_frame_time = SystemTime::now();
     }
 
     Ok(())

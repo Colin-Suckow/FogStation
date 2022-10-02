@@ -1629,9 +1629,9 @@ impl Gpu {
     }
 
     pub fn execute_cycle(&mut self) -> bool {
-        if self.cycle_counter % CYCLES_PER_SCANLINE == 0 {
-            self.hblank_consumed = false;
-        }
+        // if self.cycle_counter % CYCLES_PER_SCANLINE == 0 {
+        //     self.hblank_consumed = false;
+        // }
 
         if self.cycle_counter > CYCLES_PER_SCANLINE * TOTAL_SCANLINES {
             self.cycle_counter = 0;
@@ -1642,9 +1642,9 @@ impl Gpu {
         if self.dotclock_cycled() {
             let dots_per_line = 3413 / (2560 / self.display_h_res);
             self.pixel_count += 1;
-            // if self.pixel_count % dots_per_line == 0 {
-            //     self.hblank_consumed = false;
-            // }
+            if self.pixel_count % dots_per_line == 0 {
+                self.hblank_consumed = false;
+            }
             //
             // if self.pixel_count > dots_per_line * TOTAL_SCANLINES {
             //     self.pixel_count = 0;

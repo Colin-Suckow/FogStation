@@ -87,6 +87,7 @@ impl Timer {
     pub fn write_mode(&mut self, value: u32) {
         self.mode = value;
         self.mode.set_bit(10, true);
+        self.value = 0;
     }
 }
 

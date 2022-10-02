@@ -93,6 +93,9 @@ impl PSXEmu {
             // Ran a delay instruction, so increment the sys clock an extra step
             self.cpu_cycle_count += 1;
             self.timers.update_sys_clock(&mut self.r3000);
+            if self.cpu_cycle_count % 8 == 0 {
+                self.timers.update_sys_div_8(&mut self.r3000);
+            };
             ran_extra_cycle = true;
         }
         execute_dma_cycle(&mut self.r3000);

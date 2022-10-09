@@ -66,8 +66,22 @@ impl PSXEmu {
     pub fn step_cycle(&mut self) {
         self.super_cycle_count += 1;
 
+        if self.super_cycle_count % 17 == 0 {
+            controller_execute_cycle(&mut self.r3000);
+            cdrom::step_cycle(&mut self.r3000);
+            execute_dma_cycle(&mut self.r3000);
+            self.cpu_cycle_count += 1;
+            self.timers.update_sys_clock(&mut self.r3000);
+            if self.cpu_cycle_count >= 8 {
+                self.timers.update_sys_div_8(&mut self.r3000);
+                self.cpu_cycle_count = 0;
+            };
+        }
+
         if self.super_cycle_count % 35 == 0 {
-            self.run_cpu_cycle();
+            if self.run_cpu_cycle() {
+                self.cpu_cycle_count += 2;
+            }
         }
 
         if self.super_cycle_count % 11 == 0 {
@@ -76,7 +90,6 @@ impl PSXEmu {
     }
 
     pub fn run_cpu_cycle(&mut self) -> bool {
-        let mut ran_extra_cycle = false;
         if self.sw_breakpoints.contains(&self.r3000.pc) {
             self.halt_requested = true;
             return false;
@@ -87,24 +100,7 @@ impl PSXEmu {
             return false;
         }
 
-        controller_execute_cycle(&mut self.r3000);
-        cdrom::step_cycle(&mut self.r3000);
-        if self.r3000.step_instruction(&mut self.timers) {
-            // Ran a delay instruction, so increment the sys clock an extra step
-            self.cpu_cycle_count += 1;
-            self.timers.update_sys_clock(&mut self.r3000);
-            if self.cpu_cycle_count % 8 == 0 {
-                self.timers.update_sys_div_8(&mut self.r3000);
-            };
-            ran_extra_cycle = true;
-        }
-        execute_dma_cycle(&mut self.r3000);
-        self.cpu_cycle_count += 1;
-        self.timers.update_sys_clock(&mut self.r3000);
-        if self.cpu_cycle_count % 8 == 0 {
-            self.timers.update_sys_div_8(&mut self.r3000);
-        };
-        ran_extra_cycle
+        self.r3000.step_instruction(&mut self.timers)
     }
 
     fn run_gpu_cycle(&mut self) {

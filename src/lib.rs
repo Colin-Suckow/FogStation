@@ -66,7 +66,7 @@ impl PSXEmu {
     pub fn step_cycle(&mut self) {
         self.super_cycle_count += 1;
 
-        if self.super_cycle_count % 32 == 0 {
+        if self.super_cycle_count % 35 == 0 {
             self.run_cpu_cycle();
         }
 

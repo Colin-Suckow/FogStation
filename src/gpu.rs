@@ -1458,10 +1458,10 @@ impl Gpu {
 
                     0xE2 => {
                         // Texture window settings
-                        self.tex_mask_x = command.get_bits(0..=4);
-                        self.tex_mask_y = command.get_bits(5..=9);
-                        self.tex_offset_x = command.get_bits(10..=14);
-                        self.tex_offset_y = command.get_bits(15..=19);
+                        self.tex_mask_x = command.get_bits(0..=4) * 8;
+                        self.tex_mask_y = command.get_bits(5..=9) * 8;
+                        self.tex_offset_x = command.get_bits(10..=14) * 8;
+                        self.tex_offset_y = command.get_bits(15..=19) * 8;
                     }
 
                     0xE3 => {
@@ -2124,29 +2124,27 @@ impl Gpu {
     }
 
     fn apply_texture_mask(&self, x: u32, y: u32) -> (u32, u32) {
-        (x, y)
-        // let new_x = (x & !(self.tex_mask_x * 8)) | ((self.tex_offset_x & self.tex_mask_x) * 8);
-        // let new_y = (y & !(self.tex_mask_y * 8)) | ((self.tex_offset_y & self.tex_mask_y) * 8);
-        // (new_x, new_y)
+        let new_x = (x & !(self.tex_mask_x)) | ((self.tex_offset_x & self.tex_mask_x));
+        let new_y = (y & !(self.tex_mask_y)) | ((self.tex_offset_y & self.tex_mask_y));
+        (new_x, new_y)
     }
 
-    fn get_texel(&self, x: i32, y: i32, page_x: u32, page_y: u32, clut_x: u32, clut_y: u32) -> u16 {
+    fn get_texel(&self, in_x: i32, in_y: i32, page_x: u32, page_y: u32, clut_x: u32, clut_y: u32) -> u16 {
         let size = self.texmode;
+        let (x, y) = self.apply_texture_mask((in_x as u32) % 256, (in_y as u32) % 256);
 
         let pixel_val = match size {
             TextureColorMode::FifteenBit => {
-                let tex_x = (page_x * 64) as u32 + x as u32;
-                let tex_y = (page_y * 256) as u32 + y as u32;
-                let (masked_x, masked_y) = self.apply_texture_mask(tex_x, tex_y);
-                let addr = min(point_to_address(masked_x, masked_y) as usize, 524287);
+                let tex_x = (page_x * 64) as u32 + x;
+                let tex_y = (page_y * 256) as u32 + y;
+                let addr = min(point_to_address(tex_x, tex_y) as usize, 524287);
 
                 self.vram[addr]
             }
             TextureColorMode::EightBit => {
-                let tex_x = (page_x * 64) as u32 + (x / 2) as u32;
-                let tex_y = (page_y * 256) as u32 + y as u32;
-                let (masked_x, masked_y) = self.apply_texture_mask(tex_x, tex_y);
-                let value = self.vram[min(point_to_address(masked_x, masked_y) as usize, 524287)];
+                let tex_x = (page_x * 64) as u32 + (x / 2);
+                let tex_y = (page_y * 256) as u32 + y;
+                let value = self.vram[min(point_to_address(tex_x, tex_y) as usize, 524287)];
                 let clut_index = (value >> (x % 2) * 8) & 0xFF;
                 self.vram[min(
                     point_to_address((clut_x * 16 + clut_index as u32) as u32, clut_y as u32)
@@ -2155,10 +2153,9 @@ impl Gpu {
                 )]
             }
             TextureColorMode::FourBit => {
-                let tex_x = (page_x * 64) as u32 + (x / 4) as u32;
-                let tex_y = (page_y * 256) as u32 + y as u32;
-                let (masked_x, masked_y) = self.apply_texture_mask(tex_x, tex_y);
-                let value = self.vram[min(point_to_address(masked_x, masked_y) as usize, 524287)];
+                let tex_x = (page_x * 64) as u32 + (x / 4);
+                let tex_y = (page_y * 256) as u32 + y;
+                let value = self.vram[min(point_to_address(tex_x, tex_y) as usize, 524287)];
                 let clut_index = (value >> ((x % 4) * 4)) & 0xF;
                 self.vram[min(
                     point_to_address((clut_x * 16 + clut_index as u32) as u32, clut_y as u32),

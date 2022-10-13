@@ -4,6 +4,8 @@ use bit_field::BitField;
 use log::{error, warn};
 
 use crate::cpu::{InterruptSource, R3000};
+use crate::{MainBus, Scheduler, ScheduleTarget};
+use crate::scheduler::SysCycles;
 
 pub(super) const JOY_DATA: u32 = 0x1F801040;
 pub(super) const JOY_STAT: u32 = 0x1F801044;
@@ -128,7 +130,6 @@ pub(super) struct Controllers {
     rx_buf: VecDeque<u8>,
 
     pub(super) pending_irq: bool,
-    irq_cycle_timer: usize,
 
     latest_button_state: ButtonState,
 }
@@ -145,7 +146,6 @@ impl Controllers {
             rx_buf: VecDeque::new(),
 
             pending_irq: false,
-            irq_cycle_timer: 0,
 
             latest_button_state: ButtonState::new_digital_pad(),
         }
@@ -188,9 +188,9 @@ impl Controllers {
         }
     }
 
-    pub(super) fn write_byte(&mut self, addr: u32, val: u8) {
+    pub(super) fn write_byte(&mut self, addr: u32, val: u8, scheduler: &mut Scheduler) {
         match addr {
-            JOY_DATA => self.write_joy_data(val),
+            JOY_DATA => self.write_joy_data(val, scheduler),
             _ => error!(
                 "CONTROLLER: Unknown byte write! Addr {:#X} val: {:#X}",
                 addr, val
@@ -216,10 +216,7 @@ impl Controllers {
         }
 
         if !val.get_bit(0) {
-            //println!("TX Disabled!");
             self.tx_state = TXstate::Disabled;
-            // self.pending_irq = false;
-            // self.irq_cycle_timer = 0;
         }
 
         if val.get_bit(4) {
@@ -233,7 +230,7 @@ impl Controllers {
         self.joy_ctrl = val;
     }
 
-    fn write_joy_data(&mut self, val: u8) {
+    fn write_joy_data(&mut self, val: u8, scheduler: &mut Scheduler) {
         //println!("Joy data written {:#X} state = {:?}", val, self.tx_state);
         let new_state = match self.tx_state.clone() {
             TXstate::Disabled => {
@@ -263,7 +260,7 @@ impl Controllers {
                 }
 
                 self.push_rx_buf(0);
-                self.queue_interrupt();
+                self.queue_interrupt(scheduler);
                 TXstate::Transfering {
                     slot: slot,
                     step: 0,
@@ -286,7 +283,7 @@ impl Controllers {
                         };
                         self.push_rx_buf(response);
                         if step < 3 {
-                            self.queue_interrupt();
+                            self.queue_interrupt(scheduler);
                         }
                         TXstate::Transfering {
                             slot: slot.clone(),
@@ -350,7 +347,6 @@ impl Controllers {
         self.rx_buf.clear();
         self.pending_irq = false;
         self.irq_status = false;
-        self.irq_cycle_timer = 0;
     }
 
     fn acknowledge(&mut self) {
@@ -368,20 +364,16 @@ impl Controllers {
         }
     }
 
-    fn queue_interrupt(&mut self) {
+    fn queue_interrupt(&mut self, scheduler: &mut Scheduler) {
         self.pending_irq = true;
         self.irq_status = true;
-        self.irq_cycle_timer = 350;
+        scheduler.schedule_event(ScheduleTarget::ControllerIRQ, SysCycles(350).into());
     }
 }
 
-pub(super) fn controller_execute_cycle(cpu: &mut R3000) {
-    if cpu.main_bus.controllers.irq_cycle_timer > 0 {
-        // We are waiting for the dumb ack delay to expire
-        cpu.main_bus.controllers.irq_cycle_timer -= 1;
-    } else if cpu.main_bus.controllers.pending_irq {
-        // The dumb ack delay has expired, so now we can fire an INT7
+pub(super) fn controller_delay_complete(cpu: &mut R3000, state: &mut Controllers) {
+    if state.pending_irq {
         cpu.fire_external_interrupt(InterruptSource::Controller);
-        cpu.main_bus.controllers.pending_irq = false;
+        state.pending_irq = false;
     }
 }

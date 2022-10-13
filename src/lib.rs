@@ -1,6 +1,6 @@
 use bios::Bios;
 use bus::MainBus;
-use controller::{controller_execute_cycle, ButtonState};
+use controller::ButtonState;
 use cpu::R3000;
 use gpu::{DrawCall, Resolution};
 use timer::TimerState;
@@ -10,6 +10,7 @@ use crate::cpu::InterruptSource;
 use crate::dma::execute_dma_cycle;
 use crate::gpu::Gpu;
 use crate::memory::Memory;
+use crate::scheduler::{CpuCycles, Scheduler, ScheduleTarget};
 
 mod bios;
 mod bus;
@@ -22,17 +23,20 @@ mod mdec;
 mod memory;
 mod spu;
 mod timer;
+mod scheduler;
 
 static mut LOGGING: bool = false;
 
 pub struct PSXEmu {
     pub r3000: R3000,
-    timers: TimerState,
+    pub main_bus: MainBus,
+    pub scheduler: Scheduler,
     cpu_cycle_count: u32,
     super_cycle_count: u32,
     halt_requested: bool,
     sw_breakpoints: Vec<u32>,
     watchpoints: Vec<u32>,
+    frame_count: u32,
 }
 
 impl PSXEmu {
@@ -42,51 +46,57 @@ impl PSXEmu {
         let memory = Memory::new();
         let gpu = Gpu::new();
         let bus = MainBus::new(bios, memory, gpu);
-        let r3000 = R3000::new(bus);
+        let r3000 = R3000::new();
 
         let mut emu = PSXEmu {
             r3000: r3000,
-            timers: TimerState::new(),
+            main_bus: bus,
+            scheduler: Scheduler::new(),
             cpu_cycle_count: 0,
             super_cycle_count: 0,
             halt_requested: false,
             sw_breakpoints: Vec::new(),
             watchpoints: Vec::new(),
+            frame_count: 0,
         };
         emu.reset();
+        // Register initial events
+        emu.scheduler.schedule_event(ScheduleTarget::GPUhblank, CpuCycles(0));
+
         emu
     }
 
     /// Resets system to startup condition
     pub fn reset(&mut self) {
-        self.r3000.reset();
-        self.r3000.main_bus.gpu.reset();
+        self.reset();
+        self.main_bus.gpu.reset();
     }
 
     pub fn step_cycle(&mut self) {
-        self.super_cycle_count += 1;
+        self.scheduler.run_cycle(&mut self.r3000, &mut self.main_bus);
+        self.run_cpu_cycle();
 
-        if self.super_cycle_count % 17 == 0 {
-            controller_execute_cycle(&mut self.r3000);
-            cdrom::step_cycle(&mut self.r3000);
-            execute_dma_cycle(&mut self.r3000);
-            self.cpu_cycle_count += 1;
-            self.timers.update_sys_clock(&mut self.r3000);
-            if self.cpu_cycle_count >= 8 {
-                self.timers.update_sys_div_8(&mut self.r3000);
-                self.cpu_cycle_count = 0;
-            };
-        }
-
-        if self.super_cycle_count % 35 == 0 {
-            if self.run_cpu_cycle() {
-                self.cpu_cycle_count += 2;
-            }
-        }
-
-        if self.super_cycle_count % 11 == 0 {
-            self.run_gpu_cycle();
-        }
+        // if self.super_cycle_count % 3 == 0 {
+        //     controller_execute_cycle(&mut self);
+        //     cdrom::step_cycle(&mut self);
+        //     execute_dma_cycle(&mut self);
+        //     self.cpu_cycle_count += 1;
+        //     self.timers.update_sys_clock(&mut self);
+        //     if self.cpu_cycle_count >= 8 {
+        //         self.timers.update_sys_div_8(&mut self);
+        //         self.cpu_cycle_count = 0;
+        //     };
+        // }
+        //
+        // if self.super_cycle_count % 6 == 0 {
+        //     if self.run_cpu_cycle() {
+        //         self.cpu_cycle_count += 2;
+        //     }
+        // }
+        //
+        // if self.super_cycle_count % 2 == 0 {
+        //     self.run_gpu_cycle();
+        // }
     }
 
     pub fn run_cpu_cycle(&mut self) -> bool {
@@ -100,59 +110,60 @@ impl PSXEmu {
             return false;
         }
 
-        self.r3000.step_instruction(&mut self.timers)
+        self.r3000.step_instruction(&mut self.main_bus, &mut self.scheduler)
     }
 
-    fn run_gpu_cycle(&mut self) {
-        if self.r3000.main_bus.gpu.execute_cycle() {
-            self.timers.update_dot_clock(&mut self.r3000);
-        }
-        if self.r3000.main_bus.gpu.consume_hblank() {
-            self.timers.update_h_blank(&mut self.r3000);
-        }
-    }
+    // fn run_gpu_cycle(&mut self) {
+    //     if self.main_bus.gpu.execute_cycle() {
+    //         self.timers.update_dot_clock(&mut self);
+    //     }
+    //     if self.main_bus.gpu.consume_hblank() {
+    //         self.timers.update_h_blank(&mut self);
+    //     }
+    // }
 
     ///Runs the emulator till one frame has been generated
     pub fn run_frame(&mut self) {
         while !self.frame_ready() {
             self.step_cycle();
         }
+        self.frame_count += 1;
     }
 
     pub fn load_executable(&mut self, start_addr: u32, entrypoint: u32, _sp: u32, data: &Vec<u8>) {
         for (index, val) in data.iter().enumerate() {
-            self.r3000
+            self
                 .main_bus
-                .write_byte((index + start_addr as usize) as u32, val.clone());
+                .write_byte((index + start_addr as usize) as u32, val.clone(), &mut self.scheduler);
         }
         self.r3000.load_exe = true;
         self.r3000.entrypoint = entrypoint;
-        // self.r3000.gen_registers[29] = sp;
-        // self.r3000.gen_registers[30] = sp;
+        // self.gen_registers[29] = sp;
+        // self.gen_registers[30] = sp;
     }
 
     pub fn load_disc(&mut self, disc: Disc) {
-        self.r3000.main_bus.cd_drive.load_disc(disc);
+        self.main_bus.cd_drive.load_disc(disc);
     }
 
     pub fn loaded_disc(&self) -> &Option<Disc> {
-        self.r3000.main_bus.cd_drive.disc()
+        self.main_bus.cd_drive.disc()
     }
 
     pub fn remove_disc(&mut self) {
-        self.r3000.main_bus.cd_drive.remove_disc();
+        self.main_bus.cd_drive.remove_disc();
     }
 
     pub fn get_vram(&self) -> &Vec<u16> {
-        self.r3000.main_bus.gpu.get_vram()
+        self.main_bus.gpu.get_vram()
     }
 
     pub fn is_full_color_depth(&self) -> bool {
-        self.r3000.main_bus.gpu.is_full_color_depth()
+        self.main_bus.gpu.is_full_color_depth()
     }
 
     pub fn get_bios(&self) -> &Vec<u8> {
-        self.r3000.main_bus.bios.get_data()
+        self.main_bus.bios.get_data()
     }
 
     pub fn manually_fire_interrupt(&mut self, source: InterruptSource) {
@@ -185,27 +196,27 @@ impl PSXEmu {
     }
 
     pub fn display_resolution(&self) -> Resolution {
-        self.r3000.main_bus.gpu.resolution()
+        self.main_bus.gpu.resolution()
     }
 
     pub fn update_controller_state(&mut self, state: ButtonState) {
-        self.r3000.main_bus.controllers.update_button_state(state);
+        self.main_bus.controllers.update_button_state(state);
     }
 
     pub fn frame_ready(&mut self) -> bool {
-        self.r3000.main_bus.gpu.take_frame_ready()
+        self.main_bus.gpu.take_frame_ready()
     }
 
     pub fn set_gpu_logging(&mut self, enabled: bool) {
-        self.r3000.main_bus.gpu.set_call_logging(enabled);
+        self.main_bus.gpu.set_call_logging(enabled);
     }
 
     pub fn take_gpu_call_log(&mut self) -> Vec<DrawCall> {
-        self.r3000.main_bus.gpu.take_call_log()
+        self.main_bus.gpu.take_call_log()
     }
 
     pub fn clear_gpu_call_log(&mut self) {
-        self.r3000.main_bus.gpu.clear_call_log();
+        self.main_bus.gpu.clear_call_log();
     }
 
     pub fn add_watchpoint(&mut self, addr: u32) {
@@ -226,7 +237,7 @@ impl PSXEmu {
     }
 
     pub fn display_origin(&self) -> (usize, usize) {
-        self.r3000.main_bus.gpu.display_origin()
+        self.main_bus.gpu.display_origin()
     }
 
     pub fn get_irq_mask(&self) -> u32 {

@@ -5,6 +5,7 @@ use log::{trace, warn};
 
 use crate::cpu::{InterruptSource, R3000};
 use std::collections::VecDeque;
+use crate::MainBus;
 
 mod commands;
 pub mod disc;
@@ -434,28 +435,28 @@ fn take_next_ready_packet(running_commands: &mut Vec<Packet>) -> Option<Packet> 
     None
 }
 
-pub fn step_cycle(cpu: &mut R3000) {
+pub fn step_cycle(cpu: &mut R3000, main_bus: &mut MainBus) {
 
-    if cpu.main_bus.cd_drive.irq_request {
+    if main_bus.cd_drive.irq_request {
         cpu.fire_external_interrupt(InterruptSource::CDROM);
-        cpu.main_bus.cd_drive.irq_request = false;
+        main_bus.cd_drive.irq_request = false;
     }
 
     // // If the current interrupt hasn't been acknowledged yet, abort
-    // if cpu.main_bus.cd_drive.reg_interrupt_flag != 0 {
+    // if main_bus.cd_drive.reg_interrupt_flag != 0 {
     //     return;
     // }
 
     //println!("Full cd response queue {:?}", cd.running_commands);
 
     //Update cycles on all inflight commands
-    for packet in &mut cpu.main_bus.cd_drive.running_commands {
+    for packet in &mut main_bus.cd_drive.running_commands {
         if packet.execution_cycles > 0 {
             packet.execution_cycles -= 1;
         }
     }
 
-    let packet = match take_next_ready_packet(&mut cpu.main_bus.cd_drive.running_commands) {
+    let packet = match take_next_ready_packet(&mut main_bus.cd_drive.running_commands) {
         Some(p) => p,
         None => {
             //No response ready right now
@@ -464,50 +465,50 @@ pub fn step_cycle(cpu: &mut R3000) {
     };
 
     // If this is a read packet and reading has already been disabled, abort the entire command sequence
-    if packet.cause == IntCause::INT1 && !cpu.main_bus.cd_drive.read_enabled {
+    if packet.cause == IntCause::INT1 && !main_bus.cd_drive.read_enabled {
         //println!("Reading disabled. Aborting ReadN");
         //return;
     }
     trace!(
         "flag before {:#X}",
-        cpu.main_bus.cd_drive.reg_interrupt_flag
+        main_bus.cd_drive.reg_interrupt_flag
     );
 
-    cpu.main_bus.cd_drive.response_queue = VecDeque::with_capacity(packet.response.len()); //Clear queue
-    cpu.main_bus
+    main_bus.cd_drive.response_queue = VecDeque::with_capacity(packet.response.len()); //Clear queue
+    main_bus
         .cd_drive
         .response_queue
         .extend(packet.response.iter());
 
-    if packet.cause.bitflag() == 0x1 && cpu.main_bus.cd_drive.reg_interrupt_flag & 0x1 > 0 {
-        cpu.main_bus.cd_drive.sector_awaiting_delivery = true;
+    if packet.cause.bitflag() == 0x1 && main_bus.cd_drive.reg_interrupt_flag & 0x1 > 0 {
+        main_bus.cd_drive.sector_awaiting_delivery = true;
     } else {
-        cpu.main_bus.cd_drive.reg_interrupt_flag = packet.cause.bitflag();
+        main_bus.cd_drive.reg_interrupt_flag = packet.cause.bitflag();
         //println!("CD: processed command {:#X}", packet.command);
 
-        trace!("flag after {:#X}", cpu.main_bus.cd_drive.reg_interrupt_flag);
+        trace!("flag after {:#X}", main_bus.cd_drive.reg_interrupt_flag);
 
         //println!("CDROM command {:#X} completed", packet.command);
-        //println!("{:?}", cpu.main_bus.cd_drive.running_commands);
+        //println!("{:?}", main_bus.cd_drive.running_commands);
 
         //Check if interrupt enabled. If so, fire interrupt
-        //println!("Interrupts {:#X} cause {:#X} command {:#X}", cpu.main_bus.cd_drive.reg_interrupt_enable, packet.cause.bitflag(), packet.command);
-        if cpu.main_bus.cd_drive.reg_interrupt_enable & packet.cause.bitflag() == packet.cause.bitflag()
+        //println!("Interrupts {:#X} cause {:#X} command {:#X}", main_bus.cd_drive.reg_interrupt_enable, packet.cause.bitflag(), packet.command);
+        if main_bus.cd_drive.reg_interrupt_enable & packet.cause.bitflag() == packet.cause.bitflag()
         {
             //println!("Firing interrupt");
             // println!(
             //     "INT_E {:#X} CAUSE {:?}",
-            //     cpu.main_bus.cd_drive.reg_interrupt_enable,
+            //     main_bus.cd_drive.reg_interrupt_enable,
             //     packet.cause
             // );
-            cpu.main_bus.cd_drive.queue_irq();
+            main_bus.cd_drive.queue_irq();
         }
     }
 
     //If the response has an extra response, push that to the front of the line
     if let Some(ext_response) = packet.extra_response.clone() {
         //println!("Extra response, filling. {:?}", ext_response);
-        cpu.main_bus.cd_drive.running_commands.push(*ext_response);
+        main_bus.cd_drive.running_commands.push(*ext_response);
     };
 
     match packet.command {
@@ -515,70 +516,69 @@ pub fn step_cycle(cpu: &mut R3000) {
             //Make sure this is the second response
             if packet.extra_response.is_none() {
                 //End seek and return drive to idle state
-                cpu.main_bus.cd_drive.read_offset = 0;
-                cpu.main_bus.cd_drive.drive_state = DriveState::Idle;
+                main_bus.cd_drive.read_offset = 0;
+                main_bus.cd_drive.drive_state = DriveState::Idle;
             }
         }
 
         0x9 => {
             //pause
             if packet.extra_response.is_none() {
-                cpu.main_bus.cd_drive.read_enabled = false;
+                main_bus.cd_drive.read_enabled = false;
             }
         }
 
         0x6 => {
             //ReadN
             if packet.cause == IntCause::INT1 {
-                let new_sector = cpu
-                    .main_bus
+                let new_sector = main_bus
                     .cd_drive
                     .disc
                     .as_ref()
                     .expect("Tried to read nonexistent disc!")
                     .read_sector(
-                        cpu.main_bus
+                        main_bus
                             .cd_drive
                             .next_seek_target
-                            .plus_sector_offset(cpu.main_bus.cd_drive.read_offset),
+                            .plus_sector_offset(main_bus.cd_drive.read_offset),
                     );
 
-                //println!("Read {} from disc. Read offset {}", new_sector.index(), cpu.main_bus.cd_drive.read_offset);
+                //println!("Read {} from disc. Read offset {}", new_sector.index(), main_bus.cd_drive.read_offset);
 
-                cpu.main_bus.cd_drive.read_offset += 1;
+                main_bus.cd_drive.read_offset += 1;
 
-                if cpu.main_bus.cd_drive.data_queue.len() >= 2 {
+                if main_bus.cd_drive.data_queue.len() >= 2 {
                     //println!("DROPPED SECTOR");
                 }
 
                 // Get rid of all the middle sectors, leave only the oldest
 
-                if cpu.main_bus.cd_drive.data_queue.len() > 1 {
-                    cpu.main_bus
+                if main_bus.cd_drive.data_queue.len() > 1 {
+                    main_bus
                         .cd_drive
                         .data_queue
-                        .drain(1..cpu.main_bus.cd_drive.data_queue.len());
+                        .drain(1..main_bus.cd_drive.data_queue.len());
 
                 }
 
-                //cpu.main_bus.cd_drive.data_queue.clear();
-                cpu.main_bus.cd_drive.data_queue.push(new_sector);
+                //main_bus.cd_drive.data_queue.clear();
+                main_bus.cd_drive.data_queue.push(new_sector);
 
-                if cpu.main_bus.cd_drive.read_enabled {
+                if main_bus.cd_drive.read_enabled {
                     trace!("Inserting next ReadN");
-                    let cycles = match cpu.main_bus.cd_drive.drive_speed() {
+                    let cycles = match main_bus.cd_drive.drive_speed() {
                         DriveSpeed::Single => 0x686da,
                         DriveSpeed::Double => 0x322df,
                     };
                     let response_packet = Packet {
                         cause: IntCause::INT1,
-                        response: vec![cpu.main_bus.cd_drive.get_stat()],
+                        response: vec![main_bus.cd_drive.get_stat()],
                         execution_cycles: cycles,
                         extra_response: None,
                         command: 0x6,
                     };
 
-                    cpu.main_bus.cd_drive.running_commands.push(response_packet);
+                    main_bus.cd_drive.running_commands.push(response_packet);
                 }
             }
         }

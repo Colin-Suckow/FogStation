@@ -1,14 +1,14 @@
 use bit_field::BitField;
 use log::trace;
 
-use crate::{cpu::Exception, timer::TimerState};
+use crate::{cpu::Exception, MainBus, Scheduler, timer::TimerState};
 
 use super::{
     instruction::{InstructionArgs, NumberHelpers},
     R3000,
 };
 
-pub(super) fn op_sw(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
+pub(super) fn op_sw(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
     let addr = offset
         .immediate_sign_extended()
         .wrapping_add(cpu.read_reg(rs));
@@ -21,15 +21,15 @@ pub(super) fn op_sw(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut T
         trace!("AdES fired by op_sw");
         cpu.fire_exception(Exception::AdES);
     } else {
-        cpu.write_bus_word(addr, val, timers);
+        cpu.write_bus_word(addr, val, main_bus);
     };
 }
 
-pub(super) fn op_swr(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
+pub(super) fn op_swr(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
     let addr = offset
         .immediate_sign_extended()
         .wrapping_add(cpu.read_reg(rs));
-    let word = cpu.read_bus_word(addr & !3, timers);
+    let word = cpu.read_bus_word(addr & !3, main_bus);
     let reg_val = cpu.read_reg(rt);
     cpu.flush_load_delay();
     cpu.write_bus_word(
@@ -41,15 +41,15 @@ pub(super) fn op_swr(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut 
             3 => (word & 0x00ffffff) | (reg_val << 24),
             _ => unreachable!(),
         },
-        timers,
+        main_bus
     );
 }
 
-pub(super) fn op_swl(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
+pub(super) fn op_swl(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
     let addr = offset
         .immediate_sign_extended()
         .wrapping_add(cpu.read_reg(rs));
-    let word = cpu.read_bus_word(addr & !3, timers);
+    let word = cpu.read_bus_word(addr & !3, main_bus);
     let reg_val = cpu.read_reg(rt);
     cpu.flush_load_delay();
     cpu.write_bus_word(
@@ -61,16 +61,16 @@ pub(super) fn op_swl(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut 
             3 => (word & 0x00000000) | (reg_val >> 0),
             _ => unreachable!(),
         },
-        timers,
+        main_bus
     );
 }
 
-pub(super) fn op_lwr(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
+pub(super) fn op_lwr(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
     let addr = offset
         .immediate_sign_extended()
         .wrapping_add(cpu.read_reg(rs));
 
-    let word = cpu.read_bus_word(addr & !3, timers);
+    let word = cpu.read_bus_word(addr & !3, main_bus);
 
     // LWR can ignore the load delay, so check if theres an existing load delay and fetch the rt value
     // from there if it exists
@@ -94,12 +94,12 @@ pub(super) fn op_lwr(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut 
     );
 }
 
-pub(super) fn op_lwl(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
+pub(super) fn op_lwl(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
     let addr = offset
         .immediate_sign_extended()
         .wrapping_add(cpu.read_reg(rs));
 
-    let word = cpu.read_bus_word(addr & !3, timers);
+    let word = cpu.read_bus_word(addr & !3, main_bus);
 
     // LWL can ignore the load delay, so check if theres an existing load delay and fetch the rt value
     // from there if it exists
@@ -123,7 +123,7 @@ pub(super) fn op_lwl(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut 
     );
 }
 
-pub(super) fn op_sh(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
+pub(super) fn op_sh(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
     let base = offset.immediate_sign_extended();
     let offset = cpu.read_reg(rs);
     let addr = base.wrapping_add(offset);
@@ -134,38 +134,38 @@ pub(super) fn op_sh(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut T
         trace!("AdES fired by op_sh pc {:#X}  addr {:#X}   s_reg  {}   s_reg_val  {:#X}   offset   {:#X}", cpu.current_pc, addr, rs, offset , base);
         cpu.fire_exception(Exception::AdES);
     } else {
-        cpu.write_bus_half_word(addr, val, timers);
+        cpu.write_bus_half_word(addr, val, main_bus);
     };
 }
 
-pub(super) fn op_sb(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
+pub(super) fn op_sb(cpu: &mut R3000, main_bus: &mut MainBus, scheduler: &mut Scheduler, rs: u8, rt: u8, offset: u32) {
     let addr = offset
         .immediate_sign_extended()
         .wrapping_add(cpu.read_reg(rs));
     let val = (cpu.read_reg(rt) & 0xFF) as u8;
     cpu.flush_load_delay();
-    cpu.write_bus_byte(addr, val);
+    cpu.write_bus_byte(addr, val, main_bus, scheduler);
 }
 
-pub(super) fn op_lhu(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
+pub(super) fn op_lhu(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
     let addr = (offset.immediate_sign_extended()).wrapping_add(cpu.read_reg(rs));
     if addr % 2 != 0 {
         trace!("AdEl fired by op_lhu");
         cpu.flush_load_delay();
         cpu.fire_exception(Exception::AdEL);
     } else {
-        let val = cpu.read_bus_half_word(addr, timers).zero_extended();
+        let val = cpu.read_bus_half_word(addr, main_bus).zero_extended();
         cpu.delayed_load(rt, val);
     };
 }
 
-pub(super) fn op_lbu(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
+pub(super) fn op_lbu(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
     let addr = (offset.immediate_sign_extended()).wrapping_add(cpu.read_reg(rs));
-    let val = cpu.main_bus.read_byte(addr).zero_extended();
+    let val = cpu.read_bus_byte(addr, main_bus).zero_extended();
     cpu.delayed_load(rt, val);
 }
 
-pub(super) fn op_lw(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
+pub(super) fn op_lw(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
     let base = offset.immediate_sign_extended();
     let offset = cpu.read_reg(rs);
     let addr = base.wrapping_add(offset);
@@ -179,7 +179,7 @@ pub(super) fn op_lw(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut T
         );
         cpu.fire_exception(Exception::AdEL);
     } else {
-        let val = cpu.read_bus_word(addr as u32, timers);
+        let val = cpu.read_bus_word(addr as u32, main_bus);
 
         //println!("lw addr {:08x} val {:08x} reg {}", addr, val, rt);
 
@@ -187,20 +187,20 @@ pub(super) fn op_lw(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut T
     };
 }
 
-pub(super) fn op_lh(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
+pub(super) fn op_lh(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
     let addr = (offset.immediate_sign_extended()).wrapping_add(cpu.read_reg(rs));
     if addr % 2 != 0 {
         trace!("AdEl fired by op_lh");
         cpu.fire_exception(Exception::AdEL);
     } else {
-        let val = cpu.read_bus_half_word(addr, timers).sign_extended();
+        let val = cpu.read_bus_half_word(addr, main_bus).sign_extended();
         cpu.delayed_load(rt, val as u32);
     };
 }
 
-pub(super) fn op_lb(cpu: &mut R3000, rs: u8, rt: u8, offset: u32) {
+pub(super) fn op_lb(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
     let addr = (offset.immediate_sign_extended()).wrapping_add(cpu.read_reg(rs));
-    let val = cpu.main_bus.read_byte(addr).sign_extended();
+    let val = cpu.read_bus_byte(addr, main_bus).sign_extended();
     cpu.delayed_load(rt, val as u32);
 }
 
@@ -598,16 +598,16 @@ pub(super) fn op_imm25(cpu: &mut R3000, command: u32) {
     cpu.gte.execute_command(command);
 }
 
-pub(super) fn op_lwc2(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
+pub(super) fn op_lwc2(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
     let addr = offset
         .immediate_sign_extended()
         .wrapping_add(cpu.read_reg(rs));
-    let val = cpu.read_bus_word(addr, timers);
+    let val = cpu.read_bus_word(addr, main_bus);
     cpu.flush_load_delay();
     cpu.gte.set_data_register(rt as usize, val);
 }
 
-pub(super) fn op_swc2(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut TimerState) {
+pub(super) fn op_swc2(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
     let addr = offset
         .immediate_sign_extended()
         .wrapping_add(cpu.read_reg(rs));
@@ -617,7 +617,7 @@ pub(super) fn op_swc2(cpu: &mut R3000, rs: u8, rt: u8, offset: u32, timers: &mut
         cpu.gte.data_register(rt as usize)
     };
     cpu.flush_load_delay();
-    cpu.write_bus_word(addr, val, timers);
+    cpu.write_bus_word(addr, val, main_bus);
 }
 
 pub(super) fn op_branch(cpu: &mut R3000, instruction: u32) {

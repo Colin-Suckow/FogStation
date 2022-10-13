@@ -9,6 +9,8 @@ use enum_display_derive::Display;
 use log::{error, trace, warn};
 use nalgebra::Vector2;
 use num_traits::clamp;
+use crate::{CpuCycles, Scheduler};
+use crate::scheduler::{GpuCycles, ScheduleTarget};
 
 const CYCLES_PER_SCANLINE: u32 = 3413;
 const TOTAL_SCANLINES: u32 = 263;
@@ -261,6 +263,7 @@ pub struct Gpu {
 
     force_b15: bool,
     interlace: bool,
+    dots_per_line: u32,
 }
 
 impl Gpu {
@@ -317,6 +320,7 @@ impl Gpu {
 
             force_b15: false,
             interlace: false,
+            dots_per_line: 490,
         }
     }
 
@@ -1593,6 +1597,7 @@ impl Gpu {
                         }
                     }
                 };
+                self.dots_per_line = 3413 / (2560 / self.display_h_res);
 
                 self.display_v_res = if command.get_bit(2) && command.get_bit(5) {
                     480
@@ -1623,49 +1628,27 @@ impl Gpu {
         }
     }
 
-    fn dotclock_cycled(&mut self) -> bool {
-        self.cycle_counter += 1;
-        self.cycle_counter % (2560 / self.display_h_res) == 0
-    }
-
-    pub fn execute_cycle(&mut self) -> bool {
-        // if self.cycle_counter % CYCLES_PER_SCANLINE == 0 {
-        //     self.hblank_consumed = false;
-        // }
-
+    pub fn schedule_complete(&mut self) -> Option<CpuCycles> {
+       self.cycle_counter += CYCLES_PER_SCANLINE;
         if self.cycle_counter > CYCLES_PER_SCANLINE * TOTAL_SCANLINES {
             self.cycle_counter = 0;
             self.vblank_consumed = false;
             self.frame_ready = true;
             trace!("VBLANK DONE");
         }
-        if self.dotclock_cycled() {
-            let dots_per_line = 3413 / (2560 / self.display_h_res);
-            self.pixel_count += 1;
-            if self.pixel_count % dots_per_line == 0 {
-                self.hblank_consumed = false;
-            }
-            //
-            // if self.pixel_count > dots_per_line * TOTAL_SCANLINES {
-            //     self.pixel_count = 0;
-            //     self.vblank_consumed = false;
-            //     self.frame_ready = true;
-            //     trace!("VBLANK DONE");
-            // }
-            true
-        } else {
-            false
-        }
+        self.hblank_consumed = false;
+
+        let gpu_til_next_hblank = 3413 / (2560 / self.display_h_res);
+        Some(GpuCycles(gpu_til_next_hblank).into())
     }
 
     pub fn is_vblank(&self) -> bool {
         self.cycle_counter > CYCLES_PER_SCANLINE * (self.ntsc_y2 - self.ntsc_y1)
-        //self.pixel_count > (3413 / (2560 / self.display_h_res)) * (self.ntsc_y2 - self.ntsc_y1)
     }
 
     pub fn is_hblank(&self) -> bool {
+        // This is probably busted
         self.cycle_counter % CYCLES_PER_SCANLINE > self.display_h_res
-        //self.pixel_count % 3413 / (2560 / self.display_h_res) > self.display_h_res
     }
 
     pub fn display_origin(&self) -> (usize, usize) {

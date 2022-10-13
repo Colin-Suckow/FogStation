@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::convert::TryFrom;
 
 use bit_field::BitField;
@@ -8,7 +9,7 @@ use log::warn;
 
 use crate::bus::MainBus;
 use crate::cpu::instruction::RegisterNames;
-use crate::timer::TimerState;
+use crate::Scheduler;
 
 use self::gte::GTE;
 
@@ -62,7 +63,6 @@ pub struct R3000 {
     current_pc: u32,
     pub hi: u32,
     pub lo: u32,
-    pub main_bus: MainBus,
     delay_slot: u32,
     pub cop0: Cop0,
     load_delay: Option<LoadDelay>,
@@ -75,10 +75,12 @@ pub struct R3000 {
     gte: GTE,
     pub last_touched_addr: u32,
     pub entrypoint: u32,
+
+    pub inst_map: HashMap<String, u32>
 }
 
 impl R3000 {
-    pub fn new(bus: MainBus) -> R3000 {
+    pub fn new() -> R3000 {
         R3000 {
             gen_registers: [0; 32],
             cycle_count: 0,
@@ -86,7 +88,6 @@ impl R3000 {
             current_pc: 0,
             hi: 0,
             lo: 0,
-            main_bus: bus,
             delay_slot: 0,
             cop0: Cop0::new(),
             load_delay: None,
@@ -99,6 +100,7 @@ impl R3000 {
             gte: GTE::new(),
             last_touched_addr: 0,
             entrypoint: 0,
+            inst_map: HashMap::new()
         }
     }
     /// Resets cpu registers to zero and sets program counter to reset vector (0xBFC00000)
@@ -116,14 +118,14 @@ impl R3000 {
     }
 
     #[allow(dead_code)]
-    fn print_string(&mut self, addr: u32) {
-        let val = self.main_bus.read_byte(addr);
+    fn print_string(&mut self, addr: u32, main_bus: &mut MainBus) {
+        let val = main_bus.read_byte(addr);
         if val == 0 {
             //Null, end of string
             return;
         }
         print!("{}", std::str::from_utf8(&[val]).unwrap());
-        self.print_string(addr + 1);
+        self.print_string(addr + 1, main_bus);
     }
 
     fn print_registers(&self) {
@@ -140,7 +142,7 @@ impl R3000 {
         println!("");
     }
 
-    pub fn step_instruction(&mut self, timers: &mut TimerState) -> bool {
+    pub fn step_instruction(&mut self, main_bus: &mut MainBus, scheduler: &mut Scheduler) -> bool {
 
         let mut ran_delay_inst = false;
 
@@ -160,7 +162,7 @@ impl R3000 {
                         let len = self.read_reg(RegisterNames::a2 as u8);
                         let base = self.read_reg(RegisterNames::a1 as u8);
                         for i in 0..len {
-                            let char = self.read_bus_byte(base + i);
+                            let char = self.read_bus_byte(base + i, main_bus);
                             print!("{}", unsafe { std::str::from_utf8_unchecked(&[char]) });
                         }
                     }
@@ -192,12 +194,12 @@ impl R3000 {
         }
 
         // Handle SPU irq
-        if self.main_bus.spu.check_and_ack_irq() {
+        if main_bus.spu.check_and_ack_irq() {
             self.fire_external_interrupt(InterruptSource::SPU);
         }
 
         //Check for vblank
-        if self.main_bus.gpu.consume_vblank() {
+        if main_bus.gpu.consume_vblank() {
             self.fire_external_interrupt(InterruptSource::VBLANK);
         };
 
@@ -211,7 +213,7 @@ impl R3000 {
             self.fire_exception(Exception::Int);
         }
 
-        let instruction = self.main_bus.read_word(self.pc);
+        let instruction = main_bus.read_word(self.pc);
         self.current_pc = self.pc;
         self.pc += 4;
 
@@ -219,28 +221,28 @@ impl R3000 {
         self.last_was_branch = false;
 
         if self.log {
-            self.log_instruction(instruction);
+            self.log_instruction(instruction, main_bus);
         }
         self.cycle_count = self.cycle_count.wrapping_add(1);
-        self.run_opcode(instruction, timers);
+        self.run_opcode(instruction, main_bus, scheduler);
 
-        // if self.main_bus.last_touched_addr == 0x121CA8 {
-        //     println!("lta pc {:#X} val {:#X}", self.current_pc, self.main_bus.read_word(0x121CA8));
+        // if main_bus.last_touched_addr == 0x121CA8 {
+        //     println!("lta pc {:#X} val {:#X}", self.current_pc, main_bus.read_word(0x121CA8));
         //     self.last_touched_addr = 0;
         // }
 
         //Execute branch delay operation
         if self.delay_slot != 0 {
             ran_delay_inst = true;
-            let delay_instruction = self.main_bus.read_word(self.delay_slot);
+            let delay_instruction = main_bus.read_word(self.delay_slot);
             if self.log {
-                self.log_instruction(delay_instruction);
+                self.log_instruction(delay_instruction, main_bus);
             }
             //self.trace_file.write(format!("{:08x}: {:08x}\n", self.delay_slot, delay_instruction).as_bytes());
             //println!("{:08x}: {:08x}", self.delay_slot, delay_instruction);
             self.exec_delay = true;
             self.cycle_count = self.cycle_count.wrapping_add(1);
-            self.run_opcode(delay_instruction, timers);
+            self.run_opcode(delay_instruction, main_bus, scheduler);
             self.exec_delay = false;
             self.delay_slot = 0;
         };
@@ -253,7 +255,7 @@ impl R3000 {
         }
     }
 
-    fn log_instruction(&self, instruction: u32) {
+    fn log_instruction(&self, instruction: u32, main_bus: &mut MainBus) {
         let inst = decode_opcode(instruction).unwrap();
         // println!(
         //     "{:#X} : {:?} rs: {:#X} rt: {:#X} rd: {:#X}",
@@ -269,11 +271,11 @@ impl R3000 {
             self.current_pc,
             instruction,
             inst.mnemonic(),
-            inst.arguments(self)
+            inst.arguments(self, main_bus)
         );
     }
 
-    pub fn run_opcode(&mut self, opcode: u32, timers: &mut TimerState) {
+    pub fn run_opcode(&mut self, opcode: u32, main_bus: &mut MainBus, scheduler: &mut Scheduler) {
         if self.pc % 4 != 0 || self.delay_slot % 4 != 0 {
             warn!("Tried to execute out of alignment");
             self.fire_exception(Exception::AdEL);
@@ -281,7 +283,9 @@ impl R3000 {
         }
 
         if let Some(inst) = decode_opcode(opcode) {
-            inst.execute(self, timers);
+            // let inst_count = self.inst_map.entry(inst.mnemonic().into()).or_insert(0);
+            // *inst_count += 1;
+            inst.execute(self, main_bus, scheduler);
         } else {
             panic!("Unknown opcode! {:X}", opcode);
         }
@@ -325,7 +329,7 @@ impl R3000 {
         self.i_status.set_bit(mask_bit, true);
     }
 
-    pub fn read_bus_word(&mut self, addr: u32, timers: &mut TimerState) -> u32 {
+    pub fn read_bus_word(&mut self, addr: u32, main_bus: &mut MainBus) -> u32 {
         //self.last_touched_addr = addr & 0x1fffffff;
 
         match addr & 0x1fffffff {
@@ -334,12 +338,11 @@ impl R3000 {
                 self.i_status
             }
             0x1F801074 => self.i_mask,
-            0x1F801100..=0x1F801128 => timers.read_word(addr & 0x1fffffff),
-            _ => self.main_bus.read_word(addr),
+            _ => main_bus.read_word(addr),
         }
     }
 
-    pub fn write_bus_word(&mut self, addr: u32, val: u32, timers: &mut TimerState) {
+    pub fn write_bus_word(&mut self, addr: u32, val: u32, main_bus: &mut MainBus) {
         self.last_touched_addr = addr & 0x1fffffff;
 
         if self.cop0.cache_isolated() {
@@ -355,24 +358,22 @@ impl R3000 {
                 //println!("Writing I_MASK val {:#X}", val);
                 self.i_mask = val;
             }
-            0x1F801100..=0x1F801128 => timers.write_word(addr & 0x1fffffff, val),
-            _ => self.main_bus.write_word(addr, val),
+            _ => main_bus.write_word(addr, val),
         };
     }
 
-    fn read_bus_half_word(&mut self, addr: u32, timers: &mut TimerState) -> u16 {
+    fn read_bus_half_word(&mut self, addr: u32, main_bus: &mut MainBus) -> u16 {
         // if addr == 0x1F801C0C {
         //     println!("Read spu thing at pc {:#X}", self.current_pc);
         // }
         match addr & 0x1fffffff {
             0x1F801070 => self.i_status as u16,
             0x1F801074 => self.i_mask as u16,
-            0x1F801100..=0x1F801128 => timers.read_half_word(addr & 0x1fffffff),
-            _ => self.main_bus.read_half_word(addr),
+            _ => main_bus.read_half_word(addr),
         }
     }
 
-    pub fn read_bus_byte(&mut self, addr: u32) -> u8 {
+    pub fn read_bus_byte(&mut self, addr: u32, main_bus: &mut MainBus) -> u8 {
         //self.last_touched_addr = addr & 0x1fffffff;
         if addr & 0x1fffffff == 0x1f801040 {
             println!("Read JOY_DATA at pc {:#X}", self.current_pc);
@@ -382,11 +383,11 @@ impl R3000 {
             0x1F801072 => (self.i_status >> 8) as u8,
             0x1F801074 => self.i_mask as u8,
             0x1F801076 => (self.i_mask >> 8) as u8,
-            _ => self.main_bus.read_byte(addr),
+            _ => main_bus.read_byte(addr),
         }
     }
 
-    fn write_bus_half_word(&mut self, addr: u32, val: u16, timers: &mut TimerState) {
+    fn write_bus_half_word(&mut self, addr: u32, val: u16, main_bus: &mut MainBus) {
         self.last_touched_addr = addr & 0x1fffffff;
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
@@ -396,12 +397,11 @@ impl R3000 {
         match addr & 0x1fffffff {
             0x1F801070 => self.i_status &= (val & 0x3FF) as u32,
             0x1F801074 => self.i_mask = val as u32,
-            0x1F801100..=0x1F801128 => timers.write_half_word(addr & 0x1fffffff, val),
-            _ => self.main_bus.write_half_word(addr, val),
+            _ => main_bus.write_half_word(addr, val),
         };
     }
 
-    pub fn write_bus_byte(&mut self, addr: u32, val: u8) {
+    pub fn write_bus_byte(&mut self, addr: u32, val: u8, main_bus: &mut MainBus, scheduler: &mut Scheduler) {
         self.last_touched_addr = addr & 0x1fffffff;
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
@@ -410,7 +410,7 @@ impl R3000 {
         match addr & 0x1fffffff {
             0x1F801070 => self.i_status &= (val as u32) & 0x3FF,
             0x1F801074 => self.i_mask = val as u32,
-            _ => self.main_bus.write_byte(addr, val),
+            _ => main_bus.write_byte(addr, val, scheduler),
         };
     }
 

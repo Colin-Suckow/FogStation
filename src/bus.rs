@@ -8,7 +8,7 @@ use crate::gpu::Gpu;
 use crate::mdec::MDEC;
 use crate::memory::Memory;
 use crate::spu::SPU;
-use crate::LOGGING;
+use crate::{LOGGING, Scheduler, TimerState};
 
 pub struct MainBus {
     pub bios: Bios,
@@ -17,9 +17,11 @@ pub struct MainBus {
     pub dma: DMAState,
     pub spu: SPU,
     pub cd_drive: CDDrive,
+    pub timers: TimerState,
     scratchpad: Memory,
     pub(super) controllers: Controllers,
     pub(crate) mdec: MDEC,
+
 
     pub last_touched_addr: u32,
 }
@@ -36,6 +38,7 @@ impl MainBus {
             scratchpad: Memory::new_scratchpad(),
             controllers: Controllers::new(),
             mdec: MDEC::new(),
+            timers: TimerState::new(),
 
             last_touched_addr: 0,
         }
@@ -67,6 +70,7 @@ impl MainBus {
             0x1F801820..=0x1F801824 => self.mdec.bus_read_word(addr),
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_word(addr - 0x1fc0_0000),
             0x1F802000..=0x1F802080 => 0, // Expansion 2
+            0x1F801100..=0x1F801128 => self.timers.read_word(addr & 0x1fffffff),
             _ => panic!(
                 "Invalid word read at address {:#X}! This address is not mapped to any device.",
                 addr
@@ -110,6 +114,7 @@ impl MainBus {
             0x1F801814 => self.gpu.send_gp1_command(word),
             0x1F801820..=0x1F801824 => self.mdec.bus_write_word(addr, word),
             0x1F800000..=0x1F8003FF => self.scratchpad.write_word(addr - 0x1F800000, word),
+            0x1F801100..=0x1F801128 => self.timers.write_word(addr & 0x1fffffff, word),
             //0x1f80_1000..=0x1f80_2fff => warn!("Something tried to write to the hardware control registers. These are not currently emulated. The address was {:#X}. Value {:#X}", addr, word),
             0x1FFE0000..=0x1FFE0200 => warn!("Something tried to write to the cache control registers. These are not currently emulated. The address was {:#X}", addr),
             _ => {
@@ -133,6 +138,7 @@ impl MainBus {
             0x1F80_1040..=0x1F80_104E => self.controllers.read_half_word(addr),
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_half_word(addr - 0x1fc0_0000),
             0x1f801050..=0x1f80105e => 0xBEEF, //SIO registers
+            0x1F801100..=0x1F801128 => self.timers.read_half_word(addr & 0x1fffffff),
             _ => panic!("Invalid half word read at address {:#X}! This address is not mapped to any device.", addr)
         };
         // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {
@@ -165,6 +171,7 @@ impl MainBus {
             0x1F801C00..=0x1F801E80 => self.spu.write_half_word(addr, value),
             0x1F800000..=0x1F8003FF => self.scratchpad.write_half_word(addr - 0x1F800000, value),
             0x1F80_1040..=0x1F80_104E => self.controllers.write_half_word(addr, value),
+            0x1F801100..=0x1F801128 => self.timers.write_half_word(addr & 0x1fffffff, value),
             //0x1f801050..=0x1f80105e => (), //SIO registers
             //0x1F80_1000..=0x1F80_2000 => warn!("Something tried to half word write to the I/O ports. This is not currently emulated. The address was {:#X}. value was {:#X}", addr, value),
             _ => panic!("Invalid half word write at address {:#X}! This address is not mapped to any device.", addr)
@@ -213,7 +220,7 @@ impl MainBus {
         val
     }
 
-    pub fn write_byte(&mut self, og_addr: u32, value: u8) {
+    pub fn write_byte(&mut self, og_addr: u32, value: u8, scheduler: &mut Scheduler) {
         let addr = translate_address(og_addr);
         self.last_touched_addr = addr & 0x1fffffff;
 
@@ -229,7 +236,7 @@ impl MainBus {
             0x1F80202B => info!("DUART B: {}", value),
             0x1F801050 => info!("SIO: {}", value),
             0x1F802000..=0x1F803000 => (), //Expansion port 2
-            0x1F801040 => self.controllers.write_byte(addr, value),
+            0x1F801040 => self.controllers.write_byte(addr, value, scheduler),
             0x1F800000..=0x1F8003FF => self.scratchpad.write_byte(addr - 0x1F800000, value),
             0x1F801080..=0x1F8010F7 => self.dma.write_byte(addr, value),
             _ => panic!(

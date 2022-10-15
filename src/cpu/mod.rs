@@ -342,7 +342,7 @@ impl R3000 {
         }
     }
 
-    pub fn write_bus_word(&mut self, addr: u32, val: u32, main_bus: &mut MainBus) {
+    pub fn write_bus_word(&mut self, addr: u32, val: u32, main_bus: &mut MainBus, scheduler: &mut Scheduler) {
         self.last_touched_addr = addr & 0x1fffffff;
 
         if self.cop0.cache_isolated() {
@@ -358,7 +358,7 @@ impl R3000 {
                 //println!("Writing I_MASK val {:#X}", val);
                 self.i_mask = val;
             }
-            _ => main_bus.write_word(addr, val),
+            _ => main_bus.write_word(addr, val, scheduler),
         };
     }
 
@@ -387,7 +387,7 @@ impl R3000 {
         }
     }
 
-    fn write_bus_half_word(&mut self, addr: u32, val: u16, main_bus: &mut MainBus) {
+    fn write_bus_half_word(&mut self, addr: u32, val: u16, main_bus: &mut MainBus, scheduler: &mut Scheduler,) {
         self.last_touched_addr = addr & 0x1fffffff;
         if self.cop0.cache_isolated() {
             //Cache is isolated, so don't write
@@ -397,7 +397,7 @@ impl R3000 {
         match addr & 0x1fffffff {
             0x1F801070 => self.i_status &= (val & 0x3FF) as u32,
             0x1F801074 => self.i_mask = val as u32,
-            _ => main_bus.write_half_word(addr, val),
+            _ => main_bus.write_half_word(addr, val, scheduler),
         };
     }
 

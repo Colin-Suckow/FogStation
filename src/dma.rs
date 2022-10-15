@@ -1,7 +1,7 @@
 use crate::cpu::{InterruptSource, R3000};
 use bit_field::BitField;
 use log::{error, info, trace};
-use crate::MainBus;
+use crate::{MainBus, Scheduler};
 
 const NUM_CHANNELS: usize = 7;
 
@@ -124,7 +124,6 @@ pub struct DMAState {
     channels: [Channel; NUM_CHANNELS],
     control: u32,
     interrupt: u32,
-    cycles_to_wait: usize,
 }
 
 impl DMAState {
@@ -141,7 +140,6 @@ impl DMAState {
             ],
             control: 0x07654321, //Initial value on reset
             interrupt: 0,
-            cycles_to_wait: 0,
         }
     }
 
@@ -201,9 +199,7 @@ impl DMAState {
                         //Set control
                         //println!("Wrote DMA control {} with {:#X}", channel_num, value);
                         self.channels[channel_num].control = value;
-                        if value.get_bit(24) {
-                            self.cycles_to_wait = 500;
-                        }
+
                     }
                     _ => panic!("Unknown dma write {:#X}", addr),
                 };
@@ -254,12 +250,7 @@ impl DMAState {
     }
 }
 
-pub fn execute_dma_cycle(cpu: &mut R3000, main_bus: &mut MainBus) {
-    // if main_bus.dma.cycles_to_wait > 0 {
-    //     main_bus.dma.cycles_to_wait -= 1;
-    //     return;
-    // }
-
+pub fn execute_dma_cycle(cpu: &mut R3000, main_bus: &mut MainBus, scheduler: &mut Scheduler) {
     //Populate list of running and enabled dma channels
     let mut channels_to_run: Vec<usize> = Vec::new();
     for i in 0..NUM_CHANNELS {
@@ -332,7 +323,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000, main_bus: &mut MainBus) {
                                 let word = main_bus.mdec.bus_read_word(0x1f801820);
                                 //println!("MDEC_out DMA pushing word {:#X}", word);
                                 main_bus
-                                    .write_word(base_addr + ((i * block_size) * 4) + (j * 4), word);
+                                    .write_word(base_addr + ((i * block_size) * 4) + (j * 4), word, scheduler);
                             }
                         }
                         trace!("MDEC_out transfer done!")
@@ -448,7 +439,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000, main_bus: &mut MainBus) {
                             for j in 0..block_size {
                                 let val = main_bus.gpu.read_word_gp0();
                                 main_bus
-                                    .write_word(base_addr + ((i * block_size) * 4) + (j * 4), val);
+                                    .write_word(base_addr + ((i * block_size) * 4) + (j * 4), val, scheduler);
                             }
                         }
                         main_bus.dma.channels[num].base_addr += entries * block_size * 4;
@@ -555,11 +546,11 @@ pub fn execute_dma_cycle(cpu: &mut R3000, main_bus: &mut MainBus) {
                     let addr = base - (((entries - 1) - i) * 4);
                     if i == 0 {
                         //The first entry should point to the end of memory
-                        main_bus.write_word(addr, 0xFFFFFF);
+                        main_bus.write_word(addr, 0xFFFFFF, scheduler);
                         //println!("Wrote DMA6 end at {:#X} val {:#X}", addr, 0xFFFFFF);
                     } else {
                         //All the others should point to the address below
-                        main_bus.write_word(addr, (addr - 4) & 0xFFFFFF);
+                        main_bus.write_word(addr, (addr - 4) & 0xFFFFFF, scheduler);
                         //println!("Wrote DMA6 header at {:#X} val {:#X}", addr, (addr - 4) & 0xFFFFFF);
                     }
                 }
@@ -582,7 +573,6 @@ pub fn execute_dma_cycle(cpu: &mut R3000, main_bus: &mut MainBus) {
     if !old_flag && main_bus.dma.interrupt.get_bit(31) {
         cpu.fire_external_interrupt(InterruptSource::DMA);
     }
-    //main_bus.dma.cycles_to_wait = 200; // Lets give the cpu some time to see that the DMA is done
 }
 
 fn write_dicr(current_value: u32, value: u32) -> u32 {

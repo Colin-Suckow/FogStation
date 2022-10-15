@@ -85,7 +85,7 @@ impl MainBus {
         value
     }
 
-    pub fn write_word(&mut self, og_addr: u32, word: u32) {
+    pub fn write_word(&mut self, og_addr: u32, word: u32, scheduler: &mut Scheduler) {
         let addr = translate_address(og_addr);
         self.last_touched_addr = addr;
 
@@ -114,7 +114,7 @@ impl MainBus {
             0x1F801814 => self.gpu.send_gp1_command(word),
             0x1F801820..=0x1F801824 => self.mdec.bus_write_word(addr, word),
             0x1F800000..=0x1F8003FF => self.scratchpad.write_word(addr - 0x1F800000, word),
-            0x1F801100..=0x1F801128 => self.timers.write_word(addr & 0x1fffffff, word),
+            0x1F801100..=0x1F801128 => self.timers.write_word(addr & 0x1fffffff, word, scheduler),
             //0x1f80_1000..=0x1f80_2fff => warn!("Something tried to write to the hardware control registers. These are not currently emulated. The address was {:#X}. Value {:#X}", addr, word),
             0x1FFE0000..=0x1FFE0200 => warn!("Something tried to write to the cache control registers. These are not currently emulated. The address was {:#X}", addr),
             _ => {
@@ -150,7 +150,7 @@ impl MainBus {
         val
     }
 
-    pub fn write_half_word(&mut self, og_addr: u32, value: u16) {
+    pub fn write_half_word(&mut self, og_addr: u32, value: u16, scheduler: &mut Scheduler,) {
         let addr = translate_address(og_addr);
         self.last_touched_addr = addr;
 
@@ -171,7 +171,7 @@ impl MainBus {
             0x1F801C00..=0x1F801E80 => self.spu.write_half_word(addr, value),
             0x1F800000..=0x1F8003FF => self.scratchpad.write_half_word(addr - 0x1F800000, value),
             0x1F80_1040..=0x1F80_104E => self.controllers.write_half_word(addr, value),
-            0x1F801100..=0x1F801128 => self.timers.write_half_word(addr & 0x1fffffff, value),
+            0x1F801100..=0x1F801128 => self.timers.write_half_word(addr & 0x1fffffff, value, scheduler),
             //0x1f801050..=0x1f80105e => (), //SIO registers
             //0x1F80_1000..=0x1F80_2000 => warn!("Something tried to half word write to the I/O ports. This is not currently emulated. The address was {:#X}. value was {:#X}", addr, value),
             _ => panic!("Invalid half word write at address {:#X}! This address is not mapped to any device.", addr)
@@ -230,7 +230,7 @@ impl MainBus {
 
         match addr {
             0x0..=0x001f_ffff => self.memory.write_byte(addr, value), //KUSEG
-            0x1F801800..=0x1F801803 => self.cd_drive.write_byte(addr, value), //CDROM
+            0x1F801800..=0x1F801803 => self.cd_drive.write_byte(addr, value, scheduler), //CDROM
             0x1F802002 => info!("Serial: {}", value),
             0x1F802023 => info!("DUART A: {}", value),
             0x1F80202B => info!("DUART B: {}", value),

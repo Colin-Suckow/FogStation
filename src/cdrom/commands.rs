@@ -3,8 +3,9 @@ use crate::cdrom::{disc::DiscIndex, DriveSpeed};
 
 pub(super) const AVG_FIRST_RESPONSE_TIME: u32 = 0xc4e1;
 
-pub(super) fn get_bios_date() -> Packet {
+pub(super) fn get_bios_date(state: &mut CDDrive) -> Packet {
     Packet {
+        internal_id: state.next_packet_id(),
         cause: IntCause::INT3,
         response: vec![0x94, 0x09, 0x19, 0xC0], //PSX (PU-7) rev a
         execution_cycles: AVG_FIRST_RESPONSE_TIME,
@@ -13,10 +14,11 @@ pub(super) fn get_bios_date() -> Packet {
     }
 }
 
-fn stat(state: &CDDrive, command: u8) -> Packet {
+fn stat(state: &mut CDDrive, command: u8) -> Packet {
     //TODO: Error handling
 
     Packet {
+        internal_id: state.next_packet_id(),
         cause: IntCause::INT3,
         response: vec![state.get_stat()],
         execution_cycles: AVG_FIRST_RESPONSE_TIME,
@@ -25,15 +27,16 @@ fn stat(state: &CDDrive, command: u8) -> Packet {
     }
 }
 
-pub(super) fn get_stat(state: &CDDrive) -> Packet {
+pub(super) fn get_stat(state: &mut CDDrive) -> Packet {
     stat(state, 0x1)
 }
 
-pub(super) fn get_id(state: &CDDrive) -> Packet {
+pub(super) fn get_id(state: &mut CDDrive) -> Packet {
     //Only handles 'No Disk' and 'Licensed Game' states
     if state.disc.is_some() {
         let mut first_response = stat(state, 0x1a);
         let second_response = Packet {
+            internal_id: state.next_packet_id(),
             cause: IntCause::INT2,
             response: vec![state.get_stat(), 0x00, 0x20, 0x00, 0x53, 0x43, 0x45, 0x41], //SCEA disk inserted
             execution_cycles: 0x4a00,
@@ -45,6 +48,7 @@ pub(super) fn get_id(state: &CDDrive) -> Packet {
     } else {
         let mut first_response = stat(state, 0x1a);
         let second_response = Packet {
+            internal_id: state.next_packet_id(),
             cause: IntCause::INT5,
             response: vec![0x08, 0x40, 0, 0, 0, 0, 0, 0], //No disk
             execution_cycles: 0x4a00,
@@ -121,6 +125,7 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
     }
 
     let response_packet = Packet {
+        internal_id: state.next_packet_id(),
         cause: IntCause::INT1,
         response: vec![state.get_stat()],
         execution_cycles: cycles,
@@ -152,6 +157,7 @@ pub(super) fn pause_read(state: &mut CDDrive) -> Packet {
     state.read_enabled = false;
 
     let response_packet = Packet {
+        internal_id: state.next_packet_id(),
         cause: IntCause::INT2,
         response: vec![state.get_stat()],
         execution_cycles: cycles * 6,

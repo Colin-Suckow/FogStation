@@ -439,7 +439,7 @@ impl Instruction {
                 interpreter::op_addiu(cpu, *rs, *rt, *immediate as u32)
             }
             Instruction::SW { rt, offset, base } => {
-                interpreter::op_sw(cpu, main_bus, *base, *rt, *offset as u32)
+                interpreter::op_sw(cpu, main_bus, scheduler, *base, *rt, *offset as u32)
             }
             Instruction::SLT { rd, rs, rt } => interpreter::op_slt(cpu, *rs, *rt, *rd),
             Instruction::LUI { rt, immediate } => interpreter::op_lui(cpu, *rt, *immediate as u32),
@@ -523,7 +523,7 @@ impl Instruction {
                 interpreter::op_lhu(cpu, main_bus, *base, *rt, *offset as u32)
             }
             Instruction::SH { rt, offset, base } => {
-                interpreter::op_sh(cpu, main_bus, *base, *rt, *offset as u32)
+                interpreter::op_sh(cpu, main_bus, scheduler, *base, *rt, *offset as u32)
             }
             Instruction::LWL { rt, offset, base } => {
                 interpreter::op_lwl(cpu, main_bus, *base, *rt, *offset as u32)
@@ -532,16 +532,16 @@ impl Instruction {
                 interpreter::op_lwr(cpu, main_bus, *base, *rt, *offset as u32)
             }
             Instruction::SWL { rt, offset, base } => {
-                interpreter::op_swl(cpu, main_bus, *base, *rt, *offset as u32)
+                interpreter::op_swl(cpu, main_bus, scheduler, *base, *rt, *offset as u32)
             }
             Instruction::SWR { rt, offset, base } => {
-                interpreter::op_swr(cpu, main_bus, *base, *rt, *offset as u32)
+                interpreter::op_swr(cpu, main_bus, scheduler, *base, *rt, *offset as u32)
             }
             Instruction::LWC2 { rt, offset, base } => {
                 interpreter::op_lwc2(cpu, main_bus, *base, *rt, *offset as u32)
             }
             Instruction::SWC2 { rt, offset, base } => {
-                interpreter::op_swc2(cpu, main_bus, *base, *rt, *offset as u32)
+                interpreter::op_swc2(cpu, main_bus, scheduler, *base, *rt, *offset as u32)
             }
             Instruction::MALBRCH { opcode, .. } => interpreter::op_branch(cpu, *opcode),
         }

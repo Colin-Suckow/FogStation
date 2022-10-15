@@ -1,10 +1,20 @@
 use crate::cpu::{InterruptSource, R3000};
 use bit_field::BitField;
+use crate::{CpuCycles, Scheduler};
+use crate::scheduler::{GpuCycles, HBlankCycles, SysCycles};
+use crate::ScheduleTarget::{TimerOverflow, TimerTarget};
 
 #[derive(PartialEq, Debug)]
 enum Cause {
     Full,
     Target,
+}
+
+enum Source {
+    Sys,
+    SysDiv,
+    Dot,
+    HBlank
 }
 
 pub struct Timer {
@@ -84,10 +94,70 @@ impl Timer {
         mode
     }
 
-    pub fn write_mode(&mut self, value: u32) {
+    pub fn write_mode(&mut self, value: u32, scheduler: &mut Scheduler) {
         self.mode = value;
         self.mode.set_bit(10, true);
         self.value = 0;
+
+        // Get rid of old timer events
+        scheduler.invalidate_all_events_of_target(TimerTarget(0));
+        scheduler.invalidate_all_events_of_target(TimerOverflow(0));
+
+        // Schedule events for timer expiration
+        // Event when target reached
+        if self.target != 0 {
+            let target_cycles: CpuCycles = match self.source() {
+                Source::Sys => SysCycles(self.target).into(),
+                Source::SysDiv => SysCycles(self.target * 8).into(),
+                Source::Dot => GpuCycles(self.target).into(),
+                Source::HBlank => HBlankCycles(self.target).into(),
+            };
+            scheduler.schedule_event(TimerTarget(self.timer_number as u32), target_cycles);
+        }
+
+        // Event when overflow reached
+        let overflow_cycles: CpuCycles = match self.source() {
+            Source::Sys => SysCycles(0xFFFF).into(),
+            Source::SysDiv => SysCycles(0xFFFF * 8).into(),
+            Source::Dot => GpuCycles(0xFFFF).into(),
+            Source::HBlank => HBlankCycles(0xFFFF).into(),
+        };
+
+        scheduler.schedule_event(TimerOverflow(self.timer_number as u32), overflow_cycles);
+
+    }
+
+    fn source(&self) -> Source {
+        match self.timer_number {
+            0 => {
+                match self.mode.get_bits(8..=9) {
+                    0 | 2 => Source::Sys,
+                    _ => Source::Dot
+                }
+            },
+            1 => {
+                match self.mode.get_bits(8..=9) {
+                    0 | 2 => Source::Sys,
+                    _ => Source::HBlank
+                }
+            },
+            2 => {
+                match self.mode.get_bits(8..=9) {
+                     0 | 1 => Source::Sys,
+                    _ => Source::SysDiv
+                }
+            },
+            _ => unreachable!()
+        }
+    }
+
+    fn irq_source(&self) -> InterruptSource {
+        match self.timer_number {
+            0 => InterruptSource::TMR0,
+            1 => InterruptSource::TMR1,
+            2 => InterruptSource::TMR2,
+            _ => panic!("Invalid timer source"),
+        }
     }
 }
 
@@ -106,45 +176,29 @@ impl TimerState {
         }
     }
 
-    pub fn update_sys_clock(&mut self, cpu: &mut R3000) {
-        let mode0 = self.timer_0.mode.get_bits(8..=9);
-        let mode1 = self.timer_1.mode.get_bits(8..=9);
-        let mode2 = self.timer_2.mode.get_bits(8..=9);
+    pub fn timer_overflow_event(&mut self, cpu: &mut R3000, scheduler: &mut Scheduler, timer_num: u32) {
+        let timer = match timer_num {
+            0 => &mut self.timer_0,
+            1 => &mut self.timer_1,
+            2 => &mut self.timer_2,
+            _ => panic!("Unknown timer num!")
+        };
 
-        if mode0 == 0 || mode0 == 2 {
-            self.timer_0.increment(cpu);
-        }
-
-        if mode1 == 0 || mode1 == 2 {
-            self.timer_1.increment(cpu);
-        }
-
-        if mode2 == 0 || mode2 == 1 {
-            self.timer_2.increment(cpu);
+        if timer.mode.get_bit(5) {
+            cpu.fire_external_interrupt(timer.irq_source());
         }
     }
 
-    pub fn update_dot_clock(&mut self, cpu: &mut R3000) {
-        let mode0 = self.timer_0.mode.get_bits(8..=9);
+    pub fn timer_target_event(&mut self, cpu: &mut R3000, scheduler: &mut Scheduler, timer_num: u32) {
+        let timer = match timer_num {
+            0 => &mut self.timer_0,
+            1 => &mut self.timer_1,
+            2 => &mut self.timer_2,
+            _ => panic!("Unknown timer num!")
+        };
 
-        if mode0 == 1 || mode0 == 3 {
-            self.timer_0.increment(cpu);
-        }
-    }
-
-    pub fn update_h_blank(&mut self, cpu: &mut R3000) {
-        let mode1 = self.timer_1.mode.get_bits(8..=9);
-
-        if mode1 == 1 || mode1 == 3 {
-            self.timer_1.increment(cpu);
-        }
-    }
-
-    pub fn update_sys_div_8(&mut self, cpu: &mut R3000) {
-        let mode2 = self.timer_2.mode.get_bits(8..=9);
-
-        if mode2 == 2 || mode2 == 3 {
-            self.timer_2.increment(cpu);
+        if timer.mode.get_bit(4) {
+            cpu.fire_external_interrupt(timer.irq_source());
         }
     }
 
@@ -170,19 +224,19 @@ impl TimerState {
         val
     }
 
-    pub fn write_word(&mut self, addr: u32, val: u32) {
+    pub fn write_word(&mut self, addr: u32, val: u32, scheduler: &mut Scheduler) {
         println!("Timer write word addr {:#X} val {:#X}", addr, val);
         match addr {
             0x1F801100 => self.timer_0.value = val,
-            0x1F801104 => self.timer_0.write_mode(val),
+            0x1F801104 => self.timer_0.write_mode(val, scheduler),
             0x1F801108 => self.timer_0.target = val,
 
             0x1F801110 => self.timer_1.value = val,
-            0x1F801114 => self.timer_1.write_mode(val),
+            0x1F801114 => self.timer_1.write_mode(val, scheduler),
             0x1F801118 => self.timer_1.target = val,
 
             0x1F801120 => self.timer_2.value = val,
-            0x1F801124 => self.timer_2.write_mode(val),
+            0x1F801124 => self.timer_2.write_mode(val, scheduler),
             0x1F801128 => self.timer_2.target = val,
             _ => println!("Unknown timer address"),
         }
@@ -225,13 +279,13 @@ impl TimerState {
         }
     }
 
-    pub fn write_half_word(&mut self, addr: u32, value: u16) {
+    pub fn write_half_word(&mut self, addr: u32, value: u16, scheduler: &mut Scheduler,) {
         //println!("Tried to write timer half addr {:#X} val {:#X}", addr, value);
         match addr {
             0x1F801100 => self.timer_0.value &= (value as u32) & 0xFFFF0000,
             0x1F801102 => self.timer_0.value &= ((value as u32) << 16) & 0xFFFF,
 
-            0x1F801104 => self.timer_0.write_mode(value as u32),
+            0x1F801104 => self.timer_0.write_mode(value as u32, scheduler),
             //0x1F801106 => self.timer_0.read_mode(value as u32),
             0x1F801108 => self.timer_0.target = value as u32,
             0x1F80110A => self.timer_0.target &= (value as u32) << 16,
@@ -239,13 +293,13 @@ impl TimerState {
             0x1F801110 => self.timer_1.value &= value as u32,
             0x1F801112 => self.timer_1.value &= (value as u32) << 16,
 
-            0x1F801114 => self.timer_1.write_mode(value as u32),
+            0x1F801114 => self.timer_1.write_mode(value as u32, scheduler),
             //0x1F801116 => self.timer_1.read_mode(value as u32),
             0x1F801118 => self.timer_1.target = value as u32,
             //0x1F80111A => (self.timer_1.target >> 16) as u16,
             0x1F801120 => self.timer_2.value = value as u32,
             //0x1F801122 => (self.timer_2.value >> 16) as u16,
-            0x1F801124 => self.timer_2.write_mode(value as u32),
+            0x1F801124 => self.timer_2.write_mode(value as u32, scheduler),
             //0x1F801126 => (self.timer_2.read_mode() >> 16) as u16,
             0x1F801128 => self.timer_2.target = value as u32,
             //0x1F80112A => (self.timer_2.target >> 16) as u16,

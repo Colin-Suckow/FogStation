@@ -5,7 +5,9 @@ use log::{trace, warn};
 
 use crate::cpu::{InterruptSource, R3000};
 use std::collections::VecDeque;
-use crate::MainBus;
+use crate::{CpuCycles, MainBus, Scheduler};
+use crate::scheduler::SysCycles;
+use crate::ScheduleTarget::{CDIrq, CDPacket};
 
 mod commands;
 pub mod disc;
@@ -70,6 +72,7 @@ impl IntCause {
 
 #[derive(Debug, Clone)]
 pub(super) struct Packet {
+    internal_id: u32,
     cause: IntCause,
     response: Vec<u8>,
     execution_cycles: u32,
@@ -85,6 +88,7 @@ pub(super) struct Block {
 
 pub struct CDDrive {
     cycle_counter: u32,
+    next_id: u32,
     command_start_cycle: u32,
     running_commands: Vec<Packet>,
 
@@ -123,6 +127,7 @@ impl CDDrive {
     pub fn new() -> Self {
         Self {
             cycle_counter: 0,
+            next_id: 0,
             command_start_cycle: 0,
 
             running_commands: Vec::new(),
@@ -158,12 +163,12 @@ impl CDDrive {
         }
     }
 
-    pub fn write_byte(&mut self, addr: u32, val: u8) {
+    pub fn write_byte(&mut self, addr: u32, val: u8, scheduler: &mut Scheduler) {
         //println!("CDROM writing {:#X}.Index({}) val {:#X}", addr, self.status_index & 0x3, val);
         match addr {
             0x1F801800 => self.status_index = val & 0x3, //Status
             0x1F801801 => match self.status_index {
-                0 => self.execute_command(val),
+                0 => self.execute_command(val, scheduler),
                 1 => self.reg_sound_map_data_out = val,
                 2 => panic!("CD: 0x1F801801 write byte unknown index 2"),
                 3 => trace!("CD: Wrote Right-CD-Out Right SPU volume"),
@@ -198,7 +203,7 @@ impl CDDrive {
                         self.response_data_queue.clear();
                     }
                 }
-                1 => self.write_interrupt_flag_register(val),
+                1 => self.write_interrupt_flag_register(val, scheduler),
                 2 => trace!("CD: Wrote Left-CD-Out Left SPU volume"),
                 3 => (), // Apply audio changes
                 _ => unreachable!(),
@@ -260,7 +265,7 @@ impl CDDrive {
         &self.disc
     }
 
-    fn execute_command(&mut self, command: u8) {
+    fn execute_command(&mut self, command: u8, scheduler: &mut Scheduler) {
         //println!("Received command {:#X}", command);
 
         //Execute
@@ -289,12 +294,13 @@ impl CDDrive {
                 0x19 => {
                     //sub_function commands
                     match parameters[0] {
-                        0x20 => commands::get_bios_date(),
+                        0x20 => commands::get_bios_date(self),
                         _ => panic!("CD: Unknown sub_function command {:#X}", parameters[0]),
                     }
                 }
                 _ => panic!("CD: Unknown command {:#X}!", command),
             };
+            scheduler.schedule_event(CDPacket(response.internal_id), SysCycles(response.execution_cycles).into());
             self.running_commands.push(response);
         }
 
@@ -358,6 +364,12 @@ impl CDDrive {
         }
     }
 
+    fn next_packet_id(&mut self) -> u32 {
+        let id = self.next_id;
+        self.next_id += 1;
+        return id;
+    }
+
     fn push_parameter(&mut self, val: u8) {
         self.parameter_queue.push_back(val);
     }
@@ -380,13 +392,13 @@ impl CDDrive {
         self.response_data_queue.remove(0) // This is slow, but whatever for now. Using a proper deque is a bit difficult here
     }
 
-    fn write_interrupt_flag_register(&mut self, val: u8) {
+    fn write_interrupt_flag_register(&mut self, val: u8, scheduler: &mut Scheduler) {
         //println!("Writing flag with val {:#X}   pre flag val {:#X}", val, self.reg_interrupt_flag);
         self.reg_interrupt_flag &= !(val & 0x1F);
         if val == 1 && self.sector_awaiting_delivery {
             self.reg_interrupt_flag = 1;
             if self.reg_interrupt_enable & 1 > 0 {
-                self.queue_irq();
+                self.queue_irq(scheduler);
             }
             self.sector_awaiting_delivery = false;
         }
@@ -402,9 +414,19 @@ impl CDDrive {
         self.reg_interrupt_enable = val & 0x1f;
     }
 
-    fn queue_irq(&mut self) {
-        self.irq_request = true;
+    fn queue_irq(&self, scheduler: &mut Scheduler) {
+        scheduler.schedule_event(CDIrq, CpuCycles(1));
     }
+
+    fn take_packet_by_id(&mut self, packet_id: u32) -> Option<Packet> {
+        for i in 0..self.running_commands.len() {
+            if self.running_commands[i].internal_id == packet_id {
+                return Some(self.running_commands.remove(i));
+            }
+        }
+        return None;
+    }
+
 }
 
 fn take_next_ready_packet(running_commands: &mut Vec<Packet>) -> Option<Packet> {
@@ -435,40 +457,17 @@ fn take_next_ready_packet(running_commands: &mut Vec<Packet>) -> Option<Packet> 
     None
 }
 
-pub fn step_cycle(cpu: &mut R3000, main_bus: &mut MainBus) {
+pub fn cdpacket_event(cpu: &mut R3000, main_bus: &mut MainBus, scheduler: &mut Scheduler, packet_id: u32) {
 
-    if main_bus.cd_drive.irq_request {
-        cpu.fire_external_interrupt(InterruptSource::CDROM);
-        main_bus.cd_drive.irq_request = false;
-    }
-
-    // // If the current interrupt hasn't been acknowledged yet, abort
-    // if main_bus.cd_drive.reg_interrupt_flag != 0 {
-    //     return;
-    // }
-
-    //println!("Full cd response queue {:?}", cd.running_commands);
-
-    //Update cycles on all inflight commands
-    for packet in &mut main_bus.cd_drive.running_commands {
-        if packet.execution_cycles > 0 {
-            packet.execution_cycles -= 1;
-        }
-    }
-
-    let packet = match take_next_ready_packet(&mut main_bus.cd_drive.running_commands) {
+    let packet = match main_bus.cd_drive.take_packet_by_id(packet_id) {
         Some(p) => p,
         None => {
             //No response ready right now
+            println!("Failed to find cd packet by id {}", packet_id);
             return;
         }
     };
 
-    // If this is a read packet and reading has already been disabled, abort the entire command sequence
-    if packet.cause == IntCause::INT1 && !main_bus.cd_drive.read_enabled {
-        //println!("Reading disabled. Aborting ReadN");
-        //return;
-    }
     trace!(
         "flag before {:#X}",
         main_bus.cd_drive.reg_interrupt_flag
@@ -501,13 +500,16 @@ pub fn step_cycle(cpu: &mut R3000, main_bus: &mut MainBus) {
             //     main_bus.cd_drive.reg_interrupt_enable,
             //     packet.cause
             // );
-            main_bus.cd_drive.queue_irq();
+            main_bus.cd_drive.queue_irq(scheduler);
         }
     }
 
     //If the response has an extra response, push that to the front of the line
-    if let Some(ext_response) = packet.extra_response.clone() {
+    if let Some(mut ext_response) = packet.extra_response.clone() {
         //println!("Extra response, filling. {:?}", ext_response);
+        let next_id = main_bus.cd_drive.next_packet_id();
+        ext_response.internal_id = next_id;
+        scheduler.schedule_event(CDPacket(next_id), SysCycles(ext_response.execution_cycles).into());
         main_bus.cd_drive.running_commands.push(*ext_response);
     };
 
@@ -571,13 +573,14 @@ pub fn step_cycle(cpu: &mut R3000, main_bus: &mut MainBus) {
                         DriveSpeed::Double => 0x322df,
                     };
                     let response_packet = Packet {
+                        internal_id: main_bus.cd_drive.next_packet_id(),
                         cause: IntCause::INT1,
                         response: vec![main_bus.cd_drive.get_stat()],
                         execution_cycles: cycles,
                         extra_response: None,
                         command: 0x6,
                     };
-
+                    scheduler.schedule_event(CDPacket(response_packet.internal_id), SysCycles(response_packet.execution_cycles).into());
                     main_bus.cd_drive.running_commands.push(response_packet);
                 }
             }

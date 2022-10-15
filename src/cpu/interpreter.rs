@@ -8,7 +8,7 @@ use super::{
     R3000,
 };
 
-pub(super) fn op_sw(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
+pub(super) fn op_sw(cpu: &mut R3000, main_bus: &mut MainBus, scheduler: &mut Scheduler, rs: u8, rt: u8, offset: u32) {
     let addr = offset
         .immediate_sign_extended()
         .wrapping_add(cpu.read_reg(rs));
@@ -21,11 +21,11 @@ pub(super) fn op_sw(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, off
         trace!("AdES fired by op_sw");
         cpu.fire_exception(Exception::AdES);
     } else {
-        cpu.write_bus_word(addr, val, main_bus);
+        cpu.write_bus_word(addr, val, main_bus, scheduler);
     };
 }
 
-pub(super) fn op_swr(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
+pub(super) fn op_swr(cpu: &mut R3000, main_bus: &mut MainBus, scheduler: &mut Scheduler, rs: u8, rt: u8, offset: u32) {
     let addr = offset
         .immediate_sign_extended()
         .wrapping_add(cpu.read_reg(rs));
@@ -41,11 +41,12 @@ pub(super) fn op_swr(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, of
             3 => (word & 0x00ffffff) | (reg_val << 24),
             _ => unreachable!(),
         },
-        main_bus
+        main_bus,
+        scheduler
     );
 }
 
-pub(super) fn op_swl(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
+pub(super) fn op_swl(cpu: &mut R3000, main_bus: &mut MainBus, scheduler: &mut Scheduler, rs: u8, rt: u8, offset: u32) {
     let addr = offset
         .immediate_sign_extended()
         .wrapping_add(cpu.read_reg(rs));
@@ -61,7 +62,8 @@ pub(super) fn op_swl(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, of
             3 => (word & 0x00000000) | (reg_val >> 0),
             _ => unreachable!(),
         },
-        main_bus
+        main_bus,
+        scheduler
     );
 }
 
@@ -123,7 +125,7 @@ pub(super) fn op_lwl(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, of
     );
 }
 
-pub(super) fn op_sh(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
+pub(super) fn op_sh(cpu: &mut R3000, main_bus: &mut MainBus, scheduler: &mut Scheduler, rs: u8, rt: u8, offset: u32) {
     let base = offset.immediate_sign_extended();
     let offset = cpu.read_reg(rs);
     let addr = base.wrapping_add(offset);
@@ -134,7 +136,7 @@ pub(super) fn op_sh(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, off
         trace!("AdES fired by op_sh pc {:#X}  addr {:#X}   s_reg  {}   s_reg_val  {:#X}   offset   {:#X}", cpu.current_pc, addr, rs, offset , base);
         cpu.fire_exception(Exception::AdES);
     } else {
-        cpu.write_bus_half_word(addr, val, main_bus);
+        cpu.write_bus_half_word(addr, val, main_bus, scheduler);
     };
 }
 
@@ -607,7 +609,7 @@ pub(super) fn op_lwc2(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, o
     cpu.gte.set_data_register(rt as usize, val);
 }
 
-pub(super) fn op_swc2(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, offset: u32) {
+pub(super) fn op_swc2(cpu: &mut R3000, main_bus: &mut MainBus, scheduler: &mut Scheduler, rs: u8, rt: u8, offset: u32) {
     let addr = offset
         .immediate_sign_extended()
         .wrapping_add(cpu.read_reg(rs));
@@ -617,7 +619,7 @@ pub(super) fn op_swc2(cpu: &mut R3000, main_bus: &mut MainBus, rs: u8, rt: u8, o
         cpu.gte.data_register(rt as usize)
     };
     cpu.flush_load_delay();
-    cpu.write_bus_word(addr, val, main_bus);
+    cpu.write_bus_word(addr, val, main_bus, scheduler);
 }
 
 pub(super) fn op_branch(cpu: &mut R3000, instruction: u32) {

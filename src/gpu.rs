@@ -9,8 +9,9 @@ use enum_display_derive::Display;
 use log::{error, trace, warn};
 use nalgebra::Vector2;
 use num_traits::clamp;
-use crate::{CpuCycles, Scheduler};
+use crate::{CpuCycles, R3000, Scheduler};
 use crate::scheduler::{GpuCycles, ScheduleTarget};
+use crate::ScheduleTarget::GPUhblank;
 
 const CYCLES_PER_SCANLINE: u32 = 3413;
 const TOTAL_SCANLINES: u32 = 263;
@@ -1628,7 +1629,7 @@ impl Gpu {
         }
     }
 
-    pub fn schedule_complete(&mut self) -> Option<CpuCycles> {
+    pub fn hblank_event(&mut self, cpu: &mut R3000, scheduler: &mut Scheduler){
        self.cycle_counter += CYCLES_PER_SCANLINE;
         if self.cycle_counter > CYCLES_PER_SCANLINE * TOTAL_SCANLINES {
             self.cycle_counter = 0;
@@ -1639,7 +1640,7 @@ impl Gpu {
         self.hblank_consumed = false;
 
         let gpu_til_next_hblank = 3413 / (2560 / self.display_h_res);
-        Some(GpuCycles(gpu_til_next_hblank).into())
+        scheduler.schedule_event(GPUhblank, GpuCycles(gpu_til_next_hblank).into());
     }
 
     pub fn is_vblank(&self) -> bool {

@@ -371,7 +371,7 @@ impl Controllers {
     }
 }
 
-pub(super) fn controller_delay_complete(cpu: &mut R3000, state: &mut Controllers) {
+pub(super) fn controller_delay_event(cpu: &mut R3000, state: &mut Controllers) {
     if state.pending_irq {
         cpu.fire_external_interrupt(InterruptSource::Controller);
         state.pending_irq = false;

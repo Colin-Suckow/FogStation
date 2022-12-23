@@ -53,7 +53,7 @@ impl MainBus {
         }
     }
 
-    pub fn read_word(&mut self, og_addr: u32) -> u32 {
+    pub fn read_word(&mut self, og_addr: u32, scheduler: &mut Scheduler) -> u32 {
         let addr = translate_address(og_addr);
         // if og_addr == 0x800c14a8{
         //     return 3;
@@ -70,7 +70,7 @@ impl MainBus {
             0x1F801820..=0x1F801824 => self.mdec.bus_read_word(addr),
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_word(addr - 0x1fc0_0000),
             0x1F802000..=0x1F802080 => 0, // Expansion 2
-            0x1F801100..=0x1F801128 => self.timers.read_word(addr & 0x1fffffff),
+            0x1F801100..=0x1F801128 => self.timers.read_word(addr & 0x1fffffff, scheduler),
             _ => panic!(
                 "Invalid word read at address {:#X}! This address is not mapped to any device.",
                 addr
@@ -126,7 +126,7 @@ impl MainBus {
         }
     }
 
-    pub fn read_half_word(&mut self, og_addr: u32) -> u16 {
+    pub fn read_half_word(&mut self, og_addr: u32, scheduler: &mut Scheduler) -> u16 {
         let addr = translate_address(og_addr);
         let val = match addr {
             0x1F801070 => {
@@ -138,7 +138,7 @@ impl MainBus {
             0x1F80_1040..=0x1F80_104E => self.controllers.read_half_word(addr),
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_half_word(addr - 0x1fc0_0000),
             0x1f801050..=0x1f80105e => 0xBEEF, //SIO registers
-            0x1F801100..=0x1F801128 => self.timers.read_half_word(addr & 0x1fffffff),
+            0x1F801100..=0x1F801128 => self.timers.read_half_word(addr & 0x1fffffff, scheduler),
             _ => panic!("Invalid half word read at address {:#X}! This address is not mapped to any device.", addr)
         };
         // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {

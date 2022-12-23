@@ -213,7 +213,7 @@ impl R3000 {
             self.fire_exception(Exception::Int);
         }
 
-        let instruction = main_bus.read_word(self.pc);
+        let instruction = main_bus.read_word(self.pc, scheduler);
         self.current_pc = self.pc;
         self.pc += 4;
 
@@ -234,7 +234,7 @@ impl R3000 {
         //Execute branch delay operation
         if self.delay_slot != 0 {
             ran_delay_inst = true;
-            let delay_instruction = main_bus.read_word(self.delay_slot);
+            let delay_instruction = main_bus.read_word(self.delay_slot, scheduler);
             if self.log {
                 self.log_instruction(delay_instruction, main_bus);
             }
@@ -329,7 +329,7 @@ impl R3000 {
         self.i_status.set_bit(mask_bit, true);
     }
 
-    pub fn read_bus_word(&mut self, addr: u32, main_bus: &mut MainBus) -> u32 {
+    pub fn read_bus_word(&mut self, addr: u32, main_bus: &mut MainBus, scheduler: &mut Scheduler) -> u32 {
         //self.last_touched_addr = addr & 0x1fffffff;
 
         match addr & 0x1fffffff {
@@ -338,7 +338,7 @@ impl R3000 {
                 self.i_status
             }
             0x1F801074 => self.i_mask,
-            _ => main_bus.read_word(addr),
+            _ => main_bus.read_word(addr, scheduler),
         }
     }
 
@@ -362,22 +362,19 @@ impl R3000 {
         };
     }
 
-    fn read_bus_half_word(&mut self, addr: u32, main_bus: &mut MainBus) -> u16 {
+    fn read_bus_half_word(&mut self, addr: u32, main_bus: &mut MainBus, scheduler: &mut Scheduler) -> u16 {
         // if addr == 0x1F801C0C {
         //     println!("Read spu thing at pc {:#X}", self.current_pc);
         // }
         match addr & 0x1fffffff {
             0x1F801070 => self.i_status as u16,
             0x1F801074 => self.i_mask as u16,
-            _ => main_bus.read_half_word(addr),
+            _ => main_bus.read_half_word(addr, scheduler),
         }
     }
 
     pub fn read_bus_byte(&mut self, addr: u32, main_bus: &mut MainBus) -> u8 {
         //self.last_touched_addr = addr & 0x1fffffff;
-        if addr & 0x1fffffff == 0x1f801040 {
-            println!("Read JOY_DATA at pc {:#X}", self.current_pc);
-        }
         match addr & 0x1fffffff {
             0x1F801070 => self.i_status as u8,
             0x1F801072 => (self.i_status >> 8) as u8,

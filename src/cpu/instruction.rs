@@ -430,7 +430,7 @@ impl Instruction {
         match self {
             Instruction::SLL { rt, rd, sa } => interpreter::op_sll(cpu, *rd, *rt, *sa),
             Instruction::LW { rt, offset, base } => {
-                interpreter::op_lw(cpu, main_bus, *base, *rt, *offset as u32)
+                interpreter::op_lw(cpu, main_bus, scheduler, *base, *rt, *offset as u32)
             }
             Instruction::BNE { rs, rt, offset } => {
                 interpreter::op_bne(cpu, *rs, *rt, *offset as u32)
@@ -449,7 +449,7 @@ impl Instruction {
                 interpreter::op_slti(cpu, *rs, *rt, *immediate as u32)
             }
             Instruction::LH { rt, offset, base } => {
-                interpreter::op_lh(cpu, main_bus, *base, *rt, *offset as u32)
+                interpreter::op_lh(cpu, main_bus, scheduler, *base, *rt, *offset as u32)
             }
             Instruction::BEQ { rs, rt, offset } => {
                 interpreter::op_beq(cpu, *rs, *rt, *offset as u32)
@@ -520,16 +520,16 @@ impl Instruction {
                 interpreter::op_lbu(cpu, main_bus, *base, *rt, *offset as u32)
             }
             Instruction::LHU { rt, offset, base } => {
-                interpreter::op_lhu(cpu, main_bus, *base, *rt, *offset as u32)
+                interpreter::op_lhu(cpu, main_bus, scheduler, *base, *rt, *offset as u32)
             }
             Instruction::SH { rt, offset, base } => {
                 interpreter::op_sh(cpu, main_bus, scheduler, *base, *rt, *offset as u32)
             }
             Instruction::LWL { rt, offset, base } => {
-                interpreter::op_lwl(cpu, main_bus, *base, *rt, *offset as u32)
+                interpreter::op_lwl(cpu, main_bus, scheduler,*base, *rt, *offset as u32)
             }
             Instruction::LWR { rt, offset, base } => {
-                interpreter::op_lwr(cpu, main_bus, *base, *rt, *offset as u32)
+                interpreter::op_lwr(cpu, main_bus, scheduler, *base, *rt, *offset as u32)
             }
             Instruction::SWL { rt, offset, base } => {
                 interpreter::op_swl(cpu, main_bus, scheduler, *base, *rt, *offset as u32)
@@ -538,7 +538,7 @@ impl Instruction {
                 interpreter::op_swr(cpu, main_bus, scheduler, *base, *rt, *offset as u32)
             }
             Instruction::LWC2 { rt, offset, base } => {
-                interpreter::op_lwc2(cpu, main_bus, *base, *rt, *offset as u32)
+                interpreter::op_lwc2(cpu, main_bus, scheduler, *base, *rt, *offset as u32)
             }
             Instruction::SWC2 { rt, offset, base } => {
                 interpreter::op_swc2(cpu, main_bus, scheduler, *base, *rt, *offset as u32)

@@ -284,7 +284,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000, main_bus: &mut MainBus, scheduler: &mu
                         for i in 0..entries {
                             for j in 0..block_size {
                                 let word = main_bus
-                                    .read_word(base_addr + ((i * block_size) * 4) + (j * 4));
+                                    .read_word(base_addr + ((i * block_size) * 4) + (j * 4), scheduler);
                                 main_bus.mdec.bus_write_word(0x1f801820, word);
                             }
                         }
@@ -349,13 +349,13 @@ pub fn execute_dma_cycle(cpu: &mut R3000, main_bus: &mut MainBus, scheduler: &mu
                         //Linked list mode. mem -> gpu
                         let mut addr = main_bus.dma.channels[num].base_addr;
                         trace!("Starting linked list transfer. addr {:#X}", addr);
-                        let mut header = main_bus.read_word(addr);
+                        let mut header = main_bus.read_word(addr, scheduler);
                         trace!("base addr: {:#X}. base header: {:#X}", addr, header);
                         loop {
                             let num_words = (header >> 24) & 0xFF;
                             //trace!("addr {:#X}, header {:#X}, nw {}", addr, header, num_words);
                             for i in 0..num_words {
-                                let packet = main_bus.read_word((addr + 4) + (i * 4));
+                                let packet = main_bus.read_word((addr + 4) + (i * 4), scheduler);
                                 main_bus.gpu.send_gp0_command(packet);
                             }
                             if header & 0x800000 != 0 || header == 0x00FFFFFF {
@@ -370,7 +370,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000, main_bus: &mut MainBus, scheduler: &mu
                             //println!("Addr {:X}", addr);
 
                             addr = header & 0xFFFFFF;
-                            header = main_bus.read_word(addr);
+                            header = main_bus.read_word(addr, scheduler);
                         }
                         main_bus.dma.channels[num].base_addr = 0xFFFFFF;
                         //println!("DMA2 linked list transfer done.");
@@ -406,7 +406,7 @@ pub fn execute_dma_cycle(cpu: &mut R3000, main_bus: &mut MainBus, scheduler: &mu
                         for i in 0..entries {
                             for j in 0..block_size {
                                 let packet = main_bus
-                                    .read_word(base_addr + ((i * block_size) * 4) + (j * 4));
+                                    .read_word(base_addr + ((i * block_size) * 4) + (j * 4), scheduler);
                                 main_bus.gpu.send_gp0_command(packet);
                             }
                         }

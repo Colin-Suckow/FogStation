@@ -77,10 +77,13 @@ impl PSXEmu {
         self.scheduler.run_cycle(&mut self.r3000, &mut self.main_bus);
 
         // DMA doesn't use any delays, so it is kind of outside of the scheduler right now
-        // (plz ignore the fact that scheduler is an argument, that is for latter use)
+        // (plz ignore the fact that scheduler is an argument, that is for later use)
         execute_dma_cycle(&mut self.r3000, &mut self.main_bus, &mut self.scheduler);
 
-        self.run_cpu_cycle();
+        if self.run_cpu_cycle() {
+            // A branch delay slot was executed, so run an extra scheduler cycle
+            self.scheduler.run_cycle(&mut self.r3000, &mut self.main_bus);
+        }
 
         // if self.super_cycle_count % 3 == 0 {
         //     controller_execute_cycle(&mut self);

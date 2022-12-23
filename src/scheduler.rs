@@ -29,35 +29,42 @@ impl From<SysCycles> for CpuCycles {
 
 impl From<GpuCycles> for CpuCycles {
     fn from(gpu_cycles: GpuCycles) -> Self {
-        CpuCycles(gpu_cycles.0 * 7 / 11)
+        CpuCycles((gpu_cycles.0 as f32 / 3.2) as u32)
     }
 }
 
 impl From<HBlankCycles> for CpuCycles {
     fn from(h_cycles: HBlankCycles) -> Self {
-        GpuCycles(h_cycles.0 * 3413).into()
+        GpuCycles(h_cycles.0 * 853).into()
     }
 }
 
 #[derive(Copy, Clone)]
 struct PendingEvent {
+    id: u32,
     target: ScheduleTarget,
     cycles: u32,
 }
 
+pub struct EventHandle(u32);
+
 pub struct Scheduler {
-    pending_events: Vec<PendingEvent>
+    pending_events: Vec<PendingEvent>,
+    next_id: u32
 }
 
 impl Scheduler {
     pub fn new() -> Self {
         Self {
-            pending_events: Vec::new()
+            pending_events: Vec::new(),
+            next_id: 0
         }
     }
 
-    pub fn schedule_event(&mut self, target: ScheduleTarget, cycles: CpuCycles) {
-        self.pending_events.push(PendingEvent {target: target, cycles: cycles.0});
+    pub fn schedule_event(&mut self, target: ScheduleTarget, cycles: CpuCycles) -> EventHandle {
+        let id = self.next_id();
+        self.pending_events.push(PendingEvent {id, target: target, cycles: cycles.0});
+        EventHandle(id)
     }
 
     pub fn run_cycle(&mut self, emu: &mut R3000, main_bus: &mut MainBus) {
@@ -85,6 +92,21 @@ impl Scheduler {
         });
     }
 
+    pub fn invalidate_exact_events_of_target(&mut self, target: ScheduleTarget) {
+        self.pending_events.retain(|event| {
+            event.target != target
+        });
+    }
+
+    pub fn cycles_remaining(&self, handle: &EventHandle) -> Option<CpuCycles> {
+        for event in &self.pending_events {
+            if event.id == handle.0 {
+                return Some(CpuCycles(event.cycles));
+            }
+        }
+        None
+    }
+
     fn execute(&mut self, target: &ScheduleTarget, cpu: &mut R3000, main_bus: &mut MainBus) {
         match target {
             GPUhblank => {
@@ -108,5 +130,11 @@ impl Scheduler {
             }
             _ => {}
         }
+    }
+
+    fn next_id(&mut self) -> u32 {
+        let id = self.next_id;
+        self.next_id += 1;
+        id
     }
 }

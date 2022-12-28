@@ -9,9 +9,9 @@ use enum_display_derive::Display;
 use log::{error, trace, warn};
 use nalgebra::Vector2;
 use num_traits::clamp;
-use crate::{CpuCycles, R3000, Scheduler};
+use crate::{CpuCycles, R3000, Scheduler, cpu::InterruptSource};
 use crate::scheduler::{GpuCycles, ScheduleTarget};
-use crate::ScheduleTarget::GPUhblank;
+use crate::ScheduleTarget::GpuHblank;
 
 const CYCLES_PER_SCANLINE: u32 = 3413;
 const TOTAL_SCANLINES: u32 = 263;
@@ -265,6 +265,8 @@ pub struct Gpu {
     force_b15: bool,
     interlace: bool,
     dots_per_line: u32,
+    scanline_counter: u32,
+    is_vblank: bool,
 }
 
 impl Gpu {
@@ -322,6 +324,8 @@ impl Gpu {
             force_b15: false,
             interlace: false,
             dots_per_line: 490,
+            scanline_counter: 0,
+            is_vblank: false,
         }
     }
 
@@ -1630,26 +1634,38 @@ impl Gpu {
     }
 
     pub fn hblank_event(&mut self, cpu: &mut R3000, scheduler: &mut Scheduler){
-       self.cycle_counter += CYCLES_PER_SCANLINE;
-        if self.cycle_counter > CYCLES_PER_SCANLINE * TOTAL_SCANLINES {
-            self.cycle_counter = 0;
-            self.vblank_consumed = false;
-            self.frame_ready = true;
-            trace!("VBLANK DONE");
-        }
+       self.scanline_counter += 1;
+
         self.hblank_consumed = false;
 
         let gpu_til_next_hblank = 3413 / (2560 / self.display_h_res);
-        scheduler.schedule_event(GPUhblank, GpuCycles(gpu_til_next_hblank).into());
+        //scheduler.schedule_event(GpuHblank, GpuCycles(gpu_til_next_hblank).into());
+    }
+
+    pub fn vblank_event(&mut self, cpu: &mut R3000, scheduler: &mut Scheduler) {
+        if !self.is_vblank {
+            self.is_vblank = true;
+            // Schedule end of vblank time
+            scheduler.schedule_event(ScheduleTarget::GpuVblank, CpuCycles(150812).into());
+            
+        } else {
+            self.is_vblank = false;
+            self.vblank_consumed = false;
+            self.frame_ready = true;
+            cpu.fire_external_interrupt(InterruptSource::VBLANK);
+            // Schedule next vblank
+            scheduler.schedule_event(ScheduleTarget::GpuVblank, CpuCycles(413664).into());
+        }
     }
 
     pub fn is_vblank(&self) -> bool {
-        self.cycle_counter > CYCLES_PER_SCANLINE * (self.ntsc_y2 - self.ntsc_y1)
+        self.is_vblank
     }
 
     pub fn is_hblank(&self) -> bool {
-        // This is probably busted
-        self.cycle_counter % CYCLES_PER_SCANLINE > self.display_h_res
+        // This is definitely busted
+        //self.cycle_counter % CYCLES_PER_SCANLINE > self.display_h_res
+        true
     }
 
     pub fn display_origin(&self) -> (usize, usize) {
@@ -1660,16 +1676,6 @@ impl Gpu {
         Resolution {
             width: self.display_h_res,
             height: self.display_v_res,
-        }
-    }
-
-    pub fn consume_vblank(&mut self) -> bool {
-        if !self.vblank_consumed && self.is_vblank() {
-            trace!("VBLANK consumed");
-            self.vblank_consumed = true;
-            true
-        } else {
-            false
         }
     }
 

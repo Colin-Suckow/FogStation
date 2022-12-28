@@ -1,7 +1,7 @@
 use crate::cpu::{InterruptSource, R3000};
 use bit_field::BitField;
 use crate::{CpuCycles, Scheduler};
-use crate::scheduler::{EventHandle, GpuCycles, HBlankCycles, SysCycles};
+use crate::scheduler::{EventHandle, GpuCycles, HBlankCycles};
 use crate::ScheduleTarget::{TimerOverflow, TimerTarget};
 
 #[derive(PartialEq, Debug)]

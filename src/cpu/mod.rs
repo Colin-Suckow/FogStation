@@ -197,12 +197,7 @@ impl R3000 {
         if main_bus.spu.check_and_ack_irq() {
             self.fire_external_interrupt(InterruptSource::SPU);
         }
-
-        //Check for vblank
-        if main_bus.gpu.consume_vblank() {
-            self.fire_external_interrupt(InterruptSource::VBLANK);
-        };
-
+        
         // Handle interrupts
         let mut cause = self.cop0.read_reg(13);
         cause.set_bit(10, self.i_status & self.i_mask != 0);

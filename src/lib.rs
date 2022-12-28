@@ -1,3 +1,5 @@
+#![feature(binary_heap_retain)]
+
 use bios::Bios;
 use bus::MainBus;
 use controller::ButtonState;
@@ -31,8 +33,7 @@ pub struct PSXEmu {
     pub r3000: R3000,
     pub main_bus: MainBus,
     pub scheduler: Scheduler,
-    cpu_cycle_count: u32,
-    super_cycle_count: u32,
+    cpu_cycles: u32,
     halt_requested: bool,
     sw_breakpoints: Vec<u32>,
     watchpoints: Vec<u32>,
@@ -52,8 +53,7 @@ impl PSXEmu {
             r3000: r3000,
             main_bus: bus,
             scheduler: Scheduler::new(),
-            cpu_cycle_count: 0,
-            super_cycle_count: 0,
+            cpu_cycles: 0,
             halt_requested: false,
             sw_breakpoints: Vec::new(),
             watchpoints: Vec::new(),
@@ -62,7 +62,8 @@ impl PSXEmu {
         emu.reset();
 
         // Register initial events
-        emu.scheduler.schedule_event(ScheduleTarget::GPUhblank, CpuCycles(0));
+        emu.scheduler.schedule_event(ScheduleTarget::GpuHblank, CpuCycles(0).into());
+        emu.scheduler.schedule_event(ScheduleTarget::GpuVblank, CpuCycles(413664).into());
 
         emu
     }
@@ -80,35 +81,17 @@ impl PSXEmu {
         // (plz ignore the fact that scheduler is an argument, that is for later use)
         execute_dma_cycle(&mut self.r3000, &mut self.main_bus, &mut self.scheduler);
 
-        if self.run_cpu_cycle() {
+        // Cpu run one instruction per 2 cycles, so only execute an instruction every other cycle
+        if self.cpu_cycles % 2 == 0 && self.run_cpu_instruction() {
             // A branch delay slot was executed, so run an extra scheduler cycle
             self.scheduler.run_cycle(&mut self.r3000, &mut self.main_bus);
+            self.cpu_cycles += 1
         }
 
-        // if self.super_cycle_count % 3 == 0 {
-        //     controller_execute_cycle(&mut self);
-        //     cdrom::step_cycle(&mut self);
-        //     execute_dma_cycle(&mut self);
-        //     self.cpu_cycle_count += 1;
-        //     self.timers.update_sys_clock(&mut self);
-        //     if self.cpu_cycle_count >= 8 {
-        //         self.timers.update_sys_div_8(&mut self);
-        //         self.cpu_cycle_count = 0;
-        //     };
-        // }
-        //
-        // if self.super_cycle_count % 6 == 0 {
-        //     if self.run_cpu_cycle() {
-        //         self.cpu_cycle_count += 2;
-        //     }
-        // }
-        //
-        // if self.super_cycle_count % 2 == 0 {
-        //     self.run_gpu_cycle();
-        // }
+        self.cpu_cycles += 1;
     }
 
-    pub fn run_cpu_cycle(&mut self) -> bool {
+    pub fn run_cpu_instruction(&mut self) -> bool {
         if self.sw_breakpoints.contains(&self.r3000.pc) {
             self.halt_requested = true;
             return false;
@@ -121,15 +104,6 @@ impl PSXEmu {
 
         self.r3000.step_instruction(&mut self.main_bus, &mut self.scheduler)
     }
-
-    // fn run_gpu_cycle(&mut self) {
-    //     if self.main_bus.gpu.execute_cycle() {
-    //         self.timers.update_dot_clock(&mut self);
-    //     }
-    //     if self.main_bus.gpu.consume_hblank() {
-    //         self.timers.update_h_blank(&mut self);
-    //     }
-    // }
 
     ///Runs the emulator till one frame has been generated
     pub fn run_frame(&mut self) {

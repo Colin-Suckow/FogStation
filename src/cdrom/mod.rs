@@ -6,7 +6,6 @@ use log::{trace, warn};
 use crate::cpu::{InterruptSource, R3000};
 use std::collections::VecDeque;
 use crate::{CpuCycles, MainBus, Scheduler};
-use crate::scheduler::SysCycles;
 use crate::ScheduleTarget::{CDIrq, CDPacket};
 
 mod commands;
@@ -300,7 +299,7 @@ impl CDDrive {
                 }
                 _ => panic!("CD: Unknown command {:#X}!", command),
             };
-            scheduler.schedule_event(CDPacket(response.internal_id), SysCycles(response.execution_cycles).into());
+            scheduler.schedule_event(CDPacket(response.internal_id), CpuCycles(response.execution_cycles));
             self.running_commands.push(response);
         }
 
@@ -509,7 +508,7 @@ pub fn cdpacket_event(cpu: &mut R3000, main_bus: &mut MainBus, scheduler: &mut S
         //println!("Extra response, filling. {:?}", ext_response);
         let next_id = main_bus.cd_drive.next_packet_id();
         ext_response.internal_id = next_id;
-        scheduler.schedule_event(CDPacket(next_id), SysCycles(ext_response.execution_cycles).into());
+        scheduler.schedule_event(CDPacket(next_id), CpuCycles(ext_response.execution_cycles));
         main_bus.cd_drive.running_commands.push(*ext_response);
     };
 
@@ -580,7 +579,7 @@ pub fn cdpacket_event(cpu: &mut R3000, main_bus: &mut MainBus, scheduler: &mut S
                         extra_response: None,
                         command: 0x6,
                     };
-                    scheduler.schedule_event(CDPacket(response_packet.internal_id), SysCycles(response_packet.execution_cycles).into());
+                    scheduler.schedule_event(CDPacket(response_packet.internal_id), CpuCycles(response_packet.execution_cycles));
                     main_bus.cd_drive.running_commands.push(response_packet);
                 }
             }

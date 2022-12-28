@@ -4,8 +4,8 @@ use bit_field::BitField;
 use log::{error, warn};
 
 use crate::cpu::{InterruptSource, R3000};
+use crate::scheduler::CpuCycles;
 use crate::{MainBus, Scheduler, ScheduleTarget};
-use crate::scheduler::SysCycles;
 
 pub(super) const JOY_DATA: u32 = 0x1F801040;
 pub(super) const JOY_STAT: u32 = 0x1F801044;
@@ -367,7 +367,7 @@ impl Controllers {
     fn queue_interrupt(&mut self, scheduler: &mut Scheduler) {
         self.pending_irq = true;
         self.irq_status = true;
-        scheduler.schedule_event(ScheduleTarget::ControllerIRQ, SysCycles(350).into());
+        scheduler.schedule_event(ScheduleTarget::ControllerIRQ, CpuCycles(350));
     }
 }
 

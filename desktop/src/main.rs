@@ -300,7 +300,7 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
                     EmuMessage::AddBreakpoint(addr) => state.emu.add_sw_breakpoint(addr),
                     EmuMessage::RemoveBreakpoint(addr) => state.emu.remove_sw_breakpoint(addr),
                     EmuMessage::Kill => return Err(EmuThreadError::Killed),
-                    EmuMessage::StepCPU => { state.emu.run_cpu_cycle(); }, // Warning! Doing this too many times will desync the gpu
+                    EmuMessage::StepCPU => { state.emu.run_cpu_instruction(); }, // Warning! Doing this too many times will desync the gpu
                     EmuMessage::UpdateControllers(button_state) => {
                         state.emu.update_controller_state(button_state)
                     }

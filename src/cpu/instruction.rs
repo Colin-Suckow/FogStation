@@ -58,38 +58,47 @@ impl NumberHelpers for u32 {
 }
 
 impl InstructionArgs for u32 {
+    #[inline(always)]
     fn opcode(&self) -> u8 {
         (self >> 26) as u8
     }
 
+    #[inline(always)]
     fn rs(&self) -> u8 {
         ((self >> 21) & 0x1F) as u8
     }
 
+    #[inline(always)]
     fn rt(&self) -> u8 {
         ((self >> 16) & 0x1F) as u8
     }
 
+    #[inline(always)]
     fn rd(&self) -> u8 {
         ((self >> 11) & 0x1F) as u8
     }
 
+    #[inline(always)]
     fn shamt(&self) -> u8 {
         ((self >> 6) & 0x1F) as u8
     }
 
+    #[inline(always)]
     fn funct(&self) -> u8 {
         (self & 0x3F) as u8
     }
 
+    #[inline(always)]
     fn immediate(&self) -> u16 {
         (self & 0xFFFF) as u16
     }
 
+    #[inline(always)]
     fn address(&self) -> u32 {
         self & 0x3FFFFFF
     }
 
+    #[inline(always)]
     fn immediate_sign_extended(&self) -> u32 {
         (self.clone() & 0xFFFF) as i16 as i32 as u32
     }

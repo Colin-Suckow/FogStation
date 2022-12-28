@@ -1639,7 +1639,7 @@ impl Gpu {
         self.hblank_consumed = false;
 
         let gpu_til_next_hblank = 3413 / (2560 / self.display_h_res);
-        //scheduler.schedule_event(GpuHblank, GpuCycles(gpu_til_next_hblank).into());
+        scheduler.schedule_event(GpuHblank, GpuCycles(gpu_til_next_hblank).into());
     }
 
     pub fn vblank_event(&mut self, cpu: &mut R3000, scheduler: &mut Scheduler) {

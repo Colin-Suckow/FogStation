@@ -1,12 +1,10 @@
-use std::cmp::Reverse;
-use std::collections::BinaryHeap;
 use std::mem::discriminant;
 use crate::{InterruptSource, MainBus, PSXEmu, R3000};
 use crate::cdrom::cdpacket_event;
 use crate::controller::controller_delay_event;
 use crate::ScheduleTarget::{CDPacket, GpuHblank, TimerOverflow, TimerTarget};
 
-#[derive(PartialEq, Copy, Clone, Debug)]
+#[derive(PartialEq, Copy, Clone)]
 pub enum ScheduleTarget {
     GpuHblank,
     GpuVblank,
@@ -39,81 +37,65 @@ impl From<HBlankCycles> for CpuCycles {
 struct PendingEvent {
     id: u32,
     target: ScheduleTarget,
-    target_cycle: u32,
-}
-
-impl PartialEq for PendingEvent {
-    fn eq(&self, other: &Self) -> bool {
-        self.target_cycle == other.target_cycle
-    }
-}
-
-impl Eq for PendingEvent {}
-
-impl Ord for PendingEvent {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.target_cycle.cmp(&other.target_cycle)
-    }
-}
-
-impl PartialOrd for PendingEvent {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.target_cycle.partial_cmp(&other.target_cycle)
-    }
+    cycles: u32,
 }
 
 pub struct EventHandle(u32);
 
 pub struct Scheduler {
-    pending_events: BinaryHeap<Reverse<PendingEvent>>,
-    next_id: u32,
-    cycle_count: u32
+    pending_events: Vec<PendingEvent>,
+    next_id: u32
 }
 
 impl Scheduler {
     pub fn new() -> Self {
         Self {
-            pending_events: BinaryHeap::new(),
-            next_id: 0,
-            cycle_count: 0
+            pending_events: Vec::new(),
+            next_id: 0
         }
     }
 
     pub fn schedule_event(&mut self, target: ScheduleTarget, cycles: CpuCycles) -> EventHandle {
         let id = self.next_id();
-        self.pending_events.push(Reverse(PendingEvent {id, target: target, target_cycle: self.cycle_count + cycles.0}));
+        self.pending_events.push(PendingEvent {id, target: target, cycles: cycles.0});
         EventHandle(id)
     }
 
     pub fn run_cycle(&mut self, emu: &mut R3000, main_bus: &mut MainBus) {
 
-
-        let peek_event = self.pending_events.peek();
-        if peek_event.is_some() && peek_event.unwrap().0.target_cycle <= self.cycle_count {
-            let event = self.pending_events.pop().unwrap();
-            self.execute(&event.0.target.clone(), emu, main_bus);
+        for i in 0..self.pending_events.len() {
+            if self.pending_events[i].cycles <= 0 {
+               self.execute(&self.pending_events[i].target.clone(), emu, main_bus);
+            }
         }
 
-        self.cycle_count += 1;
-       
+
+        self.pending_events.retain_mut(|event| {
+            if event.cycles > 0 {
+                event.cycles -= 1;
+                true
+            } else {
+                false
+            }
+        });
     }
 
     pub fn invalidate_all_events_of_target(&mut self, target: ScheduleTarget) {
         self.pending_events.retain(|event| {
-            discriminant(&event.0.target) != discriminant(&target)
+            discriminant(&event.target) != discriminant(&target)
         });
     }
 
     pub fn invalidate_exact_events_of_target(&mut self, target: ScheduleTarget) {
         self.pending_events.retain(|event| {
-            event.0.target != target
+            event.target != target
         });
     }
 
     pub fn cycles_remaining(&self, handle: &EventHandle) -> Option<CpuCycles> {
         for event in &self.pending_events {
-            if event.0.id == handle.0 {
-                return Some(CpuCycles(self.cycle_count - event.0.target_cycle));
+            if event.id == handle.0 {
+                return Some(CpuCycles(event.cycles));
             }
         }
         None

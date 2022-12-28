@@ -139,7 +139,7 @@ impl MainBus {
             0x1fc0_0000..=0x1fc7_ffff => self.bios.read_half_word(addr - 0x1fc0_0000),
             0x1f801050..=0x1f80105e => 0xBEEF, //SIO registers
             0x1F801100..=0x1F801128 => self.timers.read_half_word(addr & 0x1fffffff, scheduler),
-            _ => panic!("Invalid half word read at address {:#X}! This address is not mapped to any device.", addr)
+            _ => {println!("Invalid half word read at address {:#X}! This address is not mapped to any device.", addr); 0}
         };
         // if addr > 0x1f_ffff && !(0x1F800000..=0x1F8003FF).contains(&addr) && !(0x1fc0_0000..=0x1fc7_ffff).contains(&addr) {
         //     println!("Read IO hw addr {:#X} value {:#X}", addr, val);

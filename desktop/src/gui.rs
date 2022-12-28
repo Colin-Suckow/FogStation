@@ -530,9 +530,9 @@ fn transform_psx24_to_32(
         .iter()
         .enumerate()
         .filter(|(i, _v)| {
-            (i % (VRAM_WIDTH * 2)) >= (origin_x * 3) as usize
+            (i % (VRAM_WIDTH * 2)) >= (origin_x * 2) as usize
                 && ((i) / (VRAM_WIDTH * 2)) >= origin_y as usize
-                && (i % (VRAM_WIDTH * 2)) < ((origin_x + width) * 3) as usize
+                && (i % (VRAM_WIDTH * 2)) < ((origin_x * 2) + (width * 3)) as usize
                 && ((i) / (VRAM_WIDTH * 2)) < (origin_y + height) as usize
         })
         .map(|(_i, v)| *v)

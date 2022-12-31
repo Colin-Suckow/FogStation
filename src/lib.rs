@@ -1,5 +1,3 @@
-#![feature(binary_heap_retain)]
-
 use bios::Bios;
 use bus::MainBus;
 use controller::ButtonState;

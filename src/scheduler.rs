@@ -1,8 +1,9 @@
-use std::mem::discriminant;
-use crate::{InterruptSource, MainBus, PSXEmu, R3000};
 use crate::cdrom::cdpacket_event;
 use crate::controller::controller_delay_event;
 use crate::ScheduleTarget::{CDPacket, GpuHblank, TimerOverflow, TimerTarget};
+use crate::{InterruptSource, MainBus, PSXEmu, R3000};
+use std::array;
+use std::mem::discriminant;
 
 #[derive(PartialEq, Copy, Clone)]
 pub enum ScheduleTarget {
@@ -38,58 +39,75 @@ struct PendingEvent {
     id: u32,
     target: ScheduleTarget,
     cycles: u32,
+    complete: bool,
 }
 
 pub struct EventHandle(u32);
 
+const EVENT_SLOTS: usize = 10;
+
 pub struct Scheduler {
-    pending_events: Vec<PendingEvent>,
-    next_id: u32
+    pending_events: [PendingEvent; EVENT_SLOTS],
+    next_id: u32,
 }
 
 impl Scheduler {
     pub fn new() -> Self {
         Self {
-            pending_events: Vec::new(),
-            next_id: 0
+            pending_events: [PendingEvent {
+                id: 0,
+                target: GpuHblank,
+                cycles: 0,
+                complete: true,
+            }; EVENT_SLOTS],
+            next_id: 0,
         }
     }
 
     pub fn schedule_event(&mut self, target: ScheduleTarget, cycles: CpuCycles) -> EventHandle {
         let id = self.next_id();
-        self.pending_events.push(PendingEvent {id, target: target, cycles: cycles.0});
-        EventHandle(id)
+        for i in 0..EVENT_SLOTS {
+            if self.pending_events[i].complete {
+                self.pending_events[i] = PendingEvent {
+                    id,
+                    target: target,
+                    cycles: cycles.0,
+                    complete: false,
+                };
+                return EventHandle(id);
+            }
+        }
+        // If we made it throug the loop, then there are no open event slots
+        panic!("Unable to find an open event slot!");
     }
 
     pub fn run_cycle(&mut self, emu: &mut R3000, main_bus: &mut MainBus) {
-
-        for i in 0..self.pending_events.len() {
-            if self.pending_events[i].cycles <= 0 {
-               self.execute(&self.pending_events[i].target.clone(), emu, main_bus);
+        for i in 0..EVENT_SLOTS {
+            if !self.pending_events[i].complete {
+                if self.pending_events[i].cycles == 0 {
+                    self.execute(&self.pending_events[i].target.clone(), emu, main_bus);
+                    self.pending_events[i].complete = true;
+                } else {
+                    self.pending_events[i].cycles -= 1;
+                }
             }
         }
-
-
-        self.pending_events.retain_mut(|event| {
-            if event.cycles > 0 {
-                event.cycles -= 1;
-                true
-            } else {
-                false
-            }
-        });
     }
 
     pub fn invalidate_all_events_of_target(&mut self, target: ScheduleTarget) {
-        self.pending_events.retain(|event| {
-            discriminant(&event.target) != discriminant(&target)
-        });
+        for event in &mut self.pending_events {
+            if discriminant(&event.target) == discriminant(&target) {
+                event.complete = true;
+            }
+        }
     }
 
     pub fn invalidate_exact_events_of_target(&mut self, target: ScheduleTarget) {
-        self.pending_events.retain(|event| {
-            event.target != target
-        });
+        for event in &mut self.pending_events {
+            if event.target == target {
+                event.complete = true;
+            }
+        }
     }
 
     pub fn cycles_remaining(&self, handle: &EventHandle) -> Option<CpuCycles> {
@@ -105,23 +123,22 @@ impl Scheduler {
         match target {
             GpuHblank => {
                 main_bus.gpu.hblank_event(cpu, self);
-            },
+            }
             TimerOverflow(timer_num) => {
                 main_bus.timers.timer_overflow_event(cpu, self, *timer_num);
-
-            },
+            }
             TimerTarget(timer_num) => {
                 main_bus.timers.timer_target_event(cpu, self, *timer_num);
-            },
+            }
             CDPacket(id) => {
                 cdpacket_event(cpu, main_bus, self, *id);
-            },
+            }
             ScheduleTarget::CDIrq => {
                 cpu.fire_external_interrupt(InterruptSource::CDROM);
-            },
+            }
             ScheduleTarget::ControllerIRQ => {
                 controller_delay_event(cpu, &mut main_bus.controllers);
-            },
+            }
             ScheduleTarget::GpuVblank => {
                 main_bus.gpu.vblank_event(cpu, self);
             }

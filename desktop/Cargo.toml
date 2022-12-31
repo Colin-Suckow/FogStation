@@ -1,5 +1,5 @@
 [package]
-name = "vaporstation"
+name = "Vaporstation"
 version = "0.1.0"
 authors = ["Colin Suckow <csuckow99@gmail.com>"]
 edition = "2021"

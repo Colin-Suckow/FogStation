@@ -2022,8 +2022,6 @@ impl Gpu {
 
                 let addr = ((y as u32) * 1024) + x as u32;
 
-                let mut allow_black_pixel = false;
-
                 if !self.out_of_draw_area(&Point::from_components(x, y, 0))
                     && w0 < 0.0
                     && w1 <= 0.0
@@ -2070,8 +2068,7 @@ impl Gpu {
                             | (shaded_green << 5)
                             | (shaded_red as u8 as u16);
 
-                        allow_black_pixel = tex_fill != 0;
-                        blend_b15(tex_fill, shade_fill) | 0x8000
+                        blend_b15(tex_fill, shade_fill)
                     } else {
                         tex_fill
                     };
@@ -2080,7 +2077,7 @@ impl Gpu {
                         addr as usize,
                         final_fill,
                         m_transparent,
-                        allow_black_pixel,
+                        false,
                     );
                 }
             }

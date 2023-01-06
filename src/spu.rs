@@ -113,6 +113,7 @@ impl SPU {
             0x1F801DA6 => self.set_transfer_address(value),
 
             0x1F801C00..=0x1F801E5F => {
+                //println!("Write SPU voice reg at addr {:#X} with val {:#X}", addr, value);
                 let offset = addr - 0x1F801C00;
                 LittleEndian::write_u16(
                     &mut self.voice_registers[offset as usize..(offset + 2) as usize],

@@ -1,6 +1,6 @@
 use byteorder::{ByteOrder, LittleEndian};
 use disc::*;
-use eframe::epi::RepaintSignal;
+use eframe::egui::Context;
 use gdbstub::{DisconnectReason, GdbStub, GdbStubError};
 use getopts::Matches;
 use getopts::Options;
@@ -47,7 +47,7 @@ struct EmuState {
     debugging: bool,
     last_frame_time: SystemTime,
     waiting_for_client: bool,
-    redraw_signal: Option<Arc<dyn RepaintSignal>>,
+    gui_ctx: Option<Context>,
     frame_limited: bool,
     current_origin: (usize, usize),
     latest_draw_log: Vec<DrawCall>,
@@ -193,7 +193,7 @@ fn create_emu(matches: Matches, emu_comm: EmuComms) -> EmuState {
         debugging: matches.opt_present("g"),
         last_frame_time: SystemTime::now(),
         waiting_for_client: false,
-        redraw_signal: None,
+        gui_ctx: None,
         frame_limited: START_FRAME_LIMITED,
         current_origin: (0, 0),
         latest_draw_log: vec![],
@@ -211,7 +211,7 @@ enum EmuMessage {
     UpdateControllers(ButtonState),
     Reset,
     StartFrame,
-    RequestDrawCallback(Arc<dyn RepaintSignal>),
+    RecieveGuiContext(Context),
     SetFrameLimiter(bool),
     ClearGpuLog,
     SetMemLogging(bool),
@@ -306,7 +306,7 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
                     }
                     EmuMessage::Reset => state.emu.reset(),
                     EmuMessage::StartFrame => state.waiting_for_client = false,
-                    EmuMessage::RequestDrawCallback(signal) => state.redraw_signal = Some(signal),
+                    EmuMessage::RecieveGuiContext(signal) => state.gui_ctx = Some(signal),
                     EmuMessage::SetFrameLimiter(val) => state.frame_limited = val,
                     EmuMessage::ClearGpuLog => state.emu.clear_gpu_call_log(),
                     EmuMessage::SetMemLogging(enabled) => toggle_memory_logging(enabled),
@@ -366,8 +366,8 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
             return Err(EmuThreadError::ClientDied);
         };
         // Request redraw
-        if let Some(redraw_signal) = &state.redraw_signal {
-            redraw_signal.request_repaint();
+        if let Some(gui_ctx) = &state.gui_ctx {
+            gui_ctx.request_repaint();
         }
 
         state.latest_draw_log = state.emu.take_gpu_call_log();

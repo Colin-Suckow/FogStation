@@ -17,7 +17,6 @@ overflow-checks = false     # Disable integer overflow checks.
 [dependencies]
 psx-emu = {path = ".."}
 glium = { version = "0.29", default-features = true }
-eframe = "0.15.0"
 byteorder = "1.4.2"
 getopts = "0.2.21"
 gdbstub = "0.4.5"
@@ -25,3 +24,4 @@ num = "0.4.0"
 simple_logger = "1.11.0"
 gilrs = "0.8.2"
 rcue = "0.1.3"
+eframe = { version = "0.20.1", features = ["default_fonts", "glow"] }

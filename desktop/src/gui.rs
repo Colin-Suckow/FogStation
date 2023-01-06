@@ -1,6 +1,7 @@
 use eframe::{
     egui::{self, Color32, Direction, Key, Layout, Pos2, Rect, TextureId},
-    epi,
+    epaint::TextureHandle,
+    glow,
 };
 use gilrs::{Button, GamepadId, Gilrs};
 use psx_emu::{
@@ -14,9 +15,16 @@ const VRAM_WIDTH: usize = 1024;
 const VRAM_HEIGHT: usize = 512;
 
 pub(crate) fn run_gui(state: ClientState) {
-    let app = VaporstationApp::new(state);
-    let native_options = eframe::NativeOptions::default();
-    eframe::run_native(Box::new(app), native_options);
+    let native_options = eframe::NativeOptions {
+        renderer: eframe::Renderer::Glow,
+        ..Default::default()
+    };
+
+    eframe::run_native(
+        "Vaporstation",
+        native_options,
+        Box::new(|cc| Box::new(VaporstationApp::new(state, cc))),
+    );
 }
 
 struct VaporstationApp {
@@ -26,23 +34,24 @@ struct VaporstationApp {
     awaiting_gdb: bool,
     latest_pc: u32,
     irq_mask: u32,
-    vram_texture: Option<TextureId>,
-    display_texture: Option<TextureId>,
+    vram_texture: Option<TextureHandle>,
+    display_texture: Option<TextureHandle>,
     show_vram_window: bool,
     gdb_connected: bool,
     display_origin: (usize, usize),
     latest_gpu_log: Vec<DrawCall>,
     show_gpu_call_window: bool,
     highlighted_gpu_calls: Vec<usize>,
-    last_frame_data: Vec<Color32>,
+    last_frame_data: Vec<u8>,
     memory_logging: bool,
     gilrs_instance: Gilrs,
     active_controller_id: Option<GamepadId>,
     show_gamepad_window: bool,
+    has_initialized: bool,
 }
 
 impl VaporstationApp {
-    fn new(state: ClientState) -> Self {
+    fn new(state: ClientState, cc: &eframe::CreationContext<'_>) -> Self {
         let default_resolution = Resolution {
             width: 640,
             height: 480,
@@ -68,6 +77,7 @@ impl VaporstationApp {
             gilrs_instance: Gilrs::new().unwrap(),
             active_controller_id: None,
             show_gamepad_window: false,
+            has_initialized: false,
         }
     }
 
@@ -112,26 +122,36 @@ impl VaporstationApp {
     }
 }
 
-impl epi::App for VaporstationApp {
-    fn setup(
-        &mut self,
-        _ctx: &egui::CtxRef,
-        frame: &mut epi::Frame<'_>,
-        _storage: Option<&dyn epi::Storage>,
-    ) {
-        self.emu_handle
-            .comm
-            .tx
-            .send(EmuMessage::RequestDrawCallback(frame.repaint_signal()))
-            .unwrap();
-    }
+impl eframe::App for VaporstationApp {
+    // fn setup(
+    //     &mut self,
+    //     _ctx: &egui::Context,
+    //     frame: &mut eframe::Frame<'_>,
+    //     _storage: Option<&dyn eframe::Storage>,
+    // ) {
+    //     self.emu_handle
+    //         .comm
+    //         .tx
+    //         .send(EmuMessage::RequestDrawCallback(frame.repaint_signal()))
+    //         .unwrap();
+    // }
 
-    fn update(&mut self, ctx: &eframe::egui::CtxRef, frame: &mut epi::Frame<'_>) {
+    fn update(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
+
+        if !self.has_initialized {
+            self.emu_handle
+                .comm
+                .tx
+                .send(EmuMessage::RecieveGuiContext(ctx.clone()))
+                .unwrap();
+            self.has_initialized = true;
+        }
+
         // TODO: Fix this. Runs the envent loop enough to grab most of the controller updates
         for _ in 0..16 {
             self.gilrs_instance.next_event();
         }
-        let psx_button_state = self.get_button_state(ctx.input());
+        let psx_button_state = self.get_button_state(&ctx.input());
         self.emu_handle
             .comm
             .tx
@@ -142,15 +162,6 @@ impl epi::App for VaporstationApp {
             match self.emu_handle.comm.rx.try_recv() {
                 Ok(msg) => match msg {
                     ClientMessage::FrameReady(vram_frame, frame_time, is_full_color) => {
-                        // Free the old texture if it exists
-                        if let Some(vram_texture) = self.vram_texture {
-                            frame.tex_allocator().free(vram_texture);
-                        }
-
-                        if let Some(display_texture) = self.display_texture {
-                            frame.tex_allocator().free(display_texture);
-                        }
-
                         let pixel_data = transform_psx16_to_32(
                             &vram_frame,
                             0,
@@ -159,11 +170,14 @@ impl epi::App for VaporstationApp {
                             VRAM_HEIGHT as u32,
                         );
 
-                        self.vram_texture = Some(
-                            frame
-                                .tex_allocator()
-                                .alloc_srgba_premultiplied((VRAM_WIDTH, VRAM_HEIGHT), &pixel_data),
-                        );
+                        self.vram_texture = Some(ctx.load_texture(
+                            "VRAM",
+                            egui::ColorImage::from_rgba_unmultiplied(
+                                [VRAM_WIDTH, VRAM_HEIGHT],
+                                &pixel_data,
+                            ),
+                            egui::TextureOptions::LINEAR,
+                        ));
 
                         let display_data = if is_full_color {
                             transform_psx24_to_32(
@@ -183,14 +197,17 @@ impl epi::App for VaporstationApp {
                             )
                         };
 
-                        self.display_texture =
-                            Some(frame.tex_allocator().alloc_srgba_premultiplied(
-                                (
+                        self.display_texture = Some(ctx.load_texture(
+                            "FRAME",
+                            egui::ColorImage::from_rgba_unmultiplied(
+                                [
                                     self.latest_resolution.width as usize,
                                     self.latest_resolution.height as usize,
-                                ),
+                                ],
                                 &display_data,
-                            ));
+                            ),
+                            egui::TextureOptions::LINEAR,
+                        ));
 
                         self.last_frame_data = pixel_data;
                         self.times.push(frame_time as usize);
@@ -232,16 +249,16 @@ impl epi::App for VaporstationApp {
 
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
-                egui::menu::menu(ui, "File", |ui| {
+                ui.menu_button("File", |ui| {
                     if ui.button("Quit").clicked() {
                         frame.quit();
                     }
                 });
 
-                egui::menu::menu(ui, "Settings", |ui| {
+                ui.menu_button("Settings", |ui| {
                     ui.checkbox(&mut self.show_gamepad_window, "Controller");
                 });
-                egui::menu::menu(ui, "Control", |ui| {
+                ui.menu_button("Control", |ui| {
                     let halt_button_text = if self.halted() { "Resume" } else { "Halt" };
                     if ui.button(halt_button_text).clicked() {
                         self.set_halt(!self.halted());
@@ -258,7 +275,7 @@ impl epi::App for VaporstationApp {
                             .unwrap();
                     };
                 });
-                egui::menu::menu(ui, "Debug", |ui| {
+                ui.menu_button("Debug", |ui| {
                     ui.checkbox(&mut self.show_vram_window, "VRAM Viewer");
                     ui.checkbox(&mut self.show_gpu_call_window, "GPU Call Debugger");
                     if ui
@@ -273,7 +290,7 @@ impl epi::App for VaporstationApp {
                     };
                 });
 
-                ui.with_layout(Layout::right_to_left(), |ui| {
+                ui.with_layout(Layout::right_to_left(eframe::emath::Align::Center), |ui| {
                     if self.halted() {
                         ui.label(format!("HALTED at {:#X}", self.latest_pc));
                         ui.label(format!("IRQ mask: {:#X}", self.irq_mask));
@@ -294,8 +311,8 @@ impl epi::App for VaporstationApp {
 
         if self.show_vram_window {
             egui::Window::new("VRAM Viewer").show(ctx, |ui| {
-                if let Some(vram) = self.vram_texture {
-                    ui.image(vram, [VRAM_WIDTH as f32, VRAM_HEIGHT as f32]);
+                if let Some(vram) = &self.vram_texture {
+                    ui.image(vram.id(), [VRAM_WIDTH as f32, VRAM_HEIGHT as f32]);
                 }
             });
         }
@@ -414,16 +431,14 @@ impl epi::App for VaporstationApp {
 
                                         apply_highlights(&self, &mut new_frame);
 
-                                        // Free the old texture if it exists
-                                        if let Some(vram_texture) = self.vram_texture {
-                                            frame.tex_allocator().free(vram_texture);
-                                        }
-
-                                        self.vram_texture =
-                                            Some(frame.tex_allocator().alloc_srgba_premultiplied(
-                                                (VRAM_WIDTH, VRAM_HEIGHT),
+                                        self.vram_texture = Some(ctx.load_texture(
+                                            "VRAM",
+                                            egui::ColorImage::from_rgba_unmultiplied(
+                                                [VRAM_WIDTH, VRAM_HEIGHT],
                                                 &new_frame,
-                                            ));
+                                            ),
+                                            egui::TextureOptions::LINEAR,
+                                        ));
                                     }
 
                                     ui.end_row();
@@ -438,7 +453,7 @@ impl epi::App for VaporstationApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(display_texture) = self.display_texture {
+            if let Some(display_texture) = &self.display_texture {
                 ui.with_layout(
                     egui::Layout::centered_and_justified(Direction::TopDown),
                     |ui| {
@@ -451,7 +466,7 @@ impl epi::App for VaporstationApp {
                             };
 
                         let image =
-                            egui::Image::new(display_texture, [scaled_width, scaled_height]).uv(
+                            egui::Image::new(display_texture.id(), [scaled_width, scaled_height]).uv(
                                 Rect {
                                     min: Pos2::new(0.00625, 0.00833),
                                     max: Pos2::new(1.0 - 0.00625, 1.0 - 0.00833),
@@ -462,10 +477,6 @@ impl epi::App for VaporstationApp {
                 );
             }
         });
-    }
-
-    fn name(&self) -> &str {
-        "Vaporstation"
     }
 }
 
@@ -497,7 +508,7 @@ fn transform_psx16_to_32(
     origin_y: u32,
     width: u32,
     height: u32,
-) -> Vec<Color32> {
+) -> Vec<u8> {
     psx_data
         .iter()
         .enumerate()
@@ -507,11 +518,9 @@ fn transform_psx16_to_32(
                 && (i % VRAM_WIDTH) < (origin_x + width) as usize
                 && (i / VRAM_WIDTH) < (origin_y + height) as usize
         })
-        .map(|(_i, p)| {
-            let colors = ps_pixel_to_gl(p);
-            egui::Color32::from_rgba_unmultiplied(colors[0], colors[1], colors[2], 255)
-        })
-        .collect::<Vec<_>>()
+        .map(|(_i, p)| ps_pixel_to_gl(p))
+        .flatten()
+        .collect::<Vec<u8>>()
 }
 
 fn transform_psx24_to_32(
@@ -520,7 +529,7 @@ fn transform_psx24_to_32(
     origin_y: u32,
     width: u32,
     height: u32,
-) -> Vec<Color32> {
+) -> Vec<u8> {
     psx_data
         .iter()
         .fold(vec![], |mut vec, val| {
@@ -537,12 +546,9 @@ fn transform_psx24_to_32(
         })
         .map(|(_i, v)| *v)
         .collect::<Vec<u8>>()
-        .chunks_exact(3)
-        .map(|colors| egui::Color32::from_rgba_unmultiplied(colors[0], colors[1], colors[2], 255))
-        .collect()
 }
 
-fn apply_highlights(app: &VaporstationApp, pixel_data: &mut Vec<Color32>) {
+fn apply_highlights(app: &VaporstationApp, pixel_data: &mut Vec<u8>) {
     for call_index in &app.highlighted_gpu_calls {
         let call = &app.latest_gpu_log[*call_index];
 
@@ -583,43 +589,38 @@ fn apply_highlights(app: &VaporstationApp, pixel_data: &mut Vec<Color32>) {
 
             for y in min_y..max_y {
                 for x in min_x..max_x {
-                    let addr = (y as i32) * 1024 + x as i32;
+                    let addr = ((y as i32) * 1024 + x as i32) * 3;
                     let current_pixel = pixel_data[addr as usize];
                     let highlight_color = Color32::from_rgba_unmultiplied(155, 0, 0, 155);
 
-                    pixel_data[addr as usize] = Color32::from_rgba_unmultiplied(
-                        current_pixel.r() + highlight_color.r(),
-                        current_pixel.g() + highlight_color.g(),
-                        current_pixel.b() + highlight_color.b(),
-                        255,
-                    );
+                    pixel_data[addr as usize] += highlight_color.r();
+                    pixel_data[(addr + 1) as usize] += highlight_color.g();
+                    pixel_data[(addr + 2) as usize] += highlight_color.b();
                 }
             }
 
             for y in tex_min_y..tex_max_y {
                 for x in tex_min_x..tex_max_x {
-                    let addr = ((y + tex_base_y) as i32) * 1024 + (x + tex_base_x) as i32;
+                    let addr = (((y + tex_base_y) as i32) * 1024 + (x + tex_base_x) as i32) * 3;
                     let current_pixel = pixel_data[addr as usize];
                     let highlight_color = Color32::from_rgba_unmultiplied(0, 155, 0, 155);
 
-                    pixel_data[addr as usize] = Color32::from_rgba_unmultiplied(
-                        current_pixel.r() + highlight_color.r(),
-                        current_pixel.g() + highlight_color.g(),
-                        current_pixel.b() + highlight_color.b(),
-                        255,
-                    );
+                    pixel_data[addr as usize] += highlight_color.r();
+                    pixel_data[(addr + 1) as usize] += highlight_color.g();
+                    pixel_data[(addr + 2) as usize] += highlight_color.b();
                 }
             }
         }
     }
 }
 
-///Converts 16 bit psx pixel format to u8u8u8
-fn ps_pixel_to_gl(pixel_data: &u16) -> [u8; 3] {
+///Converts 16 bit psx pixel format to u8u8u8u8
+fn ps_pixel_to_gl(pixel_data: &u16) -> [u8; 4] {
     [
         ((pixel_data & 0x1F) * 8) as u8,
         (((pixel_data >> 5) & 0x1F) * 8) as u8,
         (((pixel_data >> 10) & 0x1F) * 8) as u8,
+        255
     ]
 }
 

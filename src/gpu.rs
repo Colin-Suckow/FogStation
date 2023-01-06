@@ -16,7 +16,7 @@ use crate::ScheduleTarget::GpuHblank;
 const CYCLES_PER_SCANLINE: u32 = 3413;
 const TOTAL_SCANLINES: u32 = 263;
 
-#[derive(Copy, Clone, Debug, Display)]
+#[derive(Copy, Clone, Debug, Display, PartialEq)]
 pub enum TextureColorMode {
     FourBit,
     EightBit,
@@ -1815,7 +1815,14 @@ impl Gpu {
                 self.palette_y as u32,
             );
 
-            self.composite_and_place_pixel(address, fill, transparent, false);
+            // If this color is pulled from the CLUT table, use bit 15 for semi transparency
+            let m_transparent = if self.texmode != TextureColorMode::FifteenBit {
+                transparent && fill.get_bit(15)
+            } else {
+                transparent
+            };
+
+            self.composite_and_place_pixel(address, fill, m_transparent, false);
         }
     }
 
@@ -1826,7 +1833,7 @@ impl Gpu {
         transparent: bool,
         force_black: bool,
     ) {
-        let mut color = if transparent && fill.get_bit(15) {
+        let mut color = if transparent {
             alpha_composite(self.vram[addr], fill, &self.blend_mode)
         } else {
             fill
@@ -2040,6 +2047,13 @@ impl Gpu {
                     let tex_fill =
                         self.get_texel(tex_x as i32, tex_y as i32, page_x, page_y, clut_x, clut_y);
 
+                    // If this color is pulled from the CLUT table, use bit 15 for semi transparency
+                    let m_transparent = if self.texmode != TextureColorMode::FifteenBit {
+                        transparent && tex_fill.get_bit(15)
+                    } else {
+                        transparent
+                    };
+
                     let final_fill = if draw_type == TextureDraw::Shaded {
                         let c1 = b15_to_rgb(points[0].color);
                         let c2 = b15_to_rgb(points[1].color);
@@ -2065,7 +2079,7 @@ impl Gpu {
                     self.composite_and_place_pixel(
                         addr as usize,
                         final_fill,
-                        transparent,
+                        m_transparent,
                         allow_black_pixel,
                     );
                 }

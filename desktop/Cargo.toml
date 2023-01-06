@@ -19,9 +19,9 @@ psx-emu = {path = ".."}
 glium = { version = "0.29", default-features = true }
 eframe = "0.15.0"
 byteorder = "1.4.2"
-cue = { git = "https://github.com/lomereiter/libcue.rs" }
 getopts = "0.2.21"
 gdbstub = "0.4.5"
 num = "0.4.0"
 simple_logger = "1.11.0"
 gilrs = "0.8.2"
+rcue = "0.1.3"

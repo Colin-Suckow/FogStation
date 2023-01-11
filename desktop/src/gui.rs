@@ -728,11 +728,11 @@ impl DisplayShaderManager {
                     
                     in vec2 TexCoord;
                     
-                    uniform sampler2D ourTexture;
+                    uniform sampler2D displayTex;
                     
                     void main()
                     {
-                        FragColor = texture(ourTexture, TexCoord);
+                        FragColor = texture(displayTex, TexCoord);
                     }
                 "#,
             );

@@ -1,7 +1,9 @@
+use std::sync::{Arc, Mutex};
+
 use eframe::{
     egui::{self, Color32, Direction, Key, Layout, Pos2, Rect, TextureId},
     epaint::TextureHandle,
-    glow,
+    glow::{self, HasContext, NativeTexture}, egui_glow,
 };
 use gilrs::{Button, GamepadId, Gilrs};
 use psx_emu::{
@@ -48,6 +50,9 @@ struct VaporstationApp {
     active_controller_id: Option<GamepadId>,
     show_gamepad_window: bool,
     has_initialized: bool,
+    disp_shader_manager: Arc<Mutex<DisplayShaderManager>>,
+    last_display_data: Vec<u8>
+    //shader_layer: ShaderLayer,
 }
 
 impl VaporstationApp {
@@ -56,6 +61,11 @@ impl VaporstationApp {
             width: 640,
             height: 480,
         };
+
+        let gl = cc
+            .gl
+            .as_ref()
+            .expect("You need to run eframe with the glow backend");
 
         Self {
             emu_handle: state,
@@ -78,6 +88,9 @@ impl VaporstationApp {
             active_controller_id: None,
             show_gamepad_window: false,
             has_initialized: false,
+            disp_shader_manager: Arc::new(Mutex::new(DisplayShaderManager::new(gl))),
+            last_display_data: Vec::new(),
+            //shader_layer: ShaderLayer::new(cc.gl.as_ref().unwrap().clone()),
         }
     }
 
@@ -120,22 +133,29 @@ impl VaporstationApp {
             get_button_state_from_keyboard(input_state)
         }
     }
+
+    fn custom_painting(&mut self, ui: &mut egui::Ui, frame_data: Vec<u8>, frame_width: i32, frame_height: i32) {
+        let (rect, response) =
+            ui.allocate_exact_size(egui::Vec2::new(frame_width as f32, frame_height as f32), egui::Sense::drag());
+
+        //self.angle += response.drag_delta().x * 0.01;
+
+        // Clone locals so we can move them into the paint callback:
+        //let angle = self.angle;
+        let rotating_triangle = self.disp_shader_manager.clone();
+
+        let callback = egui::PaintCallback {
+            rect,
+            callback: std::sync::Arc::new(egui_glow::CallbackFn::new(move |_info, painter| {
+                rotating_triangle.lock().unwrap().paint(painter.gl(), &frame_data, frame_width, frame_height);
+            })),
+        };
+        ui.painter().add(callback);
+    }
+
 }
 
 impl eframe::App for VaporstationApp {
-    // fn setup(
-    //     &mut self,
-    //     _ctx: &egui::Context,
-    //     frame: &mut eframe::Frame<'_>,
-    //     _storage: Option<&dyn eframe::Storage>,
-    // ) {
-    //     self.emu_handle
-    //         .comm
-    //         .tx
-    //         .send(EmuMessage::RequestDrawCallback(frame.repaint_signal()))
-    //         .unwrap();
-    // }
-
     fn update(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
 
         if !self.has_initialized {
@@ -144,6 +164,17 @@ impl eframe::App for VaporstationApp {
                 .tx
                 .send(EmuMessage::RecieveGuiContext(ctx.clone()))
                 .unwrap();
+
+            // let shader_code = "#version 330 core
+            // out vec4 FragColor;
+            
+            // void main()
+            // {
+            //     FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
+            // } ".into();
+
+            //self.shader_layer.create_new_shader(shader_code);
+            
             self.has_initialized = true;
         }
 
@@ -210,6 +241,7 @@ impl eframe::App for VaporstationApp {
                         ));
 
                         self.last_frame_data = pixel_data;
+                        self.last_display_data = display_data;
                         self.times.push(frame_time as usize);
                     }
                     ClientMessage::ResolutionChanged(res) => self.latest_resolution = res,
@@ -453,7 +485,8 @@ impl eframe::App for VaporstationApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(display_texture) = &self.display_texture {
+            if let Some(_) = &self.display_texture {
+                let frame_data_copy = self.last_display_data.clone();
                 ui.with_layout(
                     egui::Layout::centered_and_justified(Direction::TopDown),
                     |ui| {
@@ -465,14 +498,18 @@ impl eframe::App for VaporstationApp {
                                 (pane_size.width() * 0.75, pane_size.width())
                             };
 
-                        let image =
-                            egui::Image::new(display_texture.id(), [scaled_width, scaled_height]).uv(
-                                Rect {
-                                    min: Pos2::new(0.00625, 0.00833),
-                                    max: Pos2::new(1.0 - 0.00625, 1.0 - 0.00833),
-                                },
-                            );
-                        ui.add(image);
+                        // let image =
+                        //     egui::Image::new(display_texture.id(), [scaled_width, scaled_height]).uv(
+                        //         Rect {
+                        //             min: Pos2::new(0.00625, 0.00833),
+                        //             max: Pos2::new(1.0 - 0.00625, 1.0 - 0.00833),
+                        //         },
+                        //     );
+                        // ui.add(image);
+                        
+                        egui::Frame::canvas(ui.style()).show(ui, |ui| {
+                            self.custom_painting(ui, frame_data_copy, scaled_width as i32, scaled_height as i32);
+                        });
                     },
                 );
             }
@@ -612,6 +649,7 @@ fn apply_highlights(app: &VaporstationApp, pixel_data: &mut Vec<u8>) {
             }
         }
     }
+    
 }
 
 ///Converts 16 bit psx pixel format to u8u8u8u8
@@ -645,5 +683,171 @@ impl AverageList {
         }
 
         sum as f64 / 32.0
+    }
+}
+
+
+
+
+struct DisplayShaderManager {
+    program: glow::Program,
+    vertex_array: glow::VertexArray,
+}
+
+impl DisplayShaderManager {
+    fn new(gl: &glow::Context) -> Self {
+        use glow::HasContext as _;
+
+        let shader_version = if cfg!(target_arch = "wasm32") {
+            "#version 300 es"
+        } else {
+            "#version 330"
+        };
+
+        unsafe {
+            let program = gl.create_program().expect("Cannot create program");
+
+            let (vertex_shader_source, fragment_shader_source) = (
+                r#"
+                    const vec3 verts[3] = vec3[3](
+                        vec3(-1.0, -1.0, 0.0),
+                        vec3(3.0, -1.0, 0.0),
+                        vec3(-1.0, 3.0, 0.0)
+                    );
+ 
+                    out vec2 TexCoord;
+                    
+                    void main()
+                    {
+                        gl_Position = vec4(verts[gl_VertexID], 1.0);
+                        TexCoord = vec2((0.5 - 0.00833) * gl_Position.x + 0.5, (0.5 - 0.00625) * -gl_Position.y + 0.5);
+                    }
+                "#,
+                r#"
+                    out vec4 FragColor;
+                    
+                    in vec2 TexCoord;
+                    
+                    uniform sampler2D ourTexture;
+                    
+                    void main()
+                    {
+                        FragColor = texture(ourTexture, TexCoord);
+                    }
+                "#,
+            );
+
+            let shader_sources = [
+                (glow::VERTEX_SHADER, vertex_shader_source),
+                (glow::FRAGMENT_SHADER, fragment_shader_source),
+            ];
+
+            let shaders: Vec<_> = shader_sources
+                .iter()
+                .map(|(shader_type, shader_source)| {
+                    let shader = gl
+                        .create_shader(*shader_type)
+                        .expect("Cannot create shader");
+                    gl.shader_source(shader, &format!("{}\n{}", shader_version, shader_source));
+                    gl.compile_shader(shader);
+                    assert!(
+                        gl.get_shader_compile_status(shader),
+                        "Failed to compile {shader_type}: {}",
+                        gl.get_shader_info_log(shader)
+                    );
+                    gl.attach_shader(program, shader);
+                    shader
+                })
+                .collect();
+
+            gl.link_program(program);
+            if !gl.get_program_link_status(program) {
+                panic!("{}", gl.get_program_info_log(program));
+            }
+
+            for shader in shaders {
+                gl.detach_shader(program, shader);
+                gl.delete_shader(shader);
+            }
+
+            let vertex_array = gl
+                .create_vertex_array()
+                .expect("Cannot create vertex array");
+
+            Self {
+                program,
+                vertex_array,
+            }
+        }
+    }
+
+    fn destroy(&self, gl: &glow::Context) {
+        use glow::HasContext as _;
+        unsafe {
+            gl.delete_program(self.program);
+            gl.delete_vertex_array(self.vertex_array);
+        }
+    }
+
+    fn paint(&self, gl: &glow::Context, image_data: &[u8], frame_width: i32, frame_height: i32) {
+        use glow::HasContext as _;
+        unsafe {
+            gl.use_program(Some(self.program));
+            let disp_tex = gl.create_texture().unwrap();
+            gl.active_texture(glow::TEXTURE0);
+            gl.bind_texture(glow::TEXTURE_2D, Some(disp_tex));
+            gl.tex_image_2d(glow::TEXTURE_2D, 0.into(), glow::RGBA as i32, 640, 480, 0, glow::RGBA, glow::UNSIGNED_BYTE, Some(image_data));
+            gl.generate_mipmap(glow::TEXTURE_2D);
+            gl.bind_vertex_array(Some(self.vertex_array));
+            gl.draw_arrays(glow::TRIANGLES, 0, 3);
+            gl.delete_texture(disp_tex);
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+struct ShaderLayer {
+    gl: std::sync::Arc<glow::Context>,
+    program: Option<glow::Program>
+}
+
+impl ShaderLayer {
+    fn new(gl: std::sync::Arc<glow::Context>) -> Self {
+        Self {
+            gl,
+            program: None
+        }
+    }
+
+    fn create_new_shader(&mut self, pixel_program: String) {
+        unsafe {
+            println!("Creating shader!");
+            let shader = self.gl.create_shader(glow::FRAGMENT_SHADER).unwrap();
+            self.gl.shader_source(shader, &pixel_program);
+            self.gl.compile_shader(shader);
+            if !self.gl.get_shader_compile_status(shader) {
+                panic!("{}", self.gl.get_shader_info_log(shader));
+            }
+
+            let program = self.gl.create_program().unwrap();
+            self.gl.attach_shader(program, shader);
+            self.gl.link_program(program);
+            if !self.gl.get_program_link_status(program) {
+                panic!("{}", self.gl.get_program_info_log(program));
+            }
+            self.program = Some(program);
+        }
     }
 }

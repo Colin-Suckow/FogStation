@@ -134,7 +134,7 @@ impl VaporstationApp {
         }
     }
 
-    fn custom_painting(&mut self, ui: &mut egui::Ui, frame_data: Vec<u8>, frame_width: i32, frame_height: i32) {
+    fn custom_painting(&mut self, ui: &mut egui::Ui, frame_data: Vec<u8>, frame_width: f32, frame_height: f32) {
         let (rect, response) =
             ui.allocate_exact_size(egui::Vec2::new(frame_width as f32, frame_height as f32), egui::Sense::drag());
 
@@ -147,7 +147,7 @@ impl VaporstationApp {
         let callback = egui::PaintCallback {
             rect,
             callback: std::sync::Arc::new(egui_glow::CallbackFn::new(move |_info, painter| {
-                rotating_triangle.lock().unwrap().paint(painter.gl(), &frame_data, frame_width, frame_height);
+                rotating_triangle.lock().unwrap().paint(painter.gl(), &frame_data);
             })),
         };
         ui.painter().add(callback);
@@ -508,7 +508,7 @@ impl eframe::App for VaporstationApp {
                         // ui.add(image);
                         
                         egui::Frame::canvas(ui.style()).show(ui, |ui| {
-                            self.custom_painting(ui, frame_data_copy, scaled_width as i32, scaled_height as i32);
+                            self.custom_painting(ui, frame_data_copy, scaled_width, scaled_height);
                         });
                     },
                 );
@@ -792,7 +792,7 @@ impl DisplayShaderManager {
         }
     }
 
-    fn paint(&self, gl: &glow::Context, image_data: &[u8], frame_width: i32, frame_height: i32) {
+    fn paint(&self, gl: &glow::Context, image_data: &[u8]) {
         use glow::HasContext as _;
         unsafe {
             gl.use_program(Some(self.program));

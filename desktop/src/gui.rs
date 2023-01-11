@@ -134,7 +134,7 @@ impl VaporstationApp {
         }
     }
 
-    fn custom_painting(&mut self, ui: &mut egui::Ui, frame_data: Vec<u8>, frame_width: f32, frame_height: f32) {
+    fn custom_painting(&mut self, ui: &mut egui::Ui, frame_data: Vec<u8>, frame_width: f32, frame_height: f32, psx_disp_width: i32, psx_disp_height: i32) {
         let (rect, response) =
             ui.allocate_exact_size(egui::Vec2::new(frame_width as f32, frame_height as f32), egui::Sense::drag());
 
@@ -147,7 +147,7 @@ impl VaporstationApp {
         let callback = egui::PaintCallback {
             rect,
             callback: std::sync::Arc::new(egui_glow::CallbackFn::new(move |_info, painter| {
-                rotating_triangle.lock().unwrap().paint(painter.gl(), &frame_data);
+                rotating_triangle.lock().unwrap().paint(painter.gl(), &frame_data, psx_disp_width, psx_disp_height);
             })),
         };
         ui.painter().add(callback);
@@ -508,7 +508,7 @@ impl eframe::App for VaporstationApp {
                         // ui.add(image);
                         
                         egui::Frame::canvas(ui.style()).show(ui, |ui| {
-                            self.custom_painting(ui, frame_data_copy, scaled_width, scaled_height);
+                            self.custom_painting(ui, frame_data_copy, scaled_width, scaled_height, self.latest_resolution.width as i32, self.latest_resolution.height as i32);
                         });
                     },
                 );
@@ -792,65 +792,18 @@ impl DisplayShaderManager {
         }
     }
 
-    fn paint(&self, gl: &glow::Context, image_data: &[u8]) {
+    fn paint(&self, gl: &glow::Context, image_data: &[u8], display_width: i32, display_height: i32) {
         use glow::HasContext as _;
         unsafe {
             gl.use_program(Some(self.program));
             let disp_tex = gl.create_texture().unwrap();
             gl.active_texture(glow::TEXTURE0);
             gl.bind_texture(glow::TEXTURE_2D, Some(disp_tex));
-            gl.tex_image_2d(glow::TEXTURE_2D, 0.into(), glow::RGBA as i32, 640, 480, 0, glow::RGBA, glow::UNSIGNED_BYTE, Some(image_data));
+            gl.tex_image_2d(glow::TEXTURE_2D, 0.into(), glow::RGBA as i32, display_width, display_height, 0, glow::RGBA, glow::UNSIGNED_BYTE, Some(image_data));
             gl.generate_mipmap(glow::TEXTURE_2D);
             gl.bind_vertex_array(Some(self.vertex_array));
             gl.draw_arrays(glow::TRIANGLES, 0, 3);
             gl.delete_texture(disp_tex);
-        }
-    }
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-struct ShaderLayer {
-    gl: std::sync::Arc<glow::Context>,
-    program: Option<glow::Program>
-}
-
-impl ShaderLayer {
-    fn new(gl: std::sync::Arc<glow::Context>) -> Self {
-        Self {
-            gl,
-            program: None
-        }
-    }
-
-    fn create_new_shader(&mut self, pixel_program: String) {
-        unsafe {
-            println!("Creating shader!");
-            let shader = self.gl.create_shader(glow::FRAGMENT_SHADER).unwrap();
-            self.gl.shader_source(shader, &pixel_program);
-            self.gl.compile_shader(shader);
-            if !self.gl.get_shader_compile_status(shader) {
-                panic!("{}", self.gl.get_shader_info_log(shader));
-            }
-
-            let program = self.gl.create_program().unwrap();
-            self.gl.attach_shader(program, shader);
-            self.gl.link_program(program);
-            if !self.gl.get_program_link_status(program) {
-                panic!("{}", self.gl.get_program_info_log(program));
-            }
-            self.program = Some(program);
         }
     }
 }

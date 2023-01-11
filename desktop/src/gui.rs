@@ -688,6 +688,41 @@ impl AverageList {
 
 
 
+const DEFAULT_FRAGMENT_SHADER: &str = r#"
+#version 330
+
+out vec4 FragColor;
+
+in vec2 TexCoord;
+
+uniform sampler2D displayTex;
+
+void main()
+{
+    FragColor = texture(displayTex, TexCoord);
+}
+"#;
+
+const DEFAULT_VERTEX_SHADER: &str = r#"
+#version 330
+
+const vec3 verts[3] = vec3[3](
+    vec3(-1.0, -1.0, 0.0),
+    vec3(3.0, -1.0, 0.0),
+    vec3(-1.0, 3.0, 0.0)
+);
+
+out vec2 TexCoord;
+
+void main()
+{
+    gl_Position = vec4(verts[gl_VertexID], 1.0);
+    TexCoord = vec2((0.5 - 0.00833) * gl_Position.x + 0.5, (0.5 - 0.00625) * -gl_Position.y + 0.5);
+}
+"#;
+
+
+
 
 struct DisplayShaderManager {
     program: glow::Program,
@@ -698,43 +733,11 @@ impl DisplayShaderManager {
     fn new(gl: &glow::Context) -> Self {
         use glow::HasContext as _;
 
-        let shader_version = if cfg!(target_arch = "wasm32") {
-            "#version 300 es"
-        } else {
-            "#version 330"
-        };
-
         unsafe {
             let program = gl.create_program().expect("Cannot create program");
 
             let (vertex_shader_source, fragment_shader_source) = (
-                r#"
-                    const vec3 verts[3] = vec3[3](
-                        vec3(-1.0, -1.0, 0.0),
-                        vec3(3.0, -1.0, 0.0),
-                        vec3(-1.0, 3.0, 0.0)
-                    );
- 
-                    out vec2 TexCoord;
-                    
-                    void main()
-                    {
-                        gl_Position = vec4(verts[gl_VertexID], 1.0);
-                        TexCoord = vec2((0.5 - 0.00833) * gl_Position.x + 0.5, (0.5 - 0.00625) * -gl_Position.y + 0.5);
-                    }
-                "#,
-                r#"
-                    out vec4 FragColor;
-                    
-                    in vec2 TexCoord;
-                    
-                    uniform sampler2D displayTex;
-                    
-                    void main()
-                    {
-                        FragColor = texture(displayTex, TexCoord);
-                    }
-                "#,
+                DEFAULT_VERTEX_SHADER, DEFAULT_FRAGMENT_SHADER
             );
 
             let shader_sources = [
@@ -748,7 +751,7 @@ impl DisplayShaderManager {
                     let shader = gl
                         .create_shader(*shader_type)
                         .expect("Cannot create shader");
-                    gl.shader_source(shader, &format!("{}\n{}", shader_version, shader_source));
+                    gl.shader_source(shader, &shader_source);
                     gl.compile_shader(shader);
                     assert!(
                         gl.get_shader_compile_status(shader),

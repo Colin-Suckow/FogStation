@@ -37,7 +37,6 @@ struct VaporstationApp {
     latest_pc: u32,
     irq_mask: u32,
     vram_texture: Option<TextureHandle>,
-    display_texture: Option<TextureHandle>,
     show_vram_window: bool,
     gdb_connected: bool,
     display_origin: (usize, usize),
@@ -83,13 +82,12 @@ impl VaporstationApp {
             highlighted_gpu_calls: vec![],
             last_frame_data: vec![],
             memory_logging: false,
-            display_texture: None,
             gilrs_instance: Gilrs::new().unwrap(),
             active_controller_id: None,
             show_gamepad_window: false,
             has_initialized: false,
             disp_shader_manager: Arc::new(Mutex::new(DisplayShaderManager::new(gl))),
-            last_display_data: Vec::new(),
+            last_display_data: vec![0; 640 * 480 * 4],
             //shader_layer: ShaderLayer::new(cc.gl.as_ref().unwrap().clone()),
         }
     }
@@ -142,12 +140,12 @@ impl VaporstationApp {
 
         // Clone locals so we can move them into the paint callback:
         //let angle = self.angle;
-        let rotating_triangle = self.disp_shader_manager.clone();
+        let disp_manager = self.disp_shader_manager.clone();
 
         let callback = egui::PaintCallback {
             rect,
             callback: std::sync::Arc::new(egui_glow::CallbackFn::new(move |_info, painter| {
-                rotating_triangle.lock().unwrap().paint(painter.gl(), &frame_data, psx_disp_width, psx_disp_height);
+                disp_manager.lock().unwrap().paint(painter.gl(), &frame_data, psx_disp_width, psx_disp_height);
             })),
         };
         ui.painter().add(callback);
@@ -164,17 +162,7 @@ impl eframe::App for VaporstationApp {
                 .tx
                 .send(EmuMessage::RecieveGuiContext(ctx.clone()))
                 .unwrap();
-
-            // let shader_code = "#version 330 core
-            // out vec4 FragColor;
-            
-            // void main()
-            // {
-            //     FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
-            // } ".into();
-
-            //self.shader_layer.create_new_shader(shader_code);
-            
+    
             self.has_initialized = true;
         }
 
@@ -228,17 +216,6 @@ impl eframe::App for VaporstationApp {
                             )
                         };
 
-                        self.display_texture = Some(ctx.load_texture(
-                            "FRAME",
-                            egui::ColorImage::from_rgba_unmultiplied(
-                                [
-                                    self.latest_resolution.width as usize,
-                                    self.latest_resolution.height as usize,
-                                ],
-                                &display_data,
-                            ),
-                            egui::TextureOptions::LINEAR,
-                        ));
 
                         self.last_frame_data = pixel_data;
                         self.last_display_data = display_data;
@@ -485,34 +462,23 @@ impl eframe::App for VaporstationApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(_) = &self.display_texture {
-                let frame_data_copy = self.last_display_data.clone();
-                ui.with_layout(
-                    egui::Layout::centered_and_justified(Direction::TopDown),
-                    |ui| {
-                        let pane_size = ui.max_rect();
-                        let (scaled_height, scaled_width) =
-                            if pane_size.width() > pane_size.height() * 1.3333 {
-                                (pane_size.height(), pane_size.height() * 1.3333)
-                            } else {
-                                (pane_size.width() * 0.75, pane_size.width())
-                            };
-
-                        // let image =
-                        //     egui::Image::new(display_texture.id(), [scaled_width, scaled_height]).uv(
-                        //         Rect {
-                        //             min: Pos2::new(0.00625, 0.00833),
-                        //             max: Pos2::new(1.0 - 0.00625, 1.0 - 0.00833),
-                        //         },
-                        //     );
-                        // ui.add(image);
-                        
-                        egui::Frame::canvas(ui.style()).show(ui, |ui| {
-                            self.custom_painting(ui, frame_data_copy, scaled_width, scaled_height, self.latest_resolution.width as i32, self.latest_resolution.height as i32);
-                        });
-                    },
-                );
-            }
+            let frame_data_copy = self.last_display_data.clone();
+            ui.with_layout(
+                egui::Layout::centered_and_justified(Direction::TopDown),
+                |ui| {
+                    let pane_size = ui.max_rect();
+                    let (scaled_height, scaled_width) =
+                        if pane_size.width() > pane_size.height() * 1.3333 {
+                            (pane_size.height(), pane_size.height() * 1.3333)
+                        } else {
+                            (pane_size.width() * 0.75, pane_size.width())
+                        };
+                    
+                    egui::Frame::canvas(ui.style()).show(ui, |ui| {
+                        self.custom_painting(ui, frame_data_copy, scaled_width, scaled_height, self.latest_resolution.width as i32, self.latest_resolution.height as i32);
+                    });
+                },
+            );
         });
     }
 }
@@ -583,6 +549,10 @@ fn transform_psx24_to_32(
         })
         .map(|(_i, v)| *v)
         .collect::<Vec<u8>>()
+        .chunks_exact(3)
+        .map(|colors| [colors[0], colors[1], colors[2], 255])
+        .flatten()
+        .collect()
 }
 
 fn apply_highlights(app: &VaporstationApp, pixel_data: &mut Vec<u8>) {

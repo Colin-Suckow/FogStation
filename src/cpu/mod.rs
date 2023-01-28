@@ -17,6 +17,7 @@ mod cop0;
 mod gte;
 mod instruction;
 mod interpreter;
+mod jit;
 
 #[derive(Debug, Clone, Copy)]
 pub enum InterruptSource {

@@ -3,7 +3,7 @@ A toy playstation 1 emulator written in rust. Capable of emulating most of the p
 
 
 <img src="images/re2_demo.png" height=400px alt="Resident evil 2 screenshot">
-<img src="images/cars.png" height=400px alt="ridge racer screenshot">
+<img src="images/mgs.png" height=400px alt="Metal Gear Solid Screenshot">
 <img src="https://i.imgur.com/3rMhbhJ.png" height=400px alt="gdb debugging">
 
 
@@ -12,8 +12,8 @@ A toy playstation 1 emulator written in rust. Capable of emulating most of the p
 |    OS   |      Supported     |                   Notes                                |
 |---------|--------------------|--------------------------------------------------------|
 |  Linux  | :heavy_check_mark: |          Main development target                       |
-| Windows |         :x:        | Does not build due to libcue requirement in the client |
-|  macOS  |     :question:     |                 Untested                               |
+| Windows | :heavy_check_mark: |          Tested on Windows 10 Desktop                  |
+|  macOS  | :heavy_check_mark: |          Tested on M1 Macbook Pro                      |
 
 ## Software Support
 

@@ -1833,7 +1833,7 @@ impl Gpu {
                 self.palette_y as u32,
             );
 
-            let m_transparent = fill.get_bit(15);
+            let m_transparent = fill.get_bit(15) && transparent;
 
             if fill == 0 {
                 continue;
@@ -2050,7 +2050,7 @@ impl Gpu {
                     let tex_fill =
                         self.get_texel(tex_x as i32, tex_y as i32, page_x, page_y, clut_x, clut_y);
 
-                    let m_transparent = tex_fill.get_bit(15);
+                    let m_transparent = tex_fill.get_bit(15) && transparent;
 
                     if tex_fill == 0 {
                         continue;

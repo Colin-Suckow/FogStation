@@ -376,6 +376,8 @@ impl Gpu {
             stat.set_bit(21, true);
         }
 
+        stat.set_bit(11, self.force_b15);        
+
         stat
     }
 
@@ -441,7 +443,11 @@ impl Gpu {
                             };
                             self.draw_log.push(call);
                         }
-
+                        
+                        // Quick fill ignores the mask bit, so disable it for now
+                        let prev_mask_bit = self.force_b15;
+                        self.force_b15 = false;
+                        
                         self.draw_solid_box(
                             p1.x as u32,
                             p1.y as u32,
@@ -451,6 +457,9 @@ impl Gpu {
                             false,
                             true,
                         );
+
+                        // Restore the mask bit back to its previous value
+                        self.force_b15 = prev_mask_bit;
                     }
                     _ => {
                         //NOP
@@ -1077,7 +1086,7 @@ impl Gpu {
 
                         let address = point_to_address(point.x as u32, point.y as u32) as usize;
                         let fill = b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF);
-                        self.composite_and_place_pixel(address, fill, false, true);
+                        self.composite_and_place_pixel(address, fill, false);
                     }
 
                     0b0 => {
@@ -1427,11 +1436,16 @@ impl Gpu {
                 }
 
                 for index in 0..(width * height) {
-                    let val = if index % 2 == 0 {
+                    let mut val = if index % 2 == 0 {
                         (self.gp0_buffer[((index / 2) + 3) as usize] & 0xFFFF) as u16
                     } else {
                         (self.gp0_buffer[((index / 2) + 3) as usize] >> 16) as u16
                     };
+
+                    if self.force_b15 {
+                        val.set_bit(15, true);
+                    }
+
                     let x = base_x + (index % width);
                     let y = base_y + (index / width);
                     self.vram[min(point_to_address(x, y) as usize, 524287)] = val;
@@ -1501,6 +1515,7 @@ impl Gpu {
 
                     0xE6 => {
                         self.force_b15 = command.get_bit(0);
+
                     }
 
                     _ => error!(
@@ -1732,10 +1747,13 @@ impl Gpu {
         width: u32,
     ) {
         for x_offset in 0..=width {
-            let val = self.vram[min(
+            let mut val = self.vram[min(
                 point_to_address(x_source + x_offset, y_source) as usize,
                 524287,
             )];
+            if self.force_b15 {
+                val.set_bit(15, true);
+            }
             let addr = point_to_address(x_dest + x_offset, y_dest) as usize;
             self.vram[min(addr, 524287)] = val;
         }
@@ -1775,7 +1793,7 @@ impl Gpu {
                 continue;
             }
             let address = point_to_address(x, y) as usize;
-            self.composite_and_place_pixel(address, fill, transparent, true);
+            self.composite_and_place_pixel(address, fill, transparent);
         }
     }
 
@@ -1815,14 +1833,13 @@ impl Gpu {
                 self.palette_y as u32,
             );
 
-            // If this color is pulled from the CLUT table, use bit 15 for semi transparency
-            let m_transparent = if self.texmode != TextureColorMode::FifteenBit {
-                transparent && fill.get_bit(15)
-            } else {
-                transparent
-            };
+            let m_transparent = fill.get_bit(15);
 
-            self.composite_and_place_pixel(address, fill, m_transparent, false);
+            if fill == 0 {
+                continue;
+            }
+
+            self.composite_and_place_pixel(address, fill, m_transparent);
         }
     }
 
@@ -1830,23 +1847,19 @@ impl Gpu {
         &mut self,
         addr: usize,
         fill: u16,
-        transparent: bool,
-        force_black: bool,
+        transparent: bool
     ) {
+        
         let mut color = if transparent {
             alpha_composite(self.vram[addr], fill, &self.blend_mode)
         } else {
             fill
         };
-
-        if fill == 0 && !force_black {
-            return;
-        }
-
-        if self.force_b15 {
+        
+        if self.force_b15 || fill.get_bit(15) {
             color.set_bit(15, true);
         }
-
+        
         self.vram[min(addr, 524287)] = color;
     }
 
@@ -1865,7 +1878,7 @@ impl Gpu {
                 x1,
                 x2,
                 y,
-                fill | if transparent { 0x8000 } else { 0 },
+                fill,
                 transparent,
                 clip,
             );
@@ -1901,7 +1914,6 @@ impl Gpu {
         let min_y = points.iter().min_by_key(|v| v.y).unwrap().y;
         let max_y = points.iter().max_by_key(|v| v.y).unwrap().y;
 
-        let final_fill = fill | if transparent { 0x8000 } else { 0 };
 
         for x in min_x..=max_x {
             for y in min_y..=max_y {
@@ -1911,7 +1923,7 @@ impl Gpu {
                     && edge_function(&points[2], &points[0], &point) <= 0;
                 let addr = ((y as u32) * 1024) + x as u32;
                 if !self.out_of_draw_area(&Point::from_components(x, y, 0)) && inside {
-                    self.composite_and_place_pixel(addr as usize, final_fill, transparent, true);
+                    self.composite_and_place_pixel(addr as usize, fill, transparent);
                 }
             }
         }
@@ -1971,14 +1983,7 @@ impl Gpu {
                         | ((green as u8 as u16) << 5)
                         | (red as u8 as u16);
 
-                    if points[0].color.get_bit(15)
-                        || points[1].color.get_bit(15)
-                        || points[2].color.get_bit(15)
-                    {
-                        fill.set_bit(15, true);
-                    }
-
-                    self.composite_and_place_pixel(addr as usize, fill, transparent, true);
+                    self.composite_and_place_pixel(addr as usize, fill, transparent);
                 }
             }
         }
@@ -2045,14 +2050,14 @@ impl Gpu {
                     let tex_fill =
                         self.get_texel(tex_x as i32, tex_y as i32, page_x, page_y, clut_x, clut_y);
 
-                    // If this color is pulled from the CLUT table, use bit 15 for semi transparency
-                    let m_transparent = if self.texmode != TextureColorMode::FifteenBit {
-                        transparent && tex_fill.get_bit(15)
-                    } else {
-                        transparent
-                    };
+                    let m_transparent = tex_fill.get_bit(15);
 
-                    let final_fill = if draw_type == TextureDraw::Shaded {
+                    if tex_fill == 0 {
+                        continue;
+                    }
+
+                    let mut final_fill = if draw_type == TextureDraw::Shaded {
+
                         let c1 = b15_to_rgb(points[0].color);
                         let c2 = b15_to_rgb(points[1].color);
                         let c3 = b15_to_rgb(points[2].color);
@@ -2067,17 +2072,19 @@ impl Gpu {
                         let shade_fill = ((shaded_blue & 0x1f) << 10)
                             | (shaded_green << 5)
                             | (shaded_red as u8 as u16);
-
                         blend_b15(tex_fill, shade_fill)
                     } else {
                         tex_fill
                     };
 
+                    if tex_fill.get_bit(15) {
+                        final_fill.set_bit(15, true);
+                    }
+
                     self.composite_and_place_pixel(
                         addr as usize,
                         final_fill,
-                        m_transparent,
-                        false,
+                        m_transparent
                     );
                 }
             }
@@ -2207,7 +2214,7 @@ fn blend_b15(bg_color: u16, fg_color: u16) -> u16 {
         (blend_r * 31.0) as u8,
         (blend_g * 31.0) as u8,
         (blend_b * 31.0) as u8,
-    ) | (bg_color & 0x8000)
+    )
 }
 
 #[derive(Debug)]

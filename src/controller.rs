@@ -243,7 +243,7 @@ impl Controllers {
                 } else if val == MEMORY_CARD_SELECT_BYTE {
                     Slot::MemoryCard
                 } else {
-                    panic!("Unknown SIO slot {:#X}!", val);
+                    return;
                 };
 
                 if slot == Slot::MemoryCard {

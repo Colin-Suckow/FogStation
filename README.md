@@ -31,7 +31,7 @@ See [compatibility.md](docs/compatibility.md)
 
 ## Building
 
-Install libcue from your package manager of choice, then run `cargo build --release` from /desktop to build the emulator core and desktop client.
+Run `cargo build --release` from ./desktop to build the emulator core and desktop client.
 
 ## Operating Instructions
 

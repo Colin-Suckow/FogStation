@@ -12,24 +12,25 @@ Game runs with no gameplay issues and minor to no graphical bugs
 * Crash Bandicoot*
 * Guilty Gear
 * Chrono Trigger
+* Gran Turismo 2
+* Metal Gear Solid
+* Tony Hawk's Pro Skater
+* Ridge Racer 4
+* Final Fantasy 7
 
 \* Crash Bandicoot requires timer2 speed hack to run at full speed
 
 ## Graphical Issues
 These games run, but with major graphical issues
 
-* Final Fantasy 7
 * Spyro
-* Tony Hawk's Pro Skater
 * Mega Man X4
-* Ridge Racer 4
-* Metal Gear Solid
+* Castlevania: Symphony of the Night
 
 ## Unplayable
 These games are unplayable for one reason or another, such as freezing or crashing
 
 * Ace Combat
-* Castlevania: Symphony of the Night
 * Gran Turismo
 * Persona
 * Resident Evil 1

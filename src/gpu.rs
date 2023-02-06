@@ -1824,7 +1824,7 @@ impl Gpu {
 
             let address = point_to_address(x as u32, y as u32) as usize;
 
-            let fill = self.get_texel(
+            let mut fill = self.get_texel(
                 lerp_coords(x1_tex, x2_tex, start, end, x),
                 lerp_coords(y1_tex, y2_tex, start, end, x),
                 self.texpage_x_base as u32,
@@ -1832,6 +1832,10 @@ impl Gpu {
                 self.palette_x as u32,
                 self.palette_y as u32,
             );
+
+            if self.force_b15 {
+                fill.set_bit(15, true);
+            }
 
             let m_transparent = fill.get_bit(15) && transparent;
 
@@ -2047,8 +2051,12 @@ impl Gpu {
 
                     //println!("tex_x {} tex_y {}", tex_x, tex_y);
 
-                    let tex_fill =
+                    let mut tex_fill =
                         self.get_texel(tex_x as i32, tex_y as i32, page_x, page_y, clut_x, clut_y);
+
+                    if self.force_b15 {
+                        tex_fill.set_bit(15, true);
+                    }
 
                     let m_transparent = tex_fill.get_bit(15) && transparent;
 

@@ -11,6 +11,7 @@ pub(super) fn get_bios_date(state: &mut CDDrive) -> Packet {
         execution_cycles: AVG_FIRST_RESPONSE_TIME,
         extra_response: None,
         command: 0x19,
+        need_irq: false,
     }
 }
 
@@ -24,6 +25,7 @@ fn stat(state: &mut CDDrive, command: u8) -> Packet {
         execution_cycles: AVG_FIRST_RESPONSE_TIME,
         extra_response: None,
         command,
+        need_irq: false,
     }
 }
 
@@ -42,6 +44,7 @@ pub(super) fn get_id(state: &mut CDDrive) -> Packet {
             execution_cycles: 0x4a00,
             extra_response: None,
             command: 0x1a,
+            need_irq: false,
         };
         first_response.extra_response = Some(Box::new(second_response));
         first_response
@@ -54,6 +57,7 @@ pub(super) fn get_id(state: &mut CDDrive) -> Packet {
             execution_cycles: 0x4a00,
             extra_response: None,
             command: 0x1a,
+            need_irq: false,
         };
         first_response.extra_response = Some(Box::new(second_response));
         first_response
@@ -66,8 +70,10 @@ pub(super) fn init(state: &mut CDDrive) -> Packet {
     state.drive_mode = 0;
     let mut second_response = stat(state, 0x0a);
     second_response.cause = IntCause::INT2;
+    second_response.execution_cycles = 2500000;
     first_response.execution_cycles = 0x13cce;
     first_response.extra_response = Some(Box::new(second_response));
+
     first_response
 }
 
@@ -131,6 +137,7 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
         execution_cycles: cycles,
         extra_response: None,
         command: 0x6,
+        need_irq: false,
     };
     initial_response.execution_cycles = 42430;
     initial_response.extra_response = Some(Box::new(response_packet));
@@ -163,6 +170,7 @@ pub(super) fn pause_read(state: &mut CDDrive) -> Packet {
         execution_cycles: cycles * 6,
         extra_response: None,
         command: 0x9,
+        need_irq: false,
     };
     initial_response.execution_cycles = 28648;
 

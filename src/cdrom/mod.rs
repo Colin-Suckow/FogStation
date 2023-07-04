@@ -77,6 +77,7 @@ pub(super) struct Packet {
     execution_cycles: u32,
     extra_response: Option<Box<Packet>>,
     command: u8,
+    need_irq: bool,
 }
 
 #[derive(Debug)]
@@ -101,6 +102,7 @@ pub struct CDDrive {
     response_queue: VecDeque<u8>,
     data_queue: Vec<Sector>,
     response_data_queue: Vec<u8>,
+    ready_packets: Vec<Packet>, // List of packets that have been run and are ready to be delivered upon ack
 
     want_data: bool,
 
@@ -135,6 +137,7 @@ impl CDDrive {
             data_queue: Vec::new(),
             response_queue: VecDeque::new(),
             response_data_queue: Vec::new(),
+            ready_packets: Vec::new(),
 
             status_index: 0,
 
@@ -215,12 +218,7 @@ impl CDDrive {
     }
 
     pub fn read_byte(&mut self, addr: u32) -> u8 {
-        // println!(
-        //     "CDROM reading {:#X}.Index({})",
-        //     addr,
-        //     self.status_index & 0x3
-        // );
-        match addr {
+        let v = match addr {
             0x1F801800 => self.get_status_register(),
             0x1F801801 => match self.status_index {
                 0 => self.pop_response(), // mirror
@@ -239,9 +237,9 @@ impl CDDrive {
             0x1F801803 => {
                 match self.status_index {
                     0 => self.reg_interrupt_enable,
-                    1 => self.reg_interrupt_flag,
+                    1 => self.reg_interrupt_flag | 0xE0,
                     2 => panic!("CD: 0x1F801803 read byte unknown index 2"),
-                    3 => self.reg_interrupt_flag, //Register mirror
+                    3 => self.reg_interrupt_flag | 0xE0, //Register mirror
                     _ => unreachable!(),
                 }
             }
@@ -249,7 +247,14 @@ impl CDDrive {
                 "CD: Tried to read unknown byte. Address: {:#X} Index: {}",
                 addr, self.status_index
             ),
-        }
+        };
+        // println!(
+        //     "CDROM reading {:#X}.Index({}) = {:#X}",
+        //     addr,
+        //     self.status_index & 0x3,
+        //     v
+        // );
+        v
     }
 
     pub fn load_disc(&mut self, disc: Disc) {
@@ -309,10 +314,6 @@ impl CDDrive {
 
     fn busy(&self) -> bool {
         self.reg_interrupt_flag != 0
-            || (self
-                .running_commands
-                .iter()
-                .any(|p| p.cause != IntCause::INT1))
     }
 
     fn get_status_register(&self) -> u8 {
@@ -329,7 +330,7 @@ impl CDDrive {
         status |= (!self.response_data_queue.is_empty() as u8) << 6;
         // 7 BUSYSTS
         status |= (self.busy() as u8) << 7;
-
+        // println!("Status: {:#X}", status);
         status
     }
 
@@ -407,6 +408,11 @@ impl CDDrive {
             //println!("Clearing parameters");
             self.parameter_queue = VecDeque::new();
         }
+        
+        // Now that the command has been acked we insert the data
+        if let Some(packet) = self.get_next_ready_packet() {
+            self.present_packet(packet, scheduler);
+        }
     }
 
     fn write_interrupt_enable_register(&mut self, val: u8) {
@@ -426,39 +432,124 @@ impl CDDrive {
         return None;
     }
 
-}
+    fn queue_ready_packet(&mut self, packet: Packet) {
+        self.ready_packets.push(packet);
+    }
 
-fn take_next_ready_packet(running_commands: &mut Vec<Packet>) -> Option<Packet> {
-    if running_commands
-        .iter()
-        .any(|c| (c.cause == IntCause::INT3 || c.cause == IntCause::INT2))
-    {
-        //println!("CDROM taking int3");
-        for i in 0..running_commands.len() {
-            if running_commands[i].execution_cycles == 0
-                && (running_commands[i].cause == IntCause::INT3
-                    || running_commands[i].cause == IntCause::INT2)
-            {
-                let packet = running_commands[i].clone();
-                running_commands.remove(i);
-                return Some(packet);
+    fn get_next_ready_packet(&mut self) -> Option<Packet> {
+        self.ready_packets.pop()
+    }
+
+    fn present_packet(&mut self, packet: Packet, scheduler: &mut Scheduler) {
+    
+        self.response_queue = VecDeque::with_capacity(packet.response.len()); //Clear queue
+        self
+            .response_queue
+            .extend(packet.response.iter());
+
+        // This packet still needs to raise it's IRQ. Do it now
+        if packet.need_irq {
+            self.reg_interrupt_flag = packet.cause.bitflag();
+            
+            if packet.cause.bitflag() == 0x1 && self.reg_interrupt_flag & 0x1 > 0 {
+                self.sector_awaiting_delivery = true;
+            } else {
+                if self.reg_interrupt_enable & packet.cause.bitflag() == packet.cause.bitflag()
+                {
+                    self.queue_irq(scheduler);
+                }
             }
         }
+    
+    
+        //If the response has an extra response, push that to the front of the line
+        if let Some(mut ext_response) = packet.extra_response.clone() {
+            //println!("Extra response, filling. {:?}", ext_response);
+            let next_id = self.next_packet_id();
+            ext_response.internal_id = next_id;
+            scheduler.schedule_event(CDPacket(next_id), CpuCycles(ext_response.execution_cycles));
+            self.running_commands.push(*ext_response);
+        };
+    
+        match packet.command {
+            0x15 => {
+                //Make sure this is the second response
+                if packet.extra_response.is_none() {
+                    //End seek and return drive to idle state
+                    self.read_offset = 0;
+                    self.drive_state = DriveState::Idle;
+                }
+            }
+    
+            0x9 => {
+                //pause
+                if packet.extra_response.is_none() {
+                    self.read_enabled = false;
+                }
+            }
+    
+            0x6 => {
+                //ReadN
+                if packet.cause == IntCause::INT1 {
+                    let new_sector = self
+                        .disc
+                        .as_ref()
+                        .expect("Tried to read nonexistent disc!")
+                        .read_sector(
+                            self.next_seek_target
+                                .plus_sector_offset(self.read_offset),
+                        );
+    
+                    //println!("Read {} from disc. Read offset {}", new_sector.index(), self.read_offset);
+    
+                    self.read_offset += 1;
+    
+                    if self.data_queue.len() >= 2 {
+                        //println!("DROPPED SECTOR");
+                    }
+    
+                    // Get rid of all the middle sectors, leave only the oldest
+    
+                    if self.data_queue.len() > 1 {
+                        self
+                            .data_queue
+                            .drain(1..self.data_queue.len());
+    
+                    }
+    
+                    //self.data_queue.clear();
+                    self.data_queue.push(new_sector);
+    
+                    if self.read_enabled {
+                        trace!("Inserting next ReadN");
+                        let cycles = match self.drive_speed() {
+                            DriveSpeed::Single => 0x686da,
+                            DriveSpeed::Double => 0x322df,
+                        };
+                        let response_packet = Packet {
+                            internal_id: self.next_packet_id(),
+                            cause: IntCause::INT1,
+                            response: vec![self.get_stat()],
+                            execution_cycles: cycles,
+                            extra_response: None,
+                            command: 0x6,
+                            need_irq: false
+                        };
+                        scheduler.schedule_event(CDPacket(response_packet.internal_id), CpuCycles(response_packet.execution_cycles));
+                        self.running_commands.push(response_packet);
+                    }
+                }
+            }
+            _ => (), //No actions for this command
+        };
+        //println!("All done!");
     }
-    //println!("taking an int1 since there is not int3");
-    for i in 0..running_commands.len() {
-        if running_commands[i].execution_cycles == 0 {
-            let packet = running_commands[i].clone();
-            running_commands.remove(i);
-            return Some(packet);
-        }
-    }
-    None
+
 }
 
 pub fn cdpacket_event(cpu: &mut R3000, main_bus: &mut MainBus, scheduler: &mut Scheduler, packet_id: u32) {
 
-    let packet = match main_bus.cd_drive.take_packet_by_id(packet_id) {
+    let mut packet = match main_bus.cd_drive.take_packet_by_id(packet_id) {
         Some(p) => p,
         None => {
             //No response ready right now
@@ -467,124 +558,23 @@ pub fn cdpacket_event(cpu: &mut R3000, main_bus: &mut MainBus, scheduler: &mut S
         }
     };
 
-    trace!(
-        "flag before {:#X}",
-        main_bus.cd_drive.reg_interrupt_flag
-    );
-
-    main_bus.cd_drive.response_queue = VecDeque::with_capacity(packet.response.len()); //Clear queue
-    main_bus
-        .cd_drive
-        .response_queue
-        .extend(packet.response.iter());
-
-    if packet.cause.bitflag() == 0x1 && main_bus.cd_drive.reg_interrupt_flag & 0x1 > 0 {
-        main_bus.cd_drive.sector_awaiting_delivery = true;
+    if main_bus.cd_drive.reg_interrupt_flag != 0 {
+        // There is a pending IRQ. Save this info so we know to raise the IRQ later
+        packet.need_irq = true;
     } else {
+        // There is no pending IRQ. Raise the IRQ now.
         main_bus.cd_drive.reg_interrupt_flag = packet.cause.bitflag();
-        //println!("CD: processed command {:#X}", packet.command);
-
-        trace!("flag after {:#X}", main_bus.cd_drive.reg_interrupt_flag);
-
-        //println!("CDROM command {:#X} completed", packet.command);
-        //println!("{:?}", main_bus.cd_drive.running_commands);
-
-        //Check if interrupt enabled. If so, fire interrupt
-        //println!("Interrupts {:#X} cause {:#X} command {:#X}", main_bus.cd_drive.reg_interrupt_enable, packet.cause.bitflag(), packet.command);
-        if main_bus.cd_drive.reg_interrupt_enable & packet.cause.bitflag() == packet.cause.bitflag()
-        {
-            //println!("Firing interrupt");
-            // println!(
-            //     "INT_E {:#X} CAUSE {:?}",
-            //     main_bus.cd_drive.reg_interrupt_enable,
-            //     packet.cause
-            // );
-            main_bus.cd_drive.queue_irq(scheduler);
+            
+        if packet.cause.bitflag() == 0x1 && main_bus.cd_drive.reg_interrupt_flag & 0x1 > 0 {
+            main_bus.cd_drive.sector_awaiting_delivery = true;
+        } else {
+            if main_bus.cd_drive.reg_interrupt_enable & packet.cause.bitflag() == packet.cause.bitflag()
+            {
+                main_bus.cd_drive.queue_irq(scheduler);
+            }
         }
     }
 
-    //If the response has an extra response, push that to the front of the line
-    if let Some(mut ext_response) = packet.extra_response.clone() {
-        //println!("Extra response, filling. {:?}", ext_response);
-        let next_id = main_bus.cd_drive.next_packet_id();
-        ext_response.internal_id = next_id;
-        scheduler.schedule_event(CDPacket(next_id), CpuCycles(ext_response.execution_cycles));
-        main_bus.cd_drive.running_commands.push(*ext_response);
-    };
-
-    match packet.command {
-        0x15 => {
-            //Make sure this is the second response
-            if packet.extra_response.is_none() {
-                //End seek and return drive to idle state
-                main_bus.cd_drive.read_offset = 0;
-                main_bus.cd_drive.drive_state = DriveState::Idle;
-            }
-        }
-
-        0x9 => {
-            //pause
-            if packet.extra_response.is_none() {
-                main_bus.cd_drive.read_enabled = false;
-            }
-        }
-
-        0x6 => {
-            //ReadN
-            if packet.cause == IntCause::INT1 {
-                let new_sector = main_bus
-                    .cd_drive
-                    .disc
-                    .as_ref()
-                    .expect("Tried to read nonexistent disc!")
-                    .read_sector(
-                        main_bus
-                            .cd_drive
-                            .next_seek_target
-                            .plus_sector_offset(main_bus.cd_drive.read_offset),
-                    );
-
-                //println!("Read {} from disc. Read offset {}", new_sector.index(), main_bus.cd_drive.read_offset);
-
-                main_bus.cd_drive.read_offset += 1;
-
-                if main_bus.cd_drive.data_queue.len() >= 2 {
-                    //println!("DROPPED SECTOR");
-                }
-
-                // Get rid of all the middle sectors, leave only the oldest
-
-                if main_bus.cd_drive.data_queue.len() > 1 {
-                    main_bus
-                        .cd_drive
-                        .data_queue
-                        .drain(1..main_bus.cd_drive.data_queue.len());
-
-                }
-
-                //main_bus.cd_drive.data_queue.clear();
-                main_bus.cd_drive.data_queue.push(new_sector);
-
-                if main_bus.cd_drive.read_enabled {
-                    trace!("Inserting next ReadN");
-                    let cycles = match main_bus.cd_drive.drive_speed() {
-                        DriveSpeed::Single => 0x686da,
-                        DriveSpeed::Double => 0x322df,
-                    };
-                    let response_packet = Packet {
-                        internal_id: main_bus.cd_drive.next_packet_id(),
-                        cause: IntCause::INT1,
-                        response: vec![main_bus.cd_drive.get_stat()],
-                        execution_cycles: cycles,
-                        extra_response: None,
-                        command: 0x6,
-                    };
-                    scheduler.schedule_event(CDPacket(response_packet.internal_id), CpuCycles(response_packet.execution_cycles));
-                    main_bus.cd_drive.running_commands.push(response_packet);
-                }
-            }
-        }
-        _ => (), //No actions for this command
-    };
-    //println!("All done!");
+    // Insert this packet into the queue
+    main_bus.cd_drive.queue_ready_packet(packet);
 }

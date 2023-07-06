@@ -70,7 +70,7 @@ pub(super) fn init(state: &mut CDDrive) -> Packet {
     state.drive_mode = 0;
     let mut second_response = stat(state, 0x0a);
     second_response.cause = IntCause::INT2;
-    second_response.execution_cycles = 2500000;
+    //second_response.execution_cycles = 2500000;
     first_response.execution_cycles = 0x13cce;
     first_response.extra_response = Some(Box::new(second_response));
 
@@ -121,6 +121,11 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
     state.drive_state = DriveState::Read;
     state.read_enabled = true;
     state.data_queue.clear();
+
+    // let cycles = match state.drive_speed() {
+    //     DriveSpeed::Single => 0x686da,
+    //     DriveSpeed::Double => 0x322df,
+    // } * 5;
 
     let cycles = 0x35CA8;
 

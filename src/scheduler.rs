@@ -44,7 +44,7 @@ struct PendingEvent {
 
 pub struct EventHandle(u32);
 
-const EVENT_SLOTS: usize = 16;
+const EVENT_SLOTS: usize = 32;
 
 pub struct Scheduler {
     pending_events: [PendingEvent; EVENT_SLOTS],

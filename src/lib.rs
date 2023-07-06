@@ -36,6 +36,7 @@ pub struct PSXEmu {
     sw_breakpoints: Vec<u32>,
     watchpoints: Vec<u32>,
     frame_count: u32,
+    exit_requested: bool,
 }
 
 impl PSXEmu {
@@ -56,6 +57,7 @@ impl PSXEmu {
             sw_breakpoints: Vec::new(),
             watchpoints: Vec::new(),
             frame_count: 0,
+            exit_requested: false,
         };
         emu.reset();
 
@@ -73,6 +75,11 @@ impl PSXEmu {
     }
 
     pub fn step_cycle(&mut self) {
+        if self.main_bus.exit_requested {
+            self.exit_requested = true;
+            return;
+        }
+
         self.scheduler.run_cycle(&mut self.r3000, &mut self.main_bus);
 
         // DMA doesn't use any delays, so it is kind of outside of the scheduler right now
@@ -223,6 +230,14 @@ impl PSXEmu {
 
     pub fn get_irq_mask(&self) -> u32 {
         self.r3000.i_mask
+    }
+
+    pub fn exit_requested(&self) -> bool {
+        if self.exit_requested {
+            return true;
+        } else {
+            return false;
+        }
     }
 }
 

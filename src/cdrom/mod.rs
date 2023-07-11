@@ -294,11 +294,14 @@ impl CDDrive {
                 0x16 => seek_data(self), //This should actually be seek_p, but I'm never using audio discs so we can reuse the data seek function
                 0x1A => get_id(self),
                 0x1B => read_with_retry(self), // This is actually ReadS (read without retry), but it behaves the same as ReadN, so I'm just using that
+                0x1E => get_toc(self),
                 0xC => demute(self),
                 0x19 => {
                     //sub_function commands
                     match parameters[0] {
                         0x20 => commands::get_bios_date(self),
+                        0x4 => start_sce(self),
+                        0x5 => end_sce(self),
                         _ => panic!("CD: Unknown sub_function command {:#X}", parameters[0]),
                     }
                 }

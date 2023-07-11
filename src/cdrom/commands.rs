@@ -30,7 +30,7 @@ fn stat(state: &mut CDDrive, command: u8) -> Packet {
 }
 
 pub(super) fn get_stat(state: &mut CDDrive) -> Packet {
-    stat(state, 0x1)
+    stat(state, 0x19)
 }
 
 pub(super) fn get_id(state: &mut CDDrive) -> Packet {
@@ -244,4 +244,38 @@ pub(super) fn stop(state: &mut CDDrive) -> Packet {
 // Filters out some sectors for playing music. We don't care about that here
 pub(super) fn set_filter(state: &mut CDDrive) -> Packet {
     stat(state, 0xD)
+}
+
+// Command is to reread the table of contents but we don't do this anyways so just return the expected responses
+pub(super) fn get_toc(state: &mut CDDrive) -> Packet {
+    let mut resp1 = stat(state, 0x1e);
+    let mut resp2 = stat(state, 0x1e);
+
+    resp2.cause = IntCause::INT2;
+    
+    resp1.extra_response = Some(Box::new(resp2));
+
+    resp1
+}
+
+// Subcommand 0x4: Start SCEx reading and reset counters
+// Tells the cd drive to start looking for "SCEx" copy protection strings
+// We don't need to do anything
+pub(super) fn start_sce(state: &mut CDDrive) -> Packet {
+    stat(state, 0x19)
+}
+
+// Subcommand 0x5: Stop SCEx reading and get counters
+// Returns the results of the scex check started by start_sce
+// Just return a successful check
+pub(super) fn end_sce(state: &mut CDDrive) -> Packet {
+    Packet {
+        internal_id: state.next_packet_id(),
+        cause: IntCause::INT3,
+        response: vec![0x1, 0x1], // [0x1,0x1] for licensed disks. [0x0,0x0] for unlicensed
+        execution_cycles: AVG_FIRST_RESPONSE_TIME,
+        extra_response: None,
+        command: 0x19,
+        need_irq: false,
+    }
 }

@@ -262,6 +262,7 @@ pub(super) fn get_toc(state: &mut CDDrive) -> Packet {
 // Tells the cd drive to start looking for "SCEx" copy protection strings
 // We don't need to do anything
 pub(super) fn start_sce(state: &mut CDDrive) -> Packet {
+    state.motor_state = MotorState::On;
     stat(state, 0x19)
 }
 

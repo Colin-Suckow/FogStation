@@ -246,7 +246,6 @@ pub struct Gpu {
     cycle_counter: u32,
 
     blend_mode: BlendMode,
-    force_mask: bool,
     check_mask: bool,
 
     tex_mask_x: u32,
@@ -305,7 +304,6 @@ impl Gpu {
             cycle_counter: 0,
 
             blend_mode: BlendMode::BAF,
-            force_mask: false,
             check_mask: false,
 
             tex_mask_x: 0,
@@ -1448,6 +1446,12 @@ impl Gpu {
 
                     let x = base_x + (index % width);
                     let y = base_y + (index / width);
+                    let existing_val = self.vram[min(point_to_address(x, y) as usize, 524287)];
+                    
+                    if self.check_mask && existing_val.get_bit(15) {
+                        continue;
+                    }
+
                     self.vram[min(point_to_address(x, y) as usize, 524287)] = val;
                 }
             }
@@ -1515,7 +1519,7 @@ impl Gpu {
 
                     0xE6 => {
                         self.force_b15 = command.get_bit(0);
-
+                        self.check_mask = command.get_bit(1);
                     }
 
                     _ => error!(

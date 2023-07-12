@@ -273,7 +273,9 @@ pub(super) fn end_sce(state: &mut CDDrive) -> Packet {
     Packet {
         internal_id: state.next_packet_id(),
         cause: IntCause::INT3,
-        response: vec![0x1, 0x1], // [0x1,0x1] for licensed disks. [0x0,0x0] for unlicensed
+        // PSX-SPX says [0x1,0x1] for licensed disks. [0x0,0x0] for unlicensed
+        // However yugioh only boots with [0x0, 0x0]
+        response: vec![0x0, 0x0],
         execution_cycles: AVG_FIRST_RESPONSE_TIME,
         extra_response: None,
         command: 0x19,

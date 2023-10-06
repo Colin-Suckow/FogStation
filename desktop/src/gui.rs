@@ -23,13 +23,13 @@ pub(crate) fn run_gui(state: ClientState) {
     };
 
     eframe::run_native(
-        "Vaporstation",
+        "FogStation",
         native_options,
-        Box::new(|cc| Box::new(VaporstationApp::new(state, cc))),
+        Box::new(|cc| Box::new(FogStationApp::new(state, cc))),
     );
 }
 
-struct VaporstationApp {
+struct FogStationApp {
     emu_handle: ClientState,
     times: AverageList,
     latest_resolution: Resolution,
@@ -57,7 +57,7 @@ struct VaporstationApp {
     //shader_layer: ShaderLayer,
 }
 
-impl VaporstationApp {
+impl FogStationApp {
     fn new(state: ClientState, cc: &eframe::CreationContext<'_>) -> Self {
         let default_resolution = Resolution {
             width: 640,
@@ -159,7 +159,7 @@ impl VaporstationApp {
 
 }
 
-impl eframe::App for VaporstationApp {
+impl eframe::App for FogStationApp {
     fn update(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
 
         if !self.has_initialized {
@@ -571,7 +571,7 @@ fn transform_psx24_to_32(
         .collect()
 }
 
-fn apply_highlights(app: &VaporstationApp, pixel_data: &mut Vec<u8>) {
+fn apply_highlights(app: &FogStationApp, pixel_data: &mut Vec<u8>) {
     for call_index in &app.highlighted_gpu_calls {
         let call = &app.latest_gpu_log[*call_index];
 

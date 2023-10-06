@@ -246,7 +246,6 @@ pub struct Gpu {
     cycle_counter: u32,
 
     blend_mode: BlendMode,
-    force_mask: bool,
     check_mask: bool,
 
     tex_mask_x: u32,
@@ -305,7 +304,6 @@ impl Gpu {
             cycle_counter: 0,
 
             blend_mode: BlendMode::BAF,
-            force_mask: false,
             check_mask: false,
 
             tex_mask_x: 0,
@@ -444,10 +442,6 @@ impl Gpu {
                             self.draw_log.push(call);
                         }
                         
-                        // Quick fill ignores the mask bit, so disable it for now
-                        let prev_mask_bit = self.force_b15;
-                        self.force_b15 = false;
-                        
                         self.draw_solid_box(
                             p1.x as u32,
                             p1.y as u32,
@@ -457,9 +451,6 @@ impl Gpu {
                             false,
                             true,
                         );
-
-                        // Restore the mask bit back to its previous value
-                        self.force_b15 = prev_mask_bit;
                     }
                     _ => {
                         //NOP
@@ -1086,7 +1077,7 @@ impl Gpu {
 
                         let address = point_to_address(point.x as u32, point.y as u32) as usize;
                         let fill = b24color_to_b15color(self.gp0_buffer[0] & 0x1FFFFFF);
-                        self.composite_and_place_pixel(address, fill, false);
+                        self.composite_and_place_pixel(address, fill, false, true);
                     }
 
                     0b0 => {
@@ -1448,6 +1439,12 @@ impl Gpu {
 
                     let x = base_x + (index % width);
                     let y = base_y + (index / width);
+                    let existing_val = self.vram[min(point_to_address(x, y) as usize, 524287)];
+                    
+                    if self.check_mask && existing_val.get_bit(15) {
+                        continue;
+                    }
+
                     self.vram[min(point_to_address(x, y) as usize, 524287)] = val;
                 }
             }
@@ -1515,7 +1512,7 @@ impl Gpu {
 
                     0xE6 => {
                         self.force_b15 = command.get_bit(0);
-
+                        self.check_mask = command.get_bit(1);
                     }
 
                     _ => error!(
@@ -1793,7 +1790,7 @@ impl Gpu {
                 continue;
             }
             let address = point_to_address(x, y) as usize;
-            self.composite_and_place_pixel(address, fill, transparent);
+            self.composite_and_place_pixel(address, fill, transparent, true);
         }
     }
 
@@ -1824,7 +1821,7 @@ impl Gpu {
 
             let address = point_to_address(x as u32, y as u32) as usize;
 
-            let mut fill = self.get_texel(
+            let fill = self.get_texel(
                 lerp_coords(x1_tex, x2_tex, start, end, x),
                 lerp_coords(y1_tex, y2_tex, start, end, x),
                 self.texpage_x_base as u32,
@@ -1833,17 +1830,11 @@ impl Gpu {
                 self.palette_y as u32,
             );
 
-            if self.force_b15 {
-                fill.set_bit(15, true);
-            }
-
-            let m_transparent = fill.get_bit(15) && transparent;
-
             if fill == 0 {
                 continue;
             }
 
-            self.composite_and_place_pixel(address, fill, m_transparent);
+            self.composite_and_place_pixel(address, fill, transparent, false);
         }
     }
 
@@ -1851,19 +1842,24 @@ impl Gpu {
         &mut self,
         addr: usize,
         fill: u16,
-        transparent: bool
+        transparent: bool,
+        solid_source: bool,
     ) {
+        // Return early if bit15 is set and we are checking the mask
+        if self.check_mask && self.vram[min(addr, 524287)].get_bit(15) {
+            return;
+        }
         
-        let mut color = if transparent {
+        let mut color = if transparent && (fill.get_bit(15) || solid_source) {
             alpha_composite(self.vram[addr], fill, &self.blend_mode)
         } else {
             fill
         };
         
-        if self.force_b15 || fill.get_bit(15) {
+        if self.force_b15 {
             color.set_bit(15, true);
         }
-        
+
         self.vram[min(addr, 524287)] = color;
     }
 
@@ -1927,7 +1923,7 @@ impl Gpu {
                     && edge_function(&points[2], &points[0], &point) <= 0;
                 let addr = ((y as u32) * 1024) + x as u32;
                 if !self.out_of_draw_area(&Point::from_components(x, y, 0)) && inside {
-                    self.composite_and_place_pixel(addr as usize, fill, transparent);
+                    self.composite_and_place_pixel(addr as usize, fill, transparent, true);
                 }
             }
         }
@@ -1987,7 +1983,7 @@ impl Gpu {
                         | ((green as u8 as u16) << 5)
                         | (red as u8 as u16);
 
-                    self.composite_and_place_pixel(addr as usize, fill, transparent);
+                    self.composite_and_place_pixel(addr as usize, fill, transparent, true);
                 }
             }
         }
@@ -2051,14 +2047,8 @@ impl Gpu {
 
                     //println!("tex_x {} tex_y {}", tex_x, tex_y);
 
-                    let mut tex_fill =
+                    let tex_fill =
                         self.get_texel(tex_x as i32, tex_y as i32, page_x, page_y, clut_x, clut_y);
-
-                    if self.force_b15 {
-                        tex_fill.set_bit(15, true);
-                    }
-
-                    let m_transparent = tex_fill.get_bit(15) && transparent;
 
                     if tex_fill == 0 {
                         continue;
@@ -2092,7 +2082,8 @@ impl Gpu {
                     self.composite_and_place_pixel(
                         addr as usize,
                         final_fill,
-                        m_transparent
+                        transparent,
+                        false
                     );
                 }
             }
@@ -2237,7 +2228,7 @@ fn alpha_composite(background_color: u16, alpha_color: u16, mode: &BlendMode) ->
     let (b_r, b_g, b_b) = b15_to_rgb(background_color);
     let (a_r, a_g, a_b) = b15_to_rgb(alpha_color);
 
-    match mode {
+    let mixed = match mode {
         BlendMode::B2F2 => rgb_to_b15(
             clamp((a_r / 2) as i16 + (b_r / 2) as i16, 0, 0x1F) as u8,
             clamp((a_g / 2) as i16 + (b_g / 2) as i16, 0, 0x1F) as u8,
@@ -2258,7 +2249,9 @@ fn alpha_composite(background_color: u16, alpha_color: u16, mode: &BlendMode) ->
             clamp(b_g as i16 + (a_g / 4) as i16, 0, 0x1F) as u8,
             clamp(b_b as i16 + (a_b / 4) as i16, 0, 0x1F) as u8,
         ),
-    }
+    };
+
+    mixed | (background_color & 0x8000)
 }
 
 fn sort_points_clockwise(points: &[Point]) -> Vec<Point> {

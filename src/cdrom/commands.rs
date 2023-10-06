@@ -11,6 +11,7 @@ pub(super) fn get_bios_date(state: &mut CDDrive) -> Packet {
         execution_cycles: AVG_FIRST_RESPONSE_TIME,
         extra_response: None,
         command: 0x19,
+        need_irq: false,
     }
 }
 
@@ -24,11 +25,12 @@ fn stat(state: &mut CDDrive, command: u8) -> Packet {
         execution_cycles: AVG_FIRST_RESPONSE_TIME,
         extra_response: None,
         command,
+        need_irq: false,
     }
 }
 
 pub(super) fn get_stat(state: &mut CDDrive) -> Packet {
-    stat(state, 0x1)
+    stat(state, 0x19)
 }
 
 pub(super) fn get_id(state: &mut CDDrive) -> Packet {
@@ -42,6 +44,7 @@ pub(super) fn get_id(state: &mut CDDrive) -> Packet {
             execution_cycles: 0x4a00,
             extra_response: None,
             command: 0x1a,
+            need_irq: false,
         };
         first_response.extra_response = Some(Box::new(second_response));
         first_response
@@ -54,6 +57,7 @@ pub(super) fn get_id(state: &mut CDDrive) -> Packet {
             execution_cycles: 0x4a00,
             extra_response: None,
             command: 0x1a,
+            need_irq: false,
         };
         first_response.extra_response = Some(Box::new(second_response));
         first_response
@@ -66,8 +70,10 @@ pub(super) fn init(state: &mut CDDrive) -> Packet {
     state.drive_mode = 0;
     let mut second_response = stat(state, 0x0a);
     second_response.cause = IntCause::INT2;
+    //second_response.execution_cycles = 2500000;
     first_response.execution_cycles = 0x13cce;
     first_response.extra_response = Some(Box::new(second_response));
+
     first_response
 }
 
@@ -116,6 +122,11 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
     state.read_enabled = true;
     state.data_queue.clear();
 
+    // let cycles = match state.drive_speed() {
+    //     DriveSpeed::Single => 0x686da,
+    //     DriveSpeed::Double => 0x322df,
+    // } * 5;
+
     let cycles = 0x35CA8;
 
     if !state.seek_complete {
@@ -131,6 +142,7 @@ pub(super) fn read_with_retry(state: &mut CDDrive) -> Packet {
         execution_cycles: cycles,
         extra_response: None,
         command: 0x6,
+        need_irq: false,
     };
     initial_response.execution_cycles = 42430;
     initial_response.extra_response = Some(Box::new(response_packet));
@@ -163,6 +175,7 @@ pub(super) fn pause_read(state: &mut CDDrive) -> Packet {
         execution_cycles: cycles * 6,
         extra_response: None,
         command: 0x9,
+        need_irq: false,
     };
     initial_response.execution_cycles = 28648;
 
@@ -231,4 +244,41 @@ pub(super) fn stop(state: &mut CDDrive) -> Packet {
 // Filters out some sectors for playing music. We don't care about that here
 pub(super) fn set_filter(state: &mut CDDrive) -> Packet {
     stat(state, 0xD)
+}
+
+// Command is to reread the table of contents but we don't do this anyways so just return the expected responses
+pub(super) fn get_toc(state: &mut CDDrive) -> Packet {
+    let mut resp1 = stat(state, 0x1e);
+    let mut resp2 = stat(state, 0x1e);
+
+    resp2.cause = IntCause::INT2;
+    
+    resp1.extra_response = Some(Box::new(resp2));
+
+    resp1
+}
+
+// Subcommand 0x4: Start SCEx reading and reset counters
+// Tells the cd drive to start looking for "SCEx" copy protection strings
+// We don't need to do anything
+pub(super) fn start_sce(state: &mut CDDrive) -> Packet {
+    state.motor_state = MotorState::On;
+    stat(state, 0x19)
+}
+
+// Subcommand 0x5: Stop SCEx reading and get counters
+// Returns the results of the scex check started by start_sce
+// Just return a successful check
+pub(super) fn end_sce(state: &mut CDDrive) -> Packet {
+    Packet {
+        internal_id: state.next_packet_id(),
+        cause: IntCause::INT3,
+        // PSX-SPX says [0x1,0x1] for licensed disks. [0x0,0x0] for unlicensed
+        // However yugioh only boots with [0x0, 0x0]
+        response: vec![0x0, 0x0],
+        execution_cycles: AVG_FIRST_RESPONSE_TIME,
+        extra_response: None,
+        command: 0x19,
+        need_irq: false,
+    }
 }

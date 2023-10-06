@@ -228,6 +228,8 @@ enum ClientMessage {
     DisplayOriginChanged((usize, usize)),
     LatestGPULog(Vec<DrawCall>),
     LatestIrqMask(u32),
+    LatestCdMask(u8),
+    LatestCdFlag(u8),
 }
 
 struct EmuComms {
@@ -267,7 +269,10 @@ fn start_emu_thread(matches: Matches, emu_comm: EmuComms) -> JoinHandle<()> {
         } else {
             loop {
                 if let Err(e) = emu_loop_step(&mut state) {
-                    println!("ERROR | EmuThread: Encountered error: {:?}, exiting...", e);
+                    match e {
+                        EmuThreadError::GracefulExit => println!("Emulator requested an exit. Exitting..."),
+                        _ => println!("ERROR | EmuThread: Encountered error: {:?}, exiting...", e)
+                    }
                     break;
                 }
             }
@@ -279,6 +284,7 @@ fn start_emu_thread(matches: Matches, emu_comm: EmuComms) -> JoinHandle<()> {
 enum EmuThreadError {
     ClientDied,
     Killed,
+    GracefulExit,
 }
 
 fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
@@ -292,6 +298,8 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
                         state.send_message(ClientMessage::LatestPC(state.emu.pc()));
                         state.send_message(ClientMessage::LatestGPULog(state.latest_draw_log.clone()));
                         state.send_message(ClientMessage::LatestIrqMask(state.emu.get_irq_mask()));
+                        state.send_message(ClientMessage::LatestCdMask(state.emu.main_bus.cd_drive.get_enable()));
+                        state.send_message(ClientMessage::LatestCdFlag(state.emu.main_bus.cd_drive.get_flag()));
                     }
                     EmuMessage::Continue => {
                         state.halted = false;
@@ -319,6 +327,10 @@ fn emu_loop_step(state: &mut EmuState) -> Result<(), EmuThreadError> {
                 }
             }
         }
+    }
+
+    if state.emu.exit_requested() {
+        return Err(EmuThreadError::GracefulExit);
     }
 
     if state.emu.halt_requested() {

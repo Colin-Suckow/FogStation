@@ -24,6 +24,7 @@ pub struct MainBus {
 
 
     pub last_touched_addr: u32,
+    pub exit_requested: bool
 }
 
 impl MainBus {
@@ -41,6 +42,7 @@ impl MainBus {
             timers: TimerState::new(),
 
             last_touched_addr: 0,
+            exit_requested: false
         }
     }
 
@@ -172,6 +174,10 @@ impl MainBus {
             0x1F800000..=0x1F8003FF => self.scratchpad.write_half_word(addr - 0x1F800000, value),
             0x1F80_1040..=0x1F80_104E => self.controllers.write_half_word(addr, value),
             0x1F801100..=0x1F801128 => self.timers.write_half_word(addr & 0x1fffffff, value, scheduler),
+            0x1F80_2082 => {
+                self.exit_requested = true;
+                println!("Exit requested via PCSX extension command");
+            }, // PCSX extension exit command
             //0x1f801050..=0x1f80105e => (), //SIO registers
             //0x1F80_1000..=0x1F80_2000 => warn!("Something tried to half word write to the I/O ports. This is not currently emulated. The address was {:#X}. value was {:#X}", addr, value),
             _ => panic!("Invalid half word write at address {:#X}! This address is not mapped to any device.", addr)

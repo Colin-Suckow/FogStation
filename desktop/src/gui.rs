@@ -50,7 +50,10 @@ struct VaporstationApp {
     show_gamepad_window: bool,
     has_initialized: bool,
     disp_shader_manager: Arc<Mutex<DisplayShaderManager>>,
-    last_display_data: Vec<u8>
+    last_display_data: Vec<u8>,
+    show_cd_debugger: bool,
+    latest_cd_mask: u8,
+    latest_cd_flag: u8
     //shader_layer: ShaderLayer,
 }
 
@@ -89,6 +92,9 @@ impl VaporstationApp {
             disp_shader_manager: Arc::new(Mutex::new(DisplayShaderManager::new(gl))),
             last_display_data: vec![0; 640 * 480 * 4],
             //shader_layer: ShaderLayer::new(cc.gl.as_ref().unwrap().clone()),
+            show_cd_debugger: false,
+            latest_cd_mask: 0,
+            latest_cd_flag: 0,
         }
     }
 
@@ -246,6 +252,8 @@ impl eframe::App for VaporstationApp {
                         self.highlighted_gpu_calls.clear();
                         println!("Calls in log: {}", self.latest_gpu_log.len());
                     }
+                    ClientMessage::LatestCdMask(mask) => self.latest_cd_mask = mask,
+                    ClientMessage::LatestCdFlag(flag) => self.latest_cd_flag = flag,
                 },
                 Err(e) => {
                     match e {
@@ -297,6 +305,7 @@ impl eframe::App for VaporstationApp {
                             .send(EmuMessage::SetMemLogging(self.memory_logging))
                             .unwrap();
                     };
+                    ui.checkbox(&mut self.show_cd_debugger, "CDROM");
                 });
 
                 ui.with_layout(Layout::right_to_left(eframe::emath::Align::Center), |ui| {
@@ -458,6 +467,13 @@ impl eframe::App for VaporstationApp {
                 } else {
                     ui.label("Must be halted to use gpu call debugger");
                 }
+            });
+        }
+
+        if self.show_cd_debugger {
+            egui::Window::new("Debugging | CDROM").show(ctx, |ui| {
+               ui.label(format!("CD Mask: {:#X}", self.latest_cd_mask));
+               ui.label(format!("CD Flags: {:#X}", self.latest_cd_flag));
             });
         }
 

@@ -115,8 +115,10 @@ pub struct CDDrive {
     reg_interrupt_enable: u8,
 
     read_enabled: bool,
-    sector_awaiting_delivery: bool,
+    packet_awaiting_delivery: Option<Packet>,
     irq_request: bool,
+
+    pending_irq: bool,
 
     //Probably useless registers
     reg_sound_map_data_out: u8,
@@ -151,11 +153,13 @@ impl CDDrive {
             read_offset: 0,
 
             read_enabled: false,
-            sector_awaiting_delivery: false,
+            packet_awaiting_delivery: None,
             irq_request: false,
 
             reg_interrupt_flag: 0,
             reg_interrupt_enable: 0,
+
+            pending_irq: false,
 
             //Probably useless registers
             reg_sound_map_data_out: 0,
@@ -394,12 +398,13 @@ impl CDDrive {
     fn write_interrupt_flag_register(&mut self, val: u8, scheduler: &mut Scheduler) {
         //println!("Writing flag with val {:#X}   pre flag val {:#X}", val, self.reg_interrupt_flag);
         self.reg_interrupt_flag &= !(val & 0x1F);
-        if val == 1 && self.sector_awaiting_delivery {
-            self.reg_interrupt_flag = 1;
-            if self.reg_interrupt_enable & 1 > 0 {
-                self.queue_irq(scheduler);
+        if val > 0 {
+            if let Some(packet) = self.packet_awaiting_delivery.take() {
+                self.reg_interrupt_flag = 1;
+                if self.reg_interrupt_enable & 1 > 0 {
+                    self.queue_irq(scheduler);
+                }
             }
-            self.sector_awaiting_delivery = false;
         }
         //println!("Post flag {:#X}", self.reg_interrupt_flag);
         self.response_queue = VecDeque::new(); //Reset queue
@@ -479,7 +484,7 @@ pub fn cdpacket_event(cpu: &mut R3000, main_bus: &mut MainBus, scheduler: &mut S
         .extend(packet.response.iter());
 
     if packet.cause.bitflag() == 0x1 && main_bus.cd_drive.reg_interrupt_flag & 0x1 > 0 {
-        main_bus.cd_drive.sector_awaiting_delivery = true;
+        main_bus.cd_drive.packet_awaiting_delivery = Some(packet.clone());
     } else {
         main_bus.cd_drive.reg_interrupt_flag = packet.cause.bitflag();
         //println!("CD: processed command {:#X}", packet.command);

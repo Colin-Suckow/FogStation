@@ -176,7 +176,7 @@ impl eframe::App for FogStationApp {
         for _ in 0..16 {
             self.gilrs_instance.next_event();
         }
-        let psx_button_state = self.get_button_state(&ctx.input());
+        let psx_button_state = ctx.input(|i| { self.get_button_state(i) } );
         self.emu_handle
             .comm
             .tx
@@ -268,7 +268,8 @@ impl eframe::App for FogStationApp {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if ui.button("Quit").clicked() {
-                        frame.quit();
+                        println!("This is where I would quit, IF I HAD ONE");
+                        //frame.quit();
                     }
                 });
 
@@ -330,7 +331,7 @@ impl eframe::App for FogStationApp {
         if self.show_vram_window {
             egui::Window::new("VRAM Viewer").show(ctx, |ui| {
                 if let Some(vram) = &self.vram_texture {
-                    ui.image(vram.id(), [VRAM_WIDTH as f32, VRAM_HEIGHT as f32]);
+                    ui.image(vram);
                 }
             });
         }

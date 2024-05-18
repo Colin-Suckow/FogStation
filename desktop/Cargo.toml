@@ -24,4 +24,4 @@ num = "0.4.0"
 simple_logger = "1.11.0"
 gilrs = "0.8.2"
 rcue = "0.1.3"
-eframe = { version = "0.20.1", features = ["default_fonts", "glow"] }
+eframe = { version = "0.27.2", features = ["default_fonts", "glow"] }
